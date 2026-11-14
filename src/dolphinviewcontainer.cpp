@@ -559,34 +559,6 @@ public:
     }
 
 protected:
-    // Breeze NG Aurora: a menu joined to its button is see-through and blurred. The button, painted in the menu's own
-    // see-through colour (applyChipStyle), must have nothing else under it, or it would be darker than the menu: the
-    // window's glass is taken away under it here, before the button paints.
-    void paintEvent(QPaintEvent *event) override
-    {
-        QWidget::paintEvent(event);
-        if (!ngAurora()) {
-            return;
-        }
-        const auto buttons = findChildren<QToolButton *>();
-        for (const QToolButton *button : buttons) {
-            if (!button->property("menuOpen").toBool() || !button->isVisible()) {
-                continue;
-            }
-            QPainter painter(this);
-            painter.setRenderHint(QPainter::Antialiasing);
-            painter.setCompositionMode(QPainter::CompositionMode_DestinationOut);
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(Qt::black);
-            const QRectF rect(button->mapTo(this, QPoint(0, 0)), QSizeF(button->size()));
-            QPainterPath shape; // round on top, as the style sheet draws the open button
-            shape.setFillRule(Qt::WindingFill);
-            shape.addRoundedRect(rect, 6, 6);
-            shape.addRect(QRectF(rect.left(), rect.top() + 6, rect.width(), rect.height() - 6));
-            painter.drawPath(shape);
-        }
-    }
-
     void resizeEvent(QResizeEvent *event) override
     {
         QWidget::resizeEvent(event);
@@ -676,9 +648,12 @@ private:
             sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); }").arg(ink), QStringLiteral("QToolButton:checked { background: rgba(%1, 0.34); }").arg(accentRgb));
             sheet.replace(QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.42); }").arg(accentRgb));
             // the open button wears the menu's sheet: see-through in Aurora, at the menu's own opacity (Breeze NG's
-            // setting; solid there means the 78 % of the glass looks), over nothing (see paintEvent())
+            // setting; solid there means Aurora's 38 %), over the window's glass
             const int menuOpacity = KSharedConfig::openConfig(QStringLiteral("breezengrc"))->group(QStringLiteral("Style")).readEntry("MenuOpacity", 100);
-            const QString menuGlass = QStringLiteral("rgba(%1, %2, %3, %4)").arg(menuSheet.red()).arg(menuSheet.green()).arg(menuSheet.blue()).arg(QString::number((menuOpacity >= 100 ? 78 : qMax(menuOpacity, 30)) / 100.0, 'f', 2));
+            // (Aurora's menu: a tone lifted 10 % from the window's colour, at 38 %: as Helper::menuSheet in Breeze NG)
+            const QColor inkColor = dark ? QColor(255, 255, 255) : QColor(0, 0, 0);
+            const QColor lifted(qRound(window.red() * 0.9 + inkColor.red() * 0.1), qRound(window.green() * 0.9 + inkColor.green() * 0.1), qRound(window.blue() * 0.9 + inkColor.blue() * 0.1));
+            const QString menuGlass = QStringLiteral("rgba(%1, %2, %3, %4)").arg(lifted.red()).arg(lifted.green()).arg(lifted.blue()).arg(QString::number((menuOpacity >= 100 ? 38 : qMax(menuOpacity, 30)) / 100.0, 'f', 2));
             sheet.replace(menuSheet.name(), menuGlass);
         }
         m_sheetApplying = true; // setting a sheet sends style changes of its own: changeEvent() ignores them
@@ -760,12 +735,6 @@ private:
             button->style()->unpolish(button);
             button->style()->polish(button);
             button->update();
-            for (QWidget *up = button->parentWidget(); up; up = up->parentWidget()) {
-                if (up->objectName() == QLatin1String("ngSortBar")) {
-                    up->update(); // Aurora: the bar takes the window's glass away under an open button, see paintEvent()
-                    break;
-                }
-            }
         };
         connect(menu, &QMenu::aboutToShow, button, [repolish] {
             repolish(true);
