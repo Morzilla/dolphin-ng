@@ -910,7 +910,7 @@ void DolphinMainWindow::ngUpdateAurora()
     ngLoadAuroraSettings();
     // the look is the window decoration's theme (what a Breeze NG global theme sets), as the widget style reads it
     const QString theme = KSharedConfig::openConfig(QStringLiteral("kwinrc"), KConfig::NoGlobals)->group(QStringLiteral("org.kde.kdecoration2")).readEntry("theme", QString());
-    const bool aurora = theme.compare(QLatin1String("Breeze NG Aurora"), Qt::CaseInsensitive) == 0 && QApplication::style()->name().compare(QLatin1String("breezeng"), Qt::CaseInsensitive) == 0;
+    const bool aurora = theme.startsWith(QLatin1String("Breeze NG Aurora"), Qt::CaseInsensitive) && QApplication::style()->name().compare(QLatin1String("breezeng"), Qt::CaseInsensitive) == 0;
     if (aurora != m_ngAurora) {
         m_ngAurora = aurora;
         ngSetAurora(aurora);
