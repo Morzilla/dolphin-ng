@@ -3962,26 +3962,27 @@ void DolphinMainWindow::ngMoveToolbarButtons()
         }
         // the pill and the filter field are as tall as the location bar and rounded like it: one row, one style
         QWidget *location = bar->widgetForAction(navigator);
-        const int height = location && location->sizeHint().height() > 20 ? location->sizeHint().height() : 32;
+        const int height = location && location->sizeHint().height() > 20 ? location->sizeHint().height() : 34;
         if (m_ngFilterAction) {
             if (QWidget *field = bar->widgetForAction(m_ngFilterAction)) {
-                field->setFixedHeight(height);
+                field->setFixedHeight(height + 2); // (a field's frame is drawn a pixel inside its widget all around)
             }
         }
         for (int i = 0; i < pill.size(); ++i) {
             const QString left = i == 0 ? QStringLiteral("9px") : QStringLiteral("0");
             const QString right = i == pill.size() - 1 ? QStringLiteral("9px") : QStringLiteral("0");
-            const QString sheet = QStringLiteral("QToolButton { background: rgba(%1, %2); border: 0; padding: 4px 8px; min-height: %7px; margin: 0 %8px 0 0;"
+            const QString sheet = QStringLiteral("QToolButton { background: rgba(%1, %2); border: 0; padding: 0 8px; min-height: 0; max-height: %7px; margin: 0 %8px 0 0;"
                                                  " border-top-left-radius: %4; border-bottom-left-radius: %4; border-top-right-radius: %5; border-bottom-right-radius: %5; }"
                                                  "QToolButton:hover { background: rgba(%1, %3); }"
                                                  "QToolButton:pressed { background: rgba(%1, %6); }"
                                                  "QToolButton::menu-indicator { image: none; }")
                                       .arg(ink, QString::number(veil, 'f', 3), QString::number(veil + 0.08, 'f', 3), left, right, QString::number(veil + 0.14, 'f', 3))
-                                      .arg(height - 8)
+                                      .arg(height)
                                       .arg(i == pill.size() - 1 ? 8 : 0); // (air between the pill and the location bar)
             if (pill.at(i)->styleSheet() != sheet) {
                 pill.at(i)->setStyleSheet(sheet);
             }
+            pill.at(i)->setFixedHeight(height); // (the style sheet's own height came out taller than the location bar)
         }
     }
 }
