@@ -2561,27 +2561,18 @@ void KItemListWidget::drawItemStyleOption(QPainter *painter, QWidget *widget, QS
             } else if (aurora) {
                 ring.setAlphaF(0.90);
             }
-            // Breeze NG Aurora: the ring runs on the card's own edge and the card is tinted with the accent (no gap)
+            // (Breeze NG Aurora: a thinner ring and a stronger tint inside; the ring keeps its small distance from the
+            // cards: drawn on their very edges, a block of cards left small rings where four corners meet)
             const qreal width = aurora ? (selected ? 2.0 : 1.5) : selected ? 2.5 : 1.5;
-            const qreal gap = aurora ? -width / 2.0 : 2.5 + width / 2.0;
-            if (aurora && (selected || m_ngSelProgress > 0.001)) {
-                // Breeze NG Aurora: every selected card has its own tint and ring (one outline around a block of
-                // cards, drawn on their edges, left small rings where four corners meet)
-                const qreal progress = selected ? qMax<qreal>(m_ngSelProgress, 0.35) : m_ngSelProgress;
-                QColor veil = accent;
-                veil.setAlphaF(0.20 * progress);
-                ring.setAlphaF(0.90 * progress);
-                painter->setPen(QPen(ring, width));
-                painter->setBrush(veil);
-                painter->drawRoundedRect(card.adjusted(width / 2.0, width / 2.0, -width / 2.0, -width / 2.0), radius, radius);
-            } else if (selected || m_ngSelProgress > 0.001) {
+            const qreal gap = 2.5 + width / 2.0;
+            if (selected || m_ngSelProgress > 0.001) {
                 // one outline around the block of selected cards next to each other, with a faint veil inside
                 QRectF reach;
                 qreal alpha = 1;
                 const QPainterPath block = ngSelectionBlock(gap, &reach, &alpha);
                 painter->setClipRect(reach, Qt::IntersectClip);
                 QColor veil = accent;
-                veil.setAlphaF((aurora ? 0.20 : 0.07) * alpha);
+                veil.setAlphaF((aurora ? 0.16 : 0.07) * alpha);
                 ring.setAlphaF(ring.alphaF() * alpha);
                 painter->setPen(QPen(ring, width));
                 painter->setBrush(veil);
