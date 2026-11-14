@@ -81,6 +81,14 @@
 #include <kwidgetsaddons_version.h>
 
 #include <QApplication>
+#include <QAbstractButton>
+#include <QHBoxLayout>
+#include <QMouseEvent>
+#include <QTabBar>
+#include <QToolBar>
+#include <QWindow>
+#include <KConfigGroup>
+#include <KSharedConfig>
 #include <QProxyStyle>
 #include <QPainter>
 #include <QClipboard>
@@ -127,6 +135,196 @@ const int MaxActivateTabShortcuts = 9;
 }
 
 // dolphin-ng: the separators between the docks and the view: 4 px, invisible, still draggable
+// dolphin-ng: the tabs in the title bar (setting TABS=titlebar). The window has no frame of the window manager's: the
+// row of tabs is its title bar, with the window's buttons at its end, and these two classes give it what the frame
+// gave: buttons, moving by the row, resizing from the edges.
+class NgWindowButton : public QAbstractButton
+{
+public:
+    enum Kind { Minimize, Maximize, Close };
+    NgWindowButton(Kind kind, QWidget *parent)
+        : QAbstractButton(parent)
+        , m_kind(kind)
+    {
+        setFixedSize(26, 26);
+        setFocusPolicy(Qt::NoFocus);
+        setAttribute(Qt::WA_Hover);
+        setCursor(Qt::ArrowCursor);
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const bool dark = palette().color(QPalette::Window).lightnessF() < 0.5;
+        const QColor ink = dark ? QColor(255, 255, 255) : QColor(0, 0, 0);
+        const bool hovered = underMouse();
+        const QRectF circle = QRectF(rect()).adjusted(4, 4, -4, -4);
+        QColor fill = ink;
+        fill.setAlphaF(isDown() ? 0.30 : hovered ? 0.22 : 0.12);
+        if (m_kind == Close) {
+            fill = QColor(232, 84, 72, isDown() ? 255 : hovered ? 240 : 205);
+        }
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(fill);
+        painter.drawEllipse(circle);
+        QColor glyph = m_kind == Close ? QColor(255, 255, 255, 235) : ink;
+        if (m_kind != Close) {
+            glyph.setAlphaF(0.85);
+        }
+        painter.setPen(QPen(glyph, 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setBrush(Qt::NoBrush);
+        const QPointF c = circle.center();
+        const qreal r = 3.2;
+        const bool maximized = window()->isMaximized();
+        switch (m_kind) {
+        case Minimize: // a chevron down, as Breeze draws it
+            painter.drawPolyline(QPolygonF{QPointF(c.x() - r, c.y() - r / 2), QPointF(c.x(), c.y() + r / 2), QPointF(c.x() + r, c.y() - r / 2)});
+            break;
+        case Maximize:
+            if (maximized) { // a diamond: back to its size
+                painter.drawPolygon(QPolygonF{QPointF(c.x() - r, c.y()), QPointF(c.x(), c.y() - r), QPointF(c.x() + r, c.y()), QPointF(c.x(), c.y() + r)});
+            } else { // a chevron up
+                painter.drawPolyline(QPolygonF{QPointF(c.x() - r, c.y() + r / 2), QPointF(c.x(), c.y() - r / 2), QPointF(c.x() + r, c.y() + r / 2)});
+            }
+            break;
+        case Close:
+            painter.drawLine(QPointF(c.x() - r + 0.6, c.y() - r + 0.6), QPointF(c.x() + r - 0.6, c.y() + r - 0.6));
+            painter.drawLine(QPointF(c.x() + r - 0.6, c.y() - r + 0.6), QPointF(c.x() - r + 0.6, c.y() + r - 0.6));
+            break;
+        }
+    }
+
+private:
+    Kind m_kind;
+};
+
+class NgFrameless : public QObject
+{
+public:
+    NgFrameless(QWidget *window, const QList<QWidget *> &titleAreas)
+        : QObject(window)
+        , m_window(window)
+        , m_titleAreas(titleAreas)
+    {
+        qApp->installEventFilter(this);
+    }
+    ~NgFrameless() override
+    {
+        restoreCursor();
+    }
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (!watched->isWidgetType()) {
+            return false;
+        }
+        auto *widget = static_cast<QWidget *>(watched);
+        if (widget->window() != m_window || !m_window->windowHandle()) {
+            return false;
+        }
+        const bool fixed = m_window->isMaximized() || m_window->isFullScreen();
+        switch (event->type()) {
+        case QEvent::MouseMove: {
+            auto *mouse = static_cast<QMouseEvent *>(event);
+            if (mouse->buttons() == Qt::NoButton) {
+                showEdges(fixed ? Qt::Edges() : edgesAt(mouse->globalPosition()));
+            }
+            break;
+        }
+        case QEvent::Leave:
+            if (watched == m_window) {
+                restoreCursor();
+            }
+            break;
+        case QEvent::MouseButtonPress: {
+            auto *mouse = static_cast<QMouseEvent *>(event);
+            if (mouse->button() != Qt::LeftButton) {
+                break;
+            }
+            const Qt::Edges edges = fixed ? Qt::Edges() : edgesAt(mouse->globalPosition());
+            if (edges) {
+                restoreCursor();
+                m_window->windowHandle()->startSystemResize(edges);
+                return true;
+            }
+            if (m_titleAreas.contains(widget)) {
+                m_window->windowHandle()->startSystemMove(); // the row of tabs is the title bar: drag the window by it
+                return true;
+            }
+            break;
+        }
+        case QEvent::MouseButtonDblClick:
+            if (m_titleAreas.contains(widget) && static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton) {
+                m_window->isMaximized() ? m_window->showNormal() : m_window->showMaximized();
+                return true;
+            }
+            break;
+        default:
+            break;
+        }
+        return false;
+    }
+
+private:
+    Qt::Edges edgesAt(const QPointF &global) const
+    {
+        const QPoint p = m_window->mapFromGlobal(global.toPoint());
+        const int margin = 6;
+        Qt::Edges edges;
+        if (!m_window->rect().adjusted(-2, -2, 2, 2).contains(p)) {
+            return edges;
+        }
+        if (p.x() < margin) {
+            edges |= Qt::LeftEdge;
+        } else if (p.x() >= m_window->width() - margin) {
+            edges |= Qt::RightEdge;
+        }
+        if (p.y() < 4) { // (thinner at the top: the tabs are right there)
+            edges |= Qt::TopEdge;
+        } else if (p.y() >= m_window->height() - margin) {
+            edges |= Qt::BottomEdge;
+        }
+        return edges;
+    }
+    void showEdges(Qt::Edges edges)
+    {
+        if (edges == m_shown) {
+            return;
+        }
+        restoreCursor();
+        m_shown = edges;
+        if (!edges) {
+            return;
+        }
+        Qt::CursorShape shape = Qt::SizeVerCursor;
+        if (edges == (Qt::LeftEdge | Qt::TopEdge) || edges == (Qt::RightEdge | Qt::BottomEdge)) {
+            shape = Qt::SizeFDiagCursor;
+        } else if (edges == (Qt::RightEdge | Qt::TopEdge) || edges == (Qt::LeftEdge | Qt::BottomEdge)) {
+            shape = Qt::SizeBDiagCursor;
+        } else if (edges & (Qt::LeftEdge | Qt::RightEdge)) {
+            shape = Qt::SizeHorCursor;
+        }
+        QGuiApplication::setOverrideCursor(shape);
+        m_overridden = true;
+    }
+    void restoreCursor()
+    {
+        if (m_overridden) {
+            QGuiApplication::restoreOverrideCursor();
+            m_overridden = false;
+        }
+        m_shown = Qt::Edges();
+    }
+
+    QWidget *m_window;
+    QList<QWidget *> m_titleAreas;
+    Qt::Edges m_shown;
+    bool m_overridden = false;
+};
+
 class NgSeparatorStyle : public QProxyStyle
 {
 public:
@@ -190,6 +388,12 @@ DolphinMainWindow::DolphinMainWindow()
     // opaque (it stopped repainting behind them: trails, flicker, a grey or stale sidebar). Changing the look now
     // changes only what is painted and where the blur is asked for.
     setAttribute(Qt::WA_TranslucentBackground);
+    if (ngSetting("TABS").toLower() == QLatin1String("titlebar")) {
+        // dolphin-ng: the tabs in the title bar: no frame from the window manager (see the row of tabs below); set
+        // before the widget style first looks at the window, which then gives it a shadow
+        setWindowFlag(Qt::FramelessWindowHint, true);
+        setProperty("_KDE_NET_WM_FORCE_SHADOW", true);
+    }
 
     setStateConfigGroup("State");
 
@@ -228,6 +432,7 @@ DolphinMainWindow::DolphinMainWindow()
         // dolphin-ng: the sort/filter bar sits above the tabs and follows the active view
         auto *central = new QWidget(this);
         auto *centralLayout = new QVBoxLayout(central);
+        m_ngCentralLayout = centralLayout;
         centralLayout->setContentsMargins(0, 0, 0, 0);
         centralLayout->setSpacing(0);
         m_ngSortBar = ngCreateSortBar(central);
@@ -293,7 +498,9 @@ DolphinMainWindow::DolphinMainWindow()
     const bool usePhoneUi{KRuntimePlatform::runtimePlatform().contains(QLatin1String("phone"))};
     setupGUI(Save | Create | ToolBar, usePhoneUi ? QStringLiteral("dolphinuiforphones.rc") : QString() /* load the default dolphinui.rc file */);
     QTimer::singleShot(0, this, &DolphinMainWindow::ngMoveToolbarButtons); // dolphin-ng
-    if (ngSetting("TABS").toLower() != QLatin1String("classic")) {
+    const QString tabsPlace = ngSetting("TABS").toLower();
+    m_ngTitleTabs = tabsPlace == QLatin1String("titlebar");
+    if (tabsPlace != QLatin1String("classic")) {
         // dolphin-ng: tabs first, then the address, then the rest, as in a browser: a row of its own above the tool
         // bar that holds the location bar. The bar in it mirrors the tab widget's own (DolphinTabWidget::ngCreateTopBar).
         m_ngTabsToolBar = new QToolBar(this);
@@ -304,9 +511,54 @@ DolphinMainWindow::DolphinMainWindow()
         m_ngTabsToolBar->toggleViewAction()->setVisible(false);
         m_ngTabsToolBar->setContextMenuPolicy(Qt::PreventContextMenu);
         m_ngTabsToolBar->setContentsMargins(6, 2, 6, 0);
-        m_ngTabsToolBar->addWidget(m_tabWidget->ngCreateTopBar(m_ngTabsToolBar));
+        QTabBar *topBar = m_tabWidget->ngCreateTopBar(m_ngTabsToolBar);
+        if (m_ngTitleTabs) {
+            // the row is the window's title bar: no frame from the window manager, the window's buttons on the side
+            // KWin has them (the close button's side), the rest of the row to drag the window by
+            const KConfigGroup decoration = KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2"));
+            const bool buttonsLeft = decoration.readEntry("ButtonsOnLeft", QStringLiteral("MS")).contains(QLatin1Char('X'));
+            auto *buttons = new QWidget(m_ngTabsToolBar);
+            auto *buttonsLayout = new QHBoxLayout(buttons);
+            buttonsLayout->setContentsMargins(4, 0, 4, 0);
+            buttonsLayout->setSpacing(2);
+            auto *minimize = new NgWindowButton(NgWindowButton::Minimize, buttons);
+            auto *maximize = new NgWindowButton(NgWindowButton::Maximize, buttons);
+            auto *close = new NgWindowButton(NgWindowButton::Close, buttons);
+            minimize->setToolTip(ngTr("Minimize", "Riduci a icona"));
+            maximize->setToolTip(ngTr("Maximize", "Massimizza"));
+            close->setToolTip(ngTr("Close", "Chiudi"));
+            connect(minimize, &QAbstractButton::clicked, this, &QWidget::showMinimized);
+            connect(maximize, &QAbstractButton::clicked, this, [this] {
+                isMaximized() ? showNormal() : showMaximized();
+            });
+            connect(close, &QAbstractButton::clicked, this, &QWidget::close);
+            for (QWidget *button : buttonsLeft ? QList<QWidget *>{close, maximize, minimize} : QList<QWidget *>{minimize, maximize, close}) {
+                buttonsLayout->addWidget(button);
+            }
+            auto *drag = new QWidget(m_ngTabsToolBar);
+            drag->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+            drag->setMinimumWidth(60);
+            if (buttonsLeft) {
+                m_ngTabsToolBar->addWidget(buttons);
+            }
+            m_ngTabsToolBar->addWidget(topBar);
+            m_ngTabsToolBar->addWidget(drag);
+            if (!buttonsLeft) {
+                m_ngTabsToolBar->addWidget(buttons);
+            }
+            m_ngTabsToolBar->setContentsMargins(8, 4, 4, 2);
+            new NgFrameless(this, {m_ngTabsToolBar, drag, buttons});
+        } else {
+            m_ngTabsToolBar->addWidget(topBar);
+        }
         insertToolBar(toolBar(), m_ngTabsToolBar);
-        insertToolBarBreak(toolBar());
+        if (m_ngTitleTabs && m_ngCentralLayout) {
+            // the tool bar with the location bar goes above the files only: the sidebar reaches up to its level,
+            // right under the row of tabs
+            m_ngCentralLayout->insertWidget(0, toolBar());
+        } else {
+            insertToolBarBreak(toolBar());
+        }
         connect(m_tabWidget, &DolphinTabWidget::tabCountChanged, this, &DolphinMainWindow::ngUpdateTabsRow);
         ngUpdateTabsRow();
     }
@@ -614,7 +866,8 @@ void DolphinMainWindow::ngUpdateTabsRow()
 {
     if (m_ngTabsToolBar) {
         // as Dolphin does with its own bar: out of the way with one tab, unless the user wants it always
-        m_ngTabsToolBar->setVisible(m_tabWidget->count() > 1 || GeneralSettings::alwaysShowTabBar());
+        // (as the title bar the row is always there)
+        m_ngTabsToolBar->setVisible(m_ngTitleTabs || m_tabWidget->count() > 1 || GeneralSettings::alwaysShowTabBar());
     }
 }
 
@@ -714,6 +967,22 @@ bool DolphinMainWindow::event(QEvent *event)
     if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) {
         QTimer::singleShot(700, this, &DolphinMainWindow::ngUpdateAurora); // a global theme writes the decoration last
     }
+    if (m_ngTitleTabs && (event->type() == QEvent::Resize || event->type() == QEvent::WindowStateChange)) {
+        // dolphin-ng: without a frame the window rounds its own corners (not when it fills the screen)
+        // (the widget style cuts them, wherever it lays the window's sheet: property "_breeze_ng_radius"; with the
+        // decoration's own setting for rounded corners off, they stay square)
+        const bool rounded = KSharedConfig::openConfig(QStringLiteral("breezengrc"))->group(QStringLiteral("Common")).readEntry("RoundedCorners", true);
+        const int radius = (isMaximized() || isFullScreen() || !rounded) ? 0 : 14;
+        if (property("_breeze_ng_radius").toInt() != radius) {
+            setProperty("_breeze_ng_radius", radius > 0 ? QVariant(radius) : QVariant());
+            update();
+        }
+        m_ngBlurSet = false;
+        QMetaObject::invokeMethod(this, "ngUpdateBlurRegion", Qt::QueuedConnection);
+        if (m_ngTabsToolBar) {
+            m_ngTabsToolBar->update(); // the maximize button changes its sign
+        }
+    }
     // dolphin-ng: a new native window (Qt makes one when the translucency changes) has no blur yet: ask again,
     // even for the same region
     if (event->type() == QEvent::PlatformSurface
@@ -753,6 +1022,11 @@ void DolphinMainWindow::ngUpdateBlurRegion()
                 region += QRect(dock->mapTo(this, QPoint(6, 6)), dock->size() - QSize(12, 12));
             }
         }
+    }
+    if (const int radius = property("_breeze_ng_radius").toInt(); m_ngTitleTabs && radius > 0 && !region.isEmpty()) {
+        QPainterPath shape; // (no blur outside the rounded corners of a window without a frame)
+        shape.addRoundedRect(QRectF(rect()), radius, radius);
+        region &= QRegion(shape.toFillPolygon().toPolygon());
     }
     if (m_ngBlurSet && region == m_ngBlurRegion) {
         return;
@@ -915,6 +1189,15 @@ void DolphinMainWindow::paintEvent(QPaintEvent *event)
             style()->drawPrimitive(QStyle::PE_Widget, &option, &painter, this);
         } else {
             painter.fillRect(event->rect(), palette().color(QPalette::Window)); // the docks cut their glass out of this
+            if (const int radius = property("_breeze_ng_radius").toInt(); radius > 0) {
+                QPainterPath outside; // without a frame the window rounds its own corners
+                outside.addRect(QRectF(rect()));
+                QPainterPath shape;
+                shape.addRoundedRect(QRectF(rect()), radius, radius);
+                painter.setRenderHint(QPainter::Antialiasing);
+                painter.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+                painter.fillPath(outside.subtracted(shape), Qt::black);
+            }
         }
     }
     KXmlGuiWindow::paintEvent(event);
@@ -3557,6 +3840,23 @@ void DolphinMainWindow::ngPlaceSidebarToggle()
         };
         connect(dock, &QDockWidget::visibilityChanged, this, update);
         update();
+    }
+    if (m_ngTitleTabs && m_ngTabsToolBar) {
+        // with the tabs in the title bar the button comes first in that row, before the tabs
+        if (bar->actions().contains(m_ngSidebarToggle)) {
+            bar->removeAction(m_ngSidebarToggle);
+        }
+        if (!m_ngTitleToggle) {
+            auto *button = new QToolButton(m_ngTabsToolBar);
+            button->setDefaultAction(m_ngSidebarToggle);
+            button->setAutoRaise(true);
+            button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+            button->setIconSize(QSize(20, 20));
+            button->setFocusPolicy(Qt::NoFocus);
+            m_ngTitleToggle = button;
+            m_ngTabsToolBar->insertWidget(m_ngTabsToolBar->actions().value(0), button);
+        }
+        return;
     }
     if (!bar->actions().contains(m_ngSidebarToggle)) {
         bar->insertAction(bar->actions().value(0), m_ngSidebarToggle);

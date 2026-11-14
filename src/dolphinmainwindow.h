@@ -33,6 +33,7 @@
 
 using CommandType = KIO::FileUndoManager::CommandType;
 
+class QVBoxLayout;
 class DiskSpaceUsageMenu;
 class DolphinBookmarkHandler;
 class DolphinViewActionHandler;
@@ -793,6 +794,9 @@ private:
     QWidget *m_ngSortBar = nullptr; // dolphin-ng: the sort/filter bar above the tabs
     QToolBar *m_ngTabsToolBar = nullptr; // dolphin-ng: the row of tabs above the location bar
     void ngUpdateTabsRow();
+    QVBoxLayout *m_ngCentralLayout = nullptr;
+    QWidget *m_ngTitleToggle = nullptr; // the sidebar's button in the row of tabs
+    bool m_ngTitleTabs = false; // dolphin-ng: the row of tabs is the window's title bar (no frame of the window manager's)
     QList<QAction *> m_ngMovedActions; // dolphin-ng: toolbar buttons that were moved to the sort bar
     QAction *m_ngSidebarToggle = nullptr; // dolphin-ng: shows and hides the places, first in the toolbar
     void ngPlaceSidebarToggle();
