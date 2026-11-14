@@ -1154,7 +1154,15 @@ void PlacesPanel::ngPlaceScrollBar()
             m_ngOverlayBar->setPageStep(real->pageStep());
             m_ngOverlayBar->setSingleStep(real->singleStep());
             m_ngOverlayBar->setValue(real->value());
-            m_ngOverlayBar->setVisible(real->maximum() > real->minimum());
+            // hidden at once when there is nothing to scroll; shown only when there still is a moment later (choosing
+            // a place lays the list out again, and for an instant it seemed to need the bar: it flashed)
+            if (real->maximum() <= real->minimum()) {
+                m_ngOverlayBar->hide();
+            } else if (!m_ngOverlayBar->isVisible()) {
+                QTimer::singleShot(250, m_ngOverlayBar, [this, real] {
+                    m_ngOverlayBar->setVisible(real->maximum() > real->minimum());
+                });
+            }
         };
         connect(real, &QScrollBar::rangeChanged, m_ngOverlayBar, sync);
         connect(real, &QScrollBar::valueChanged, m_ngOverlayBar, &QScrollBar::setValue);

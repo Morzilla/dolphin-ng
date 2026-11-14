@@ -2564,7 +2564,17 @@ void KItemListWidget::drawItemStyleOption(QPainter *painter, QWidget *widget, QS
             // Breeze NG Aurora: the ring runs on the card's own edge and the card is tinted with the accent (no gap)
             const qreal width = aurora ? (selected ? 2.0 : 1.5) : selected ? 2.5 : 1.5;
             const qreal gap = aurora ? -width / 2.0 : 2.5 + width / 2.0;
-            if (selected || m_ngSelProgress > 0.001) {
+            if (aurora && (selected || m_ngSelProgress > 0.001)) {
+                // Breeze NG Aurora: every selected card has its own tint and ring (one outline around a block of
+                // cards, drawn on their edges, left small rings where four corners meet)
+                const qreal progress = selected ? qMax<qreal>(m_ngSelProgress, 0.35) : m_ngSelProgress;
+                QColor veil = accent;
+                veil.setAlphaF(0.20 * progress);
+                ring.setAlphaF(0.90 * progress);
+                painter->setPen(QPen(ring, width));
+                painter->setBrush(veil);
+                painter->drawRoundedRect(card.adjusted(width / 2.0, width / 2.0, -width / 2.0, -width / 2.0), radius, radius);
+            } else if (selected || m_ngSelProgress > 0.001) {
                 // one outline around the block of selected cards next to each other, with a faint veil inside
                 QRectF reach;
                 qreal alpha = 1;
