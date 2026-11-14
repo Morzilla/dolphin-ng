@@ -556,6 +556,12 @@ DolphinMainWindow::DolphinMainWindow()
             // the tool bar with the location bar goes above the files only: the sidebar reaches up to its level,
             // right under the row of tabs
             m_ngCentralLayout->insertWidget(0, toolBar());
+            if (m_ngSortBar && m_ngSortBar->layout()) {
+                // the sort bar's first button starts where the pill of back and forward does, right above it
+                QMargins margins = m_ngSortBar->layout()->contentsMargins();
+                margins.setLeft(4);
+                m_ngSortBar->layout()->setContentsMargins(margins);
+            }
         } else {
             insertToolBarBreak(toolBar());
         }
@@ -1206,6 +1212,7 @@ void DolphinMainWindow::paintEvent(QPaintEvent *event)
 void DolphinMainWindow::ngStyleReparsed()
 {
     ngLoadAuroraSettings();
+    QTimer::singleShot(0, this, &DolphinMainWindow::ngMoveToolbarButtons); // (the pill of back, forward and up follows the veil)
     const auto all = findChildren<QWidget *>();
     for (QWidget *child : all) {
         if (child->objectName() == QLatin1String("ngSortBar")) {
@@ -3909,8 +3916,10 @@ void DolphinMainWindow::ngMoveToolbarButtons()
         }
         if (!m_ngFilterAction) {
             if (QWidget *field = ngSortBarFilterField(m_ngSortBar)) {
+                auto *gap = new QWidget(bar); // a little air between the location bar and the field
+                gap->setFixedWidth(8);
+                bar->addWidget(gap);
                 field->setFixedWidth(240);
-                field->setMinimumHeight(32);
                 m_ngFilterAction = bar->addWidget(field);
             }
         }
@@ -3918,40 +3927,63 @@ void DolphinMainWindow::ngMoveToolbarButtons()
             m_ngFilterAction->setVisible(true);
         }
     }
-    // back and forward, which stood before the location bar, go right after it, with "up" beside them: the address
-    // first, then the ways to move from it (the view settings button, which the sort bar replaces, stays out)
-    QList<QAction *> leading;
+    // back and forward stay before the location bar, with "up" beside them; the view settings button, which the
+    // sort bar replaces, leaves the tool bar
     QAction *viewSettings = actionCollection()->action(QStringLiteral("view_settings"));
     const QList<QAction *> actions = bar->actions();
     for (QAction *action : actions) {
         if (action == navigator) {
             break;
         }
-        if (action != m_ngSidebarToggle) { // it stays above the panel
-            leading.append(action);
-        }
-    }
-    for (QAction *action : std::as_const(leading)) {
-        bar->removeAction(action);
-    }
-    QList<QAction *> afterAddress;
-    for (QAction *action : std::as_const(leading)) {
-        if (action == viewSettings || action->isSeparator()) {
+        if (action == viewSettings) {
+            bar->removeAction(action);
             if (!m_ngMovedActions.contains(action)) {
                 m_ngMovedActions.append(action);
             }
-        } else {
-            afterAddress.append(action);
         }
     }
-    if (QAction *up = actionCollection()->action(QStringLiteral("go_up")); up && !bar->actions().contains(up) && !afterAddress.contains(up) && !m_ngUpPlaced) {
+    if (QAction *up = actionCollection()->action(QStringLiteral("go_up")); up && !bar->actions().contains(up) && !m_ngUpPlaced) {
         m_ngUpPlaced = true;
-        afterAddress.append(up);
-    }
-    if (!afterAddress.isEmpty()) {
-        bar->insertActions(m_ngFilterAction, afterAddress); // (before the filter field; at the end if there is none)
+        bar->insertAction(navigator, up);
     }
     ngSortBarSetLeadingActions(m_ngSortBar, {});
+    // back, forward and up as one pill of glass, the veil of every other button (Breeze NG's setting in Aurora)
+    {
+        const bool dark = ngIsDark(palette());
+        const QString ink = dark ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
+        const qreal veil = ngAurora() ? ngAuroraVeilAlpha(dark, true) : 0.06;
+        QList<QWidget *> pill;
+        for (const char *name : {"go_back", "go_forward", "go_up"}) {
+            QAction *action = actionCollection()->action(QString::fromLatin1(name));
+            QWidget *button = action ? bar->widgetForAction(action) : nullptr;
+            if (button && action->isVisible()) { // (the button of an action added a moment ago is not shown yet)
+                pill.append(button);
+            }
+        }
+        // the pill and the filter field are as tall as the location bar and rounded like it: one row, one style
+        QWidget *location = bar->widgetForAction(navigator);
+        const int height = location && location->sizeHint().height() > 20 ? location->sizeHint().height() : 32;
+        if (m_ngFilterAction) {
+            if (QWidget *field = bar->widgetForAction(m_ngFilterAction)) {
+                field->setFixedHeight(height);
+            }
+        }
+        for (int i = 0; i < pill.size(); ++i) {
+            const QString left = i == 0 ? QStringLiteral("9px") : QStringLiteral("0");
+            const QString right = i == pill.size() - 1 ? QStringLiteral("9px") : QStringLiteral("0");
+            const QString sheet = QStringLiteral("QToolButton { background: rgba(%1, %2); border: 0; padding: 4px 8px; min-height: %7px; margin: 0 %8px 0 0;"
+                                                 " border-top-left-radius: %4; border-bottom-left-radius: %4; border-top-right-radius: %5; border-bottom-right-radius: %5; }"
+                                                 "QToolButton:hover { background: rgba(%1, %3); }"
+                                                 "QToolButton:pressed { background: rgba(%1, %6); }"
+                                                 "QToolButton::menu-indicator { image: none; }")
+                                      .arg(ink, QString::number(veil, 'f', 3), QString::number(veil + 0.08, 'f', 3), left, right, QString::number(veil + 0.14, 'f', 3))
+                                      .arg(height - 8)
+                                      .arg(i == pill.size() - 1 ? 8 : 0); // (air between the pill and the location bar)
+            if (pill.at(i)->styleSheet() != sheet) {
+                pill.at(i)->setStyleSheet(sheet);
+            }
+        }
+    }
 }
 
 void DolphinMainWindow::saveNewToolbarConfig()
