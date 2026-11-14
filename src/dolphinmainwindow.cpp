@@ -293,6 +293,23 @@ DolphinMainWindow::DolphinMainWindow()
     const bool usePhoneUi{KRuntimePlatform::runtimePlatform().contains(QLatin1String("phone"))};
     setupGUI(Save | Create | ToolBar, usePhoneUi ? QStringLiteral("dolphinuiforphones.rc") : QString() /* load the default dolphinui.rc file */);
     QTimer::singleShot(0, this, &DolphinMainWindow::ngMoveToolbarButtons); // dolphin-ng
+    if (ngSetting("TABS").toLower() != QLatin1String("classic")) {
+        // dolphin-ng: tabs first, then the address, then the rest, as in a browser: a row of its own above the tool
+        // bar that holds the location bar. The bar in it mirrors the tab widget's own (DolphinTabWidget::ngCreateTopBar).
+        m_ngTabsToolBar = new QToolBar(this);
+        m_ngTabsToolBar->setObjectName(QStringLiteral("ngTabsToolBar"));
+        m_ngTabsToolBar->setWindowTitle(ngTr("Tabs", "Schede"));
+        m_ngTabsToolBar->setMovable(false);
+        m_ngTabsToolBar->setFloatable(false);
+        m_ngTabsToolBar->toggleViewAction()->setVisible(false);
+        m_ngTabsToolBar->setContextMenuPolicy(Qt::PreventContextMenu);
+        m_ngTabsToolBar->setContentsMargins(6, 2, 6, 0);
+        m_ngTabsToolBar->addWidget(m_tabWidget->ngCreateTopBar(m_ngTabsToolBar));
+        insertToolBar(toolBar(), m_ngTabsToolBar);
+        insertToolBarBreak(toolBar());
+        connect(m_tabWidget, &DolphinTabWidget::tabCountChanged, this, &DolphinMainWindow::ngUpdateTabsRow);
+        ngUpdateTabsRow();
+    }
     stateChanged(QStringLiteral("new_file"));
 
     QClipboard *clipboard = QApplication::clipboard();
@@ -593,8 +610,20 @@ void DolphinMainWindow::slotSplitViewChanged()
     updateSplitActions();
 }
 
+void DolphinMainWindow::ngUpdateTabsRow()
+{
+    if (m_ngTabsToolBar) {
+        // as Dolphin does with its own bar: out of the way with one tab, unless the user wants it always
+        m_ngTabsToolBar->setVisible(m_tabWidget->count() > 1 || GeneralSettings::alwaysShowTabBar());
+    }
+}
+
 void DolphinMainWindow::slotTabBarChanged()
 {
+    if (m_tabWidget->ngHasTopBar()) {
+        ngUpdateTabsRow(); // (the tab widget's own bar stays hidden)
+        return;
+    }
     m_tabWidget->setTabBarAutoHide(!GeneralSettings::alwaysShowTabBar());
     m_tabWidget->tabBar()->setTabsClosable(GeneralSettings::showCloseButtonOnTabs());
 }

@@ -239,6 +239,17 @@ private Q_SLOTS:
      */
     void renameTab(int index, const QString &label);
 
+public:
+    /**
+     * dolphin-ng: a second tab bar that mirrors this widget's own and drives it, to be placed elsewhere in the window
+     * (above the location bar: tabs first, then the address, then the rest). The widget's own bar is hidden from then on.
+     */
+    QTabBar *ngCreateTopBar(QWidget *parent);
+    bool ngHasTopBar() const
+    {
+        return m_ngTopBar != nullptr;
+    }
+
 protected:
     void tabInserted(int index) override;
     void tabRemoved(int index) override;
@@ -290,6 +301,13 @@ private:
 private:
     QPointer<DolphinTabPage> m_lastViewedTab;
     QPointer<DolphinNavigatorsWidgetAction> m_navigatorsWidget;
+
+    // dolphin-ng: the tab bar above the location bar, see ngCreateTopBar()
+    void ngSyncTopBar();
+    void ngScheduleSync();
+    QTabBar *m_ngTopBar = nullptr;
+    bool m_ngSyncing = false;
+    bool m_ngSyncPending = false;
 };
 
 #endif

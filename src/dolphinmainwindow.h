@@ -791,6 +791,8 @@ private:
     KNewFileMenu *m_newFileMenu;
     DolphinTabWidget *m_tabWidget;
     QWidget *m_ngSortBar = nullptr; // dolphin-ng: the sort/filter bar above the tabs
+    QToolBar *m_ngTabsToolBar = nullptr; // dolphin-ng: the row of tabs above the location bar
+    void ngUpdateTabsRow();
     QList<QAction *> m_ngMovedActions; // dolphin-ng: toolbar buttons that were moved to the sort bar
     QAction *m_ngSidebarToggle = nullptr; // dolphin-ng: shows and hides the places, first in the toolbar
     void ngPlaceSidebarToggle();

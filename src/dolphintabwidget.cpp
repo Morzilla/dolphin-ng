@@ -19,6 +19,7 @@
 #include <KStringHandler>
 #include <kio/global.h>
 
+#include <QTimer>
 #include <QApplication>
 #include <QDropEvent>
 #include <QStackedWidget>
@@ -129,10 +130,93 @@ void DolphinTabWidget::updateTabName(int index)
     if (!tabPageAt(index)->customLabel().isEmpty()) {
         QString name = tabPageAt(index)->customLabel();
         tabBar()->setTabText(index, name);
+        ngScheduleSync();
         return;
     }
 
     tabBar()->setTabText(index, tabName(tabPageAt(index)));
+    ngScheduleSync();
+}
+
+QTabBar *DolphinTabWidget::ngCreateTopBar(QWidget *parent)
+{
+    if (m_ngTopBar) {
+        return m_ngTopBar;
+    }
+    auto *top = new DolphinTabBar(parent);
+    top->setDocumentMode(true);
+    top->setElideMode(Qt::ElideRight);
+    top->setUsesScrollButtons(true);
+    top->setExpanding(false);
+    top->setDrawBase(false);
+    // what the user does on it goes to this widget, as from its own bar
+    connect(top, &DolphinTabBar::openNewActivatedTab, this, QOverload<int>::of(&DolphinTabWidget::openNewActivatedTab));
+    connect(top, &DolphinTabBar::tabDragMoveEvent, this, &DolphinTabWidget::tabDragMoveEvent);
+    connect(top, &DolphinTabBar::tabDropEvent, this, &DolphinTabWidget::tabDropEvent);
+    connect(top, &DolphinTabBar::tabDetachRequested, this, &DolphinTabWidget::detachTab);
+    connect(top, &DolphinTabBar::tabRenamed, this, &DolphinTabWidget::renameTab);
+    connect(top, &QTabBar::tabCloseRequested, this, QOverload<int>::of(&DolphinTabWidget::closeTab));
+    connect(top, &QTabBar::currentChanged, this, [this](int index) {
+        if (!m_ngSyncing && index >= 0 && index != currentIndex()) {
+            setCurrentIndex(index);
+        }
+    });
+    connect(top, &QTabBar::tabMoved, this, [this](int from, int to) {
+        if (!m_ngSyncing) {
+            m_ngSyncing = true;
+            tabBar()->moveTab(from, to);
+            m_ngSyncing = false;
+        }
+    });
+    // and what changes here shows on it
+    connect(tabBar(), &QTabBar::tabMoved, this, &DolphinTabWidget::ngScheduleSync);
+    connect(this, &QTabWidget::currentChanged, this, &DolphinTabWidget::ngScheduleSync);
+    m_ngTopBar = top;
+    setTabBarAutoHide(false);
+    tabBar()->hide();
+    ngSyncTopBar();
+    return top;
+}
+
+void DolphinTabWidget::ngScheduleSync()
+{
+    if (!m_ngTopBar || m_ngSyncPending) {
+        return;
+    }
+    m_ngSyncPending = true;
+    QTimer::singleShot(0, this, [this] {
+        m_ngSyncPending = false;
+        ngSyncTopBar();
+    });
+}
+
+void DolphinTabWidget::ngSyncTopBar()
+{
+    if (!m_ngTopBar) {
+        return;
+    }
+    m_ngSyncing = true;
+    QTabBar *own = tabBar();
+    while (m_ngTopBar->count() > own->count()) {
+        m_ngTopBar->removeTab(m_ngTopBar->count() - 1);
+    }
+    while (m_ngTopBar->count() < own->count()) {
+        m_ngTopBar->addTab(QString());
+    }
+    for (int i = 0; i < own->count(); ++i) {
+        if (m_ngTopBar->tabText(i) != own->tabText(i)) {
+            m_ngTopBar->setTabText(i, own->tabText(i));
+        }
+        m_ngTopBar->setTabIcon(i, own->tabIcon(i));
+        if (m_ngTopBar->tabToolTip(i) != own->tabToolTip(i)) {
+            m_ngTopBar->setTabToolTip(i, own->tabToolTip(i));
+        }
+    }
+    if (own->currentIndex() >= 0) {
+        m_ngTopBar->setCurrentIndex(own->currentIndex());
+    }
+    own->hide(); // (it stays out of sight whatever the tab widget does)
+    m_ngSyncing = false;
 }
 
 bool DolphinTabWidget::isUrlOpen(const QUrl &url) const
@@ -454,7 +538,8 @@ void DolphinTabWidget::tabUrlChanged(const QUrl &url)
     if (index >= 0) {
         updateTabName(index);
         tabBar()->setTabToolTip(index, url.toDisplayString(QUrl::PreferLocalFile));
-        if (tabBar()->isVisible()) {
+        ngScheduleSync();
+        if (tabBar()->isVisible() || m_ngTopBar) {
             // ensure the path url ends with a slash to have proper folder icon for remote folders
             const QUrl pathUrl = QUrl(url.adjusted(QUrl::StripTrailingSlash).toString(QUrl::FullyEncoded).append("/"));
             tabBar()->setTabIcon(index, QIcon::fromTheme(KIO::iconNameForUrl(pathUrl)));
@@ -503,8 +588,9 @@ void DolphinTabWidget::renameTab(int index, const QString &name)
 void DolphinTabWidget::tabInserted(int index)
 {
     QTabWidget::tabInserted(index);
+    ngScheduleSync();
 
-    if (tabBar()->isVisible()) {
+    if (tabBar()->isVisible() || m_ngTopBar) {
         // Resolve all pending tab icons
         for (int i = 0; i < count(); ++i) {
             const QUrl url = tabPageAt(i)->activeViewContainer()->url();
@@ -525,6 +611,7 @@ void DolphinTabWidget::tabInserted(int index)
 void DolphinTabWidget::tabRemoved(int index)
 {
     QTabWidget::tabRemoved(index);
+    ngScheduleSync();
 
     Q_EMIT tabCountChanged(count());
     m_lastViewedTab->setActive(true);

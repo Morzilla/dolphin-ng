@@ -184,7 +184,7 @@ PlacesPanel::PlacesPanel(QWidget *parent)
 {
     m_ngPalette = palette(); // the stock palette, restored when the glass panel is turned off
     ngApplyPalette();
-    setViewportMargins(10, 12, 10, 12 + DolphinDockWidget::ngDiskRoom()); // dolphin-ng: keep the entries inside the glass card drawn by the dock, above its disk boxes
+    setViewportMargins(16, 12, 16, 12 + DolphinDockWidget::ngDiskRoom()); // dolphin-ng: keep the entries inside the glass card drawn by the dock, above its disk boxes
     // dolphin-ng: a tighter list than KIO's own, and icons moved in so the selection pill's round end clears them
     // (read by Dialog NG's places view; the stock KIO ignores them)
     setProperty("ngRowPadding", 2);
@@ -351,7 +351,7 @@ void PlacesPanel::ngPaintPills()
     // every other surface for the hovered one, no edge
     auto drawPill = [&](QPainter &painter, const QRectF &rect, qreal strength) {
         painter.setRenderHint(QPainter::Antialiasing);
-        const QRectF pill = rect.adjusted(2.5, 2.5, -2.5, -2.5);
+        const QRectF pill = rect.adjusted(0.5, 2.5, -0.5, -2.5);
         const qreal radius = pill.height() / 2.0;
         if (ngAurora()) {
             painter.setPen(Qt::NoPen);
@@ -1292,7 +1292,7 @@ void PlacesPanel::ngLayoutBottom()
             widget->move(14, height() + 20);
         }
     }
-    setViewportMargins(10, 12 + topTotal, 10, 12 + bottomTotal);
+    setViewportMargins(16, 12 + topTotal, 16, 12 + bottomTotal); // (16 at the sides: the pill of the selected entry keeps clear of the card's edges)
     ngPlaceScrollBar();
 
     // top down, then bottom up; the disks are drawn by the dock where they are given room
@@ -1303,7 +1303,7 @@ void PlacesPanel::ngLayoutBottom()
         if (name == QLatin1String("disks")) {
             disksAt = y;
         } else if (QWidget *widget = widgetOf(name); widget && sectionsShown && !widget->isHidden()) {
-            widget->setGeometry(14, y, width() - 28, widget->height());
+            widget->setGeometry(18, y, width() - 36, widget->height());
         }
         y += heightOf(name);
     }
@@ -1314,7 +1314,7 @@ void PlacesPanel::ngLayoutBottom()
         if (name == QLatin1String("disks")) {
             disksAt = y;
         } else if (QWidget *widget = widgetOf(name); widget && sectionsShown && !widget->isHidden()) {
-            widget->setGeometry(14, y + 8, width() - 28, widget->height());
+            widget->setGeometry(18, y + 8, width() - 36, widget->height());
         }
     }
     if (property("ngDisksY").toInt() != disksAt) {
