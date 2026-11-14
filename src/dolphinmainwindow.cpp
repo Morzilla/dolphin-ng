@@ -3877,9 +3877,51 @@ void DolphinMainWindow::ngMoveToolbarButtons()
             m_ngMovedActions.clear();
             ngSortBarSetLeadingActions(m_ngSortBar, {});
         }
+        if (!m_ngMovedTrailing.isEmpty()) {
+            ngSortBarSetTrailingActions(m_ngSortBar, {});
+            bar->addActions(m_ngMovedTrailing);
+            m_ngMovedTrailing.clear();
+        }
+        if (m_ngFilterAction) {
+            m_ngFilterAction->setVisible(false);
+        }
         return;
     }
+    {
+        // what stood after the location bar (split, search, the menu) goes to the end of the sort bar, and the
+        // field that filters the folder comes up next to the location bar: address and search side by side
+        QList<QAction *> trailing;
+        bool after = false;
+        const QList<QAction *> all = bar->actions();
+        for (QAction *action : all) {
+            if (action == navigator) {
+                after = true;
+            } else if (after && action != m_ngFilterAction) {
+                trailing.append(action);
+            }
+        }
+        for (QAction *action : std::as_const(trailing)) {
+            bar->removeAction(action);
+        }
+        if (!trailing.isEmpty()) {
+            m_ngMovedTrailing += trailing;
+            ngSortBarSetTrailingActions(m_ngSortBar, m_ngMovedTrailing);
+        }
+        if (!m_ngFilterAction) {
+            if (QWidget *field = ngSortBarFilterField(m_ngSortBar)) {
+                field->setFixedWidth(240);
+                field->setMinimumHeight(32);
+                m_ngFilterAction = bar->addWidget(field);
+            }
+        }
+        if (m_ngFilterAction) {
+            m_ngFilterAction->setVisible(true);
+        }
+    }
+    // back and forward, which stood before the location bar, go right after it, with "up" beside them: the address
+    // first, then the ways to move from it (the view settings button, which the sort bar replaces, stays out)
     QList<QAction *> leading;
+    QAction *viewSettings = actionCollection()->action(QStringLiteral("view_settings"));
     const QList<QAction *> actions = bar->actions();
     for (QAction *action : actions) {
         if (action == navigator) {
@@ -3889,21 +3931,27 @@ void DolphinMainWindow::ngMoveToolbarButtons()
             leading.append(action);
         }
     }
-    if (leading.isEmpty()) {
-        return;
-    }
     for (QAction *action : std::as_const(leading)) {
         bar->removeAction(action);
     }
-    m_ngMovedActions += leading;
-    QList<QAction *> shown;
-    QAction *viewSettings = actionCollection()->action(QStringLiteral("view_settings"));
-    for (QAction *action : std::as_const(m_ngMovedActions)) {
-        if (action != viewSettings && !action->isSeparator()) {
-            shown.append(action);
+    QList<QAction *> afterAddress;
+    for (QAction *action : std::as_const(leading)) {
+        if (action == viewSettings || action->isSeparator()) {
+            if (!m_ngMovedActions.contains(action)) {
+                m_ngMovedActions.append(action);
+            }
+        } else {
+            afterAddress.append(action);
         }
     }
-    ngSortBarSetLeadingActions(m_ngSortBar, shown);
+    if (QAction *up = actionCollection()->action(QStringLiteral("go_up")); up && !bar->actions().contains(up) && !afterAddress.contains(up) && !m_ngUpPlaced) {
+        m_ngUpPlaced = true;
+        afterAddress.append(up);
+    }
+    if (!afterAddress.isEmpty()) {
+        bar->insertActions(m_ngFilterAction, afterAddress); // (before the filter field; at the end if there is none)
+    }
+    ngSortBarSetLeadingActions(m_ngSortBar, {});
 }
 
 void DolphinMainWindow::saveNewToolbarConfig()

@@ -535,6 +535,10 @@ QWidget *ngCreateSortBar(QWidget *parent);
 void ngSortBarFollow(QWidget *bar, DolphinView *view);
 // buttons shown at the start of the bar, before the sorting (the navigation buttons of the window)
 void ngSortBarSetLeadingActions(QWidget *bar, const QList<QAction *> &actions);
+// dolphin-ng: the buttons that stood after the location bar, at the end of the sort bar; and the bar's filter field,
+// which the window places next to the location bar
+void ngSortBarSetTrailingActions(QWidget *bar, const QList<QAction *> &actions);
+QWidget *ngSortBarFilterField(QWidget *bar);
 /** dolphin-ng: the filters of that bar as a section for the sidebar (rows with counts; a click filters). */
 QWidget *ngCreateFilterPanel(QWidget *sortBar, QWidget *parent, std::function<void(const QUrl &)> open, int part = 0);
 

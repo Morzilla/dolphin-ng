@@ -31,6 +31,7 @@
 #include <KIO/JobUiDelegateFactory>
 #include <KIO/MkpathJob>
 #include <KIO/ApplicationLauncherJob>
+#include <QWidgetAction>
 #include <QFileInfo>
 #include <KMessageBox>
 #include <KIO/CommandLauncherJob>
@@ -487,6 +488,14 @@ public:
         m_filter->setFixedWidth(210);
         m_filter->setToolTip(ngTr("Show only the items whose name contains the text. Esc clears the field.", "Mostra solo gli elementi il cui nome contiene il testo. Esc svuota il campo."));
         row->addWidget(m_filter, 0, Qt::AlignTop);
+        // the buttons that stood after the location bar in the tool bar (split, search, the menu), when the window
+        // moves them here and takes the field above next to the location bar (see setTrailingActions)
+        m_trailing = new QWidget(this);
+        auto *trailing = new QHBoxLayout(m_trailing);
+        trailing->setContentsMargins(4, 0, 0, 0);
+        trailing->setSpacing(2);
+        m_trailing->hide();
+        row->addWidget(m_trailing, 0, Qt::AlignTop);
         connect(m_filter, &QLineEdit::textChanged, this, [this](const QString &text) {
             if (m_view) {
                 m_view->setNameFilter(text);
@@ -745,6 +754,50 @@ private:
     }
 
 public:
+    QLineEdit *filterField() const
+    {
+        return m_filter;
+    }
+
+    void setTrailingActions(const QList<QAction *> &actions)
+    {
+        QLayout *layout = m_trailing->layout();
+        while (QLayoutItem *item = layout->takeAt(0)) {
+            if (QWidget *widget = item->widget()) {
+                if (auto *owner = qobject_cast<QWidgetAction *>(widget->property("_ng_widget_action").value<QObject *>())) {
+                    owner->releaseWidget(widget);
+                } else {
+                    widget->deleteLater();
+                }
+            }
+            delete item;
+        }
+        for (QAction *action : actions) {
+            if (action->isSeparator()) {
+                continue;
+            }
+            if (auto *widgetAction = qobject_cast<QWidgetAction *>(action)) {
+                // (the menu button: an action that makes its own widget)
+                if (QWidget *widget = widgetAction->requestWidget(m_trailing)) {
+                    widget->setProperty("_ng_widget_action", QVariant::fromValue<QObject *>(widgetAction));
+                    layout->addWidget(widget);
+                    continue;
+                }
+            }
+            auto *button = new QToolButton(m_trailing);
+            button->setDefaultAction(action);
+            button->setAutoRaise(true);
+            // the names that the tool bar showed beside the icon stay (Split), the others are icons
+            button->setToolButtonStyle(action->priority() == QAction::LowPriority || action->iconText().isEmpty() ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextBesideIcon);
+            button->setIconSize(QSize(20, 20));
+            if (action->menu()) {
+                button->setPopupMode(QToolButton::InstantPopup);
+            }
+            layout->addWidget(button);
+        }
+        m_trailing->setVisible(layout->count() > 0);
+    }
+
     void setLeadingActions(const QList<QAction *> &actions)
     {
         QLayout *layout = m_leading->layout();
@@ -1296,6 +1349,7 @@ private:
 
     DolphinView *m_view;
     QWidget *m_leading;
+    QWidget *m_trailing = nullptr;
     QHBoxLayout *m_leadingLayout = nullptr;
     NgFlowLayout *m_flow;
     QPointer<QWidget> m_sortPill, m_sortCaption, m_sortCompact; // the sorting as a pill, or as one button when narrow
@@ -4160,6 +4214,19 @@ QWidget *ngCreateFilterPanel(QWidget *sortBar, QWidget *parent, std::function<vo
 {
     auto *bar = dynamic_cast<NgSortBar *>(sortBar);
     return bar ? new NgFilterPanel(bar, parent, std::move(open), part) : nullptr;
+}
+
+void ngSortBarSetTrailingActions(QWidget *bar, const QList<QAction *> &actions)
+{
+    if (auto *sortBar = dynamic_cast<NgSortBar *>(bar)) {
+        sortBar->setTrailingActions(actions);
+    }
+}
+
+QWidget *ngSortBarFilterField(QWidget *bar)
+{
+    auto *sortBar = dynamic_cast<NgSortBar *>(bar);
+    return sortBar ? sortBar->filterField() : nullptr;
 }
 
 void ngSortBarSetLeadingActions(QWidget *bar, const QList<QAction *> &actions)
