@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      407dfc92c0d55a49ef04e49b7ce04bbf78ac5602
+%global commit      67e6b3d85efc9d56a34a361dd885094b98a57640
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611141458
+%global snapdate    202611141558
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
