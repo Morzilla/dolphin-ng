@@ -3943,7 +3943,7 @@ void DolphinMainWindow::ngMoveToolbarButtons()
         if (!m_ngFilterAction) {
             if (QWidget *field = ngSortBarFilterField(m_ngSortBar)) {
                 auto *gap = new QWidget(bar); // a little air between the location bar and the field
-                gap->setFixedWidth(8);
+                gap->setFixedWidth(12);
                 bar->addWidget(gap);
                 field->setFixedWidth(240);
                 m_ngFilterAction = bar->addWidget(field);
@@ -3992,7 +3992,11 @@ void DolphinMainWindow::ngMoveToolbarButtons()
         const int height = location && location->sizeHint().height() > 20 ? location->sizeHint().height() : 34;
         if (m_ngFilterAction) {
             if (QWidget *field = bar->widgetForAction(m_ngFilterAction)) {
-                field->setFixedHeight(height + 2); // (a field's frame is drawn a pixel inside its widget all around)
+                // as tall as the row of the tool bar, like the location bar beside it (a fixed height taken from the
+                // location bar's size hint stood taller than it where the tool bar lays it out lower)
+                field->setMinimumHeight(0);
+                field->setMaximumHeight(QWIDGETSIZE_MAX);
+                field->setSizePolicy(field->sizePolicy().horizontalPolicy(), QSizePolicy::Expanding);
             }
         }
         for (int i = 0; i < pill.size(); ++i) {
