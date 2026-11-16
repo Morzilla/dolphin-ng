@@ -74,6 +74,7 @@ private:
     QSlider *m_glass;
     QSlider *m_blur;
     QSlider *m_liveBlur; // the compositor's own blur strength, for the live backdrop
+    QSlider *m_windowOpacity = nullptr; // Breeze NG's window opacity (Glass or Aurora), shown with that style
     QCheckBox *m_motion;
     // sidebar: animated gradient
     QComboBox *m_lavaStyle;
