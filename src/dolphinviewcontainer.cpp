@@ -654,6 +654,11 @@ private:
             const QColor accent = ngAuroraSelection(palette());
             const QColor accentHover = ngAuroraSelection(palette(), 0.08);
             const QString accentRgb = QStringLiteral("%1, %2, %3").arg(accent.red()).arg(accent.green()).arg(accent.blue());
+            if (!dark) {
+                // light schemes: the pointer brings frost, not a shade of ink
+                sheet.replace(QStringLiteral("QToolButton:hover { background: rgba(%1, 0.08); }").arg(ink), QStringLiteral("QToolButton:hover { background: rgba(255, 255, 255, 0.50); }"));
+                sheet.replace(QStringLiteral("QToolButton:pressed { background: rgba(%1, 0.14); }").arg(ink), QStringLiteral("QToolButton:pressed { background: rgba(255, 255, 255, 0.70); }"));
+            }
             sheet.replace(QStringLiteral("padding: 3px 8px; background: rgba(%1, 0.06);").arg(ink), QStringLiteral("padding: 3px 8px; background: rgba(%1, %2);").arg(veilInk, veil));
             sheet.replace(QStringLiteral("QWidget#navPill { background: rgba(%1, 0.05); border: 1px solid rgba(%1, 0.09);").arg(ink), QStringLiteral("QWidget#navPill { background: rgba(%1, %2); border: 0;").arg(veilInk, veil));
             sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); }").arg(ink), QStringLiteral("QToolButton:checked { background: rgba(%1, %2); color: %3; }").arg(accentRgb, QString::number(accent.alphaF(), 'f', 2), ngAuroraSelectionText(palette()).name()));

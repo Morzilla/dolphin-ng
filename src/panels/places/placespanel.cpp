@@ -366,6 +366,14 @@ void PlacesPanel::ngPaintPills()
         QStyleOptionViewItem option;
         initViewItemOption(&option);
         option.rect = visualRect(index); // the delegate lays the row out in its full rect (with the title space)
+        if (ngAurora() && index == m_ngPillIndex) {
+            // on the pill of the selection: the colour of text on a selection (white on the full accent, the deep
+            // accent on its light sheet)
+            const QColor onSelection = ngAuroraSelectionText(palette());
+            for (QPalette::ColorRole role : {QPalette::Text, QPalette::WindowText, QPalette::HighlightedText}) {
+                option.palette.setColor(role, onSelection);
+            }
+        }
         option.state &= ~(QStyle::State_Selected | QStyle::State_MouseOver | QStyle::State_HasFocus);
         option.showDecorationSelected = false;
         if (QAbstractItemDelegate *delegate = itemDelegateForIndex(index)) {

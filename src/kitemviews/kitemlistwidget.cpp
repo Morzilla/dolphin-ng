@@ -1629,7 +1629,8 @@ bool ngAuroraFull()
 
 QColor ngAuroraSelection(const QPalette &palette, qreal more)
 {
-    const bool dark = palette.color(QPalette::Window).lightnessF() < 0.5;
+    // (the application's scheme: a panel may blank its own window colour)
+    const bool dark = QGuiApplication::palette().color(QPalette::Window).lightnessF() < 0.5;
     if (s_ngAuroraFull) {
         const QColor accent = ngAuroraAccent(palette, 1.0);
         float h, s, l;
@@ -1644,7 +1645,7 @@ QColor ngAuroraSelectionText(const QPalette &palette)
     if (s_ngAuroraFull) {
         return QColor(255, 255, 255);
     }
-    if (palette.color(QPalette::Window).lightnessF() >= 0.5) {
+    if (QGuiApplication::palette().color(QPalette::Window).lightnessF() >= 0.5) {
         float h, s, l;
         ngAuroraAccent(palette, 1.0).getHslF(&h, &s, &l);
         return QColor::fromHslF(h, s, 0.38); // on a light sheet of the accent: the accent itself, deep enough to read
@@ -1703,7 +1704,13 @@ void KItemListWidget::paint(QPainter *painter, const QStyleOptionGraphicsItem *o
         if (ngAurora()) {
             // Breeze NG Aurora: a light veil on the window's glass, no lit edge
             painter->setBrush(ngAuroraVeil(dark));
-            painter->drawRoundedRect(card, 8, 8);
+            if (!dark) {
+                painter->setPen(QPen(QColor(255, 255, 255, 140), 1)); // frost has a bright hairline edge
+                painter->drawRoundedRect(card.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8);
+                painter->setPen(Qt::NoPen);
+            } else {
+                painter->drawRoundedRect(card, 8, 8);
+            }
         } else {
             painter->setBrush(dark ? QColor(0, 0, 0, 66) : QColor(0, 0, 0, 14)); // darker than the view on either scheme
             painter->drawRoundedRect(card, 5, 5);
@@ -2516,7 +2523,8 @@ QPainterPath KItemListWidget::ngSelectionBlock(qreal grow, QRectF *reach, qreal 
 void KItemListWidget::ngPaintCheck(QPainter *painter, QWidget *widget)
 {
     // the round check at the top left corner of a selected item with a ring selection, over its content
-    if (!ngRingSelection() || m_ngSelProgress < 0.01) {
+    // (off unless asked for, setting SELECT_CHECK=show: the ring and the tint say "selected" already)
+    if (!ngRingSelection() || m_ngSelProgress < 0.01 || ngSetting("SELECT_CHECK").toLower() != QLatin1String("show")) {
         return;
     }
     const qreal pop = m_ngSelProgress; // the check fades in and out with the ring

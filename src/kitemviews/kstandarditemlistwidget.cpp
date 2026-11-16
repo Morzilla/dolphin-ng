@@ -3264,7 +3264,9 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
         const QColor back = QColor::fromHslF(hue, sat * 0.62, 0.40);
         const QColor front = QColor::fromHslF(hue, sat * 0.78, dark ? 0.70 : 0.72);
         const QColor frontTop = QColor::fromHslF(hue, sat * 0.78, dark ? 0.74 : 0.76);
-        const QColor ink = QColor::fromHslF(hue, sat * 0.6, 0.15), ink2 = QColor::fromHslF(hue, sat * 0.55, 0.27);
+        // what is written and drawn on the folder: slate, the text colour of Breeze NG Light, on every hue (a dark
+        // tone of the folder's own hue was nearly black on the pale front)
+        const QColor ink(43, 54, 72), ink2(74, 88, 110);
         const qreal radius = qMin(width, height) * 0.09;
         const qreal tabDepth = height * 0.16;
         QPainterPath backShape;
@@ -3831,6 +3833,9 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
     if (isDir) {
         if (const int special = ngSpecialFolder(values.value("url").toUrl().toLocalFile())) {
             m_ngTint = ngAccent(ngSpecialFolderColour(special), darkScheme); // a well-known folder: its own colour
+        } else {
+            // any other folder: the accent colour of the desktop (the icon theme's own grey-blue said nothing)
+            m_ngTint = ngAccent(QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight), darkScheme);
         }
     }
 

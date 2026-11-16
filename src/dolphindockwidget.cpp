@@ -664,7 +664,13 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
         // Breeze NG Aurora: the whole window is already glass; the card is a faint veil of ink on it, not a hole
         opaque = false;
         painter.setBrush(ngAuroraVeil(ngIsDark(palette())));
-        painter.drawRoundedRect(card, radius, radius);
+        if (!ngIsDark(palette())) {
+            painter.setPen(QPen(QColor(255, 255, 255, 140), 1)); // frost has a bright hairline edge
+            painter.drawRoundedRect(QRectF(card).adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
+            painter.setPen(Qt::NoPen);
+        } else {
+            painter.drawRoundedRect(card, radius, radius);
+        }
     } else {
         // live blur: thin out the window tint under the card, so the compositor's blur shows through
         opaque = false;
