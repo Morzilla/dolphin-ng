@@ -6,7 +6,23 @@ click away, and work in progress shown on the files themselves. It is based on D
 things are shown and clicked; file operations are Dolphin's own. It installs into your home folder, next to your
 distribution's Dolphin, and replaces nothing.
 
-![Dolphin NG: cards in groups, pinned items first, two selected, a resize under way, the glass sidebar with filters and disks](ng/screenshots/readme/hero.png)
+![Dolphin NG in Breeze NG's Aurora Glass: Tessera cards, two pinned items first, the glass sidebar with pinned items, filters and disks](ng/screenshots/readme/hero.png)
+
+With Breeze NG's **Aurora Glass** look, in the dark and in the light colour scheme (here four cards selected:
+neighbours share one outline):
+
+| Dark | Light |
+|---|---|
+| <img src="ng/screenshots/readme/aurora-dark.png" width="420" alt="Dolphin NG, Aurora Glass, dark"> | <img src="ng/screenshots/readme/aurora-light.png" width="420" alt="Dolphin NG, Aurora Glass, light"> |
+
+**Fedora 44 and 45: there are ready-made packages on COPR**, no building needed:
+
+```
+sudo dnf copr enable morzilla/desktop-ng
+sudo dnf install dolphin-ng breeze-ng
+```
+
+Log out and in again afterwards. The same repository has the rest of the NG desktop: `breeze-ng`, `dolphin-ng`, `dialog-ng`, `neoline-icons` ([project page](https://copr.fedorainfracloud.org/coprs/morzilla/desktop-ng/)).
 
 **Try it with the graphical installer: [how it works and how to run it](https://github.com/Morzilla/breeze-ng/blob/ng/NG.md#everything-at-once).**
 It sets up Dolphin NG and lets you pick the other parts of the NG desktop (the Breeze NG style, the NeoLine icons,
