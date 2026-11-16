@@ -480,6 +480,27 @@ public:
         m_flow = new NgFlowLayout(nullptr, 4, 4);
         m_flow->setContentsMargins(0, 0, 0, 0);
         row->addLayout(m_flow, 1);
+        // this folder has a view of its own (its look of cards, its sorting or groups): an icon on the right says so,
+        // and a click forgets it, back to the default view
+        m_ownView = new QToolButton(this);
+        m_ownView->setAutoRaise(true);
+        m_ownView->setCheckable(true);
+        m_ownView->setChecked(true); // in the accent: it stands out from the other buttons
+        m_ownView->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        m_ownView->setIcon(QIcon::fromTheme(QStringLiteral("folder-favorites"), QIcon::fromTheme(QStringLiteral("bookmarks"))));
+        m_ownView->setToolTip(ngTr("This folder has a view of its own (look of the cards, sorting, groups). Click to go back to the default view.",
+                                   "Questa cartella ha una vista sua (aspetto delle card, ordinamento, gruppi). Clic per tornare alla vista predefinita."));
+        m_ownView->hide();
+        connect(m_ownView, &QToolButton::clicked, this, [this] {
+            m_ownView->setChecked(true);
+            if (m_view) {
+                m_view->ngResetFolderView();
+            }
+            QTimer::singleShot(0, this, [this] {
+                rebuild();
+            });
+        });
+        row->addWidget(m_ownView, 0, Qt::AlignTop);
 
         // instant filter of the current folder: what you type narrows the list as you type
         m_filter = new QLineEdit(this);
@@ -562,13 +583,7 @@ public:
         });
         connect(view, &DolphinView::viewSettingsChanged, this, [this] {
             QTimer::singleShot(0, this, [this] {
-                if (m_ownView && m_view) {
-                    const bool show = m_view->ngFolderHasOwnView();
-                    if (show != m_ownView->isVisible()) {
-                        m_ownView->setVisible(show);
-                        fitSorting();
-                    }
-                }
+                updateOwnView();
             });
         });
         connect(view, &DolphinView::groupRoleChanged, this, [this] {
@@ -885,6 +900,9 @@ public:
         if (m_leading->isVisible()) {
             room -= m_leading->sizeHint().width() + layout()->spacing();
         }
+        if (m_ownView->isVisible()) {
+            room -= m_ownView->sizeHint().width() + layout()->spacing();
+        }
         const int trailingWidth = m_trailing->isVisible() ? m_trailing->sizeHint().width() : 0;
         if (m_trailing->isVisible()) {
             room -= trailingWidth + layout()->spacing();
@@ -951,7 +969,7 @@ public:
         m_sortCompact->setVisible(compact);
         // and if the one line is still too wide: the groups, the filters, the cards and the sorting keep only their
         // icon, one after the other, until it fits (their names are in the tooltips)
-        const QList<QToolButton *> named = {m_ownView.data(), m_groups.data(), m_filters.data(), m_cards.data(), qobject_cast<QToolButton *>(m_sortCompact.data())};
+        const QList<QToolButton *> named = {m_groups.data(), m_filters.data(), m_cards.data(), qobject_cast<QToolButton *>(m_sortCompact.data())};
         for (QToolButton *button : named) {
             if (button) {
                 button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
@@ -982,6 +1000,15 @@ public:
             }
         }
         m_flow->invalidate();
+    }
+
+    void updateOwnView()
+    {
+        const bool show = m_view && m_view->ngFolderHasOwnView();
+        if (show != m_ownView->isVisible()) {
+            m_ownView->setVisible(show);
+            fitSorting();
+        }
     }
 
     // the buttons are shorter than the pill of the sorting beside them: centred on the first line of the bar
@@ -1018,6 +1045,7 @@ private:
         m_gaps.clear();
         QTimer::singleShot(0, this, [this] {
             alignLeading();
+            updateOwnView(); // (the view saves its properties after it changes: looked at a moment later)
             fitSorting();
         });
         if (!m_view) {
@@ -1384,37 +1412,6 @@ private:
             m_groupsTextWidth = groups->sizeHint().width();
         }
 
-        // ---- this folder has a view of its own (its look of cards, its sorting or groups): a chip says so, and a click
-        // forgets it, back to the default view. (Shown a moment later: the view saves its properties after it changes)
-        {
-            auto *own = new QToolButton(this);
-            own->setAutoRaise(true);
-            own->setCheckable(true);
-            own->setChecked(true); // in the accent: it stands out from the controls
-            own->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-            own->setIcon(QIcon::fromTheme(QStringLiteral("folder-favorites"), QIcon::fromTheme(QStringLiteral("bookmarks"))));
-            own->setText(ngTr("This folder's view", "Vista di questa cartella"));
-            own->setToolTip(ngTr("This folder has a view of its own (look of the cards, sorting, groups). Click to go back to the default view.",
-                                 "Questa cartella ha una vista sua (aspetto delle card, ordinamento, gruppi). Clic per tornare alla vista predefinita."));
-            own->setVisible(false);
-            connect(own, &QToolButton::clicked, this, [this] {
-                m_view->ngResetFolderView();
-                QTimer::singleShot(0, this, [this] {
-                    rebuild();
-                });
-            });
-            m_flow->addWidget(own);
-            m_ownView = own;
-            QTimer::singleShot(0, this, [this] {
-                if (m_ownView && m_view) {
-                    const bool show = m_view->ngFolderHasOwnView();
-                    if (show != m_ownView->isVisible()) {
-                        m_ownView->setVisible(show);
-                        fitSorting();
-                    }
-                }
-            });
-        }
 
         if (!list) {
             m_flow->invalidate();
@@ -1494,7 +1491,7 @@ private:
     int m_trailingTextWidth = 0; // the width their names take
     QPointer<QToolButton> m_groups; // the groups button (icon only when even the compact bar is too wide)
     QPointer<QToolButton> m_filters, m_cards; // the filters and cards buttons (icon only when narrower still)
-    QPointer<QToolButton> m_ownView; // "this folder's view": shown when the folder has one of its own
+    QToolButton *m_ownView = nullptr; // "this folder's view", on the right: shown when the folder has one of its own
     int m_groupsTextWidth = 0;
     QList<QPointer<QWidget>> m_gaps; // the spaces between the groups of the bar (narrower when the bar is)
     DolphinView::Mode m_modeBeforeCards = DolphinView::DetailsView; // the cards button goes back to this
