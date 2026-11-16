@@ -119,6 +119,13 @@ public:
     void save();
 
     /**
+     * dolphin-ng: whether the folder has view properties of its own (only when every folder remembers its view),
+     * and forgetting them: the folder goes back to the default view.
+     */
+    bool ngHasOwn() const;
+    void ngForget();
+
+    /**
      * Returns the destination directory path where the view
      * properties are stored. \a subDir specifies the used sub
      * directory.
@@ -183,6 +190,7 @@ private:
     bool m_changedProps;
     bool m_autoSave;
     QString m_filePath;
+    bool m_ngOwn = false;
     ViewPropertySettings *m_node;
 };
 

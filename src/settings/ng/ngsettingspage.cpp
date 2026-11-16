@@ -6,6 +6,7 @@
 
 #include "kitemviews/kitemlistwidget.h"
 #include "dolphin_contentdisplaysettings.h"
+#include "dolphin_generalsettings.h"
 #include "dolphinplacesmodelsingleton.h"
 #include "panels/places/placespanel.h"
 
@@ -1287,11 +1288,23 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     for (const char *id : {"a", "b", "c"}) {
         m_cards->addItem(QString(), QString::fromLatin1(id));
     }
-    tilesFor(m_cards, QStringLiteral("cards"), ngTr("Kind of card", "Tipo di card"),
+    tilesFor(m_cards, QStringLiteral("cards"), ngTr("Default kind of card", "Tipo di card predefinito"),
              {{QStringLiteral("Tessera"), ngTr("Preview on top, details below", "Anteprima in alto, dettagli sotto")},
               {QStringLiteral("Scheda"), ngTr("Icon on the left, everything in three lines", "Icona a sinistra, tutto in tre righe")},
               {QStringLiteral("Dossier"), ngTr("The days elapsed, large", "I giorni trascorsi in grande")}},
              3);
+    {
+        auto *note = new QLabel(ngTr("For every folder without a look of its own: the Cards button in the bar gives the folder it shows a look of its own.",
+                                     "Per tutte le cartelle senza un aspetto loro: il pulsante Card nella barra dà alla cartella aperta un aspetto suo."),
+                                this);
+        note->setWordWrap(true);
+        note->setEnabled(false);
+        page->addWidget(note);
+    }
+    m_perFolder = toggle(ngTr("Every folder remembers its own view (sorting, groups, look of the cards)", "Ogni cartella ricorda la sua vista (ordinamento, gruppi, aspetto delle card)"));
+    m_perFolder->setToolTip(ngTr("A folder with a view of its own shows \"This folder's view\" in the bar: a click goes back to the default view.",
+                                 "Una cartella con una vista sua mostra \"Vista di questa cartella\" nella barra: un clic torna alla vista predefinita."));
+    connect(m_perFolder, &QAbstractButton::toggled, this, &NgSettingsPage::changed);
     m_cardsFit = new QComboBox(this);
     m_cardsFit->addItem(QString(), QString());
     m_cardsFit->addItem(QString(), QStringLiteral("stretch"));
@@ -1578,6 +1591,7 @@ void NgSettingsPage::updateDependencies()
 
 void NgSettingsPage::loadSettings()
 {
+    m_perFolder->setChecked(!GeneralSettings::globalViewProps());
     m_glassPanel->setChecked(ngSetting("SIDEBAR").toLower() != QLatin1String("plain"));
     m_backdrop->setCurrentIndex(qMax(0, m_backdrop->findData(ngSetting("GLASS_MODE").toLower())));
     m_image->setText(ngSetting("GLASS_IMAGE"));
@@ -1658,6 +1672,10 @@ void NgSettingsPage::loadSettings()
 
 void NgSettingsPage::applySettings()
 {
+    if (GeneralSettings::globalViewProps() == m_perFolder->isChecked()) {
+        GeneralSettings::setGlobalViewProps(!m_perFolder->isChecked());
+        GeneralSettings::self()->save();
+    }
     setNgSetting("SIDEBAR", m_glassPanel->isChecked() ? QString() : QStringLiteral("plain"));
     setNgSetting("GLASS_MODE", m_backdrop->currentData().toString());
     setNgSetting("GLASS_IMAGE", m_image->text().trimmed());
@@ -1751,6 +1769,7 @@ void NgSettingsPage::applySettings()
 
 void NgSettingsPage::restoreDefaults()
 {
+    m_perFolder->setChecked(true);
     // the same look as ngDefault() in kitemlistwidget.cpp
     m_glassPanel->setChecked(true);
     m_backdrop->setCurrentIndex(qMax(0, m_backdrop->findData(QStringLiteral("live"))));

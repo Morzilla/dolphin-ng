@@ -101,6 +101,7 @@ private:
     QComboBox *m_dialogSize; // small | medium | large
     // icons view
     QCheckBox *m_tiles;
+    QCheckBox *m_perFolder = nullptr; // every folder remembers its own view (Dolphin's GlobalViewProps, the other way round)
     // cards view
     QComboBox *m_cards;
     QComboBox *m_cardsFit;

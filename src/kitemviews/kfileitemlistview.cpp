@@ -481,18 +481,18 @@ QSize KFileItemListView::availableIconSize() const
         // dolphin-ng: a card shows its preview much larger than an icon: across the band on top (Tessera) or in the
         // column on the left (Scheda). Asked at the icon size, it was stretched to fit and came out blurred.
         const QSizeF card = itemSize();
-        if (ngCardStyle() == NgCardStyle::Tessera) {
+        if (ngCardStyle(this) == NgCardStyle::Tessera) {
             // as wide as the band whatever the proportions: a preview is fitted inside the size asked for, so a page
             // taller than wide (a PDF) needs the height to spare, or it comes narrow and is stretched across the band
             return QSize(qRound(card.width()), qRound(card.width() * 2.4)); // 2.4: a phone screenshot is about 1 : 2.2
         }
-        if (ngCardStyle() == NgCardStyle::Scheda) {
+        if (ngCardStyle(this) == NgCardStyle::Scheda) {
             // as wide as the object's column, and tall enough that a page (taller than wide) comes at that width
             // too: fitted in the column's own height it came half as wide and was stretched, blurred
             const qreal column = qMin(card.height() * 1.3, card.width() * 0.38);
             return QSize(qRound(column), qRound(column * 2.4));
         }
-        if (ngCardStyle() == NgCardStyle::Dossier) {
+        if (ngCardStyle(this) == NgCardStyle::Dossier) {
             // the object in the header (see KStandardItemListWidget::updateCardsLayoutTextCache())
             const qreal column = qMin(qRound(card.height() * 0.38) * 1.6, card.width() * 0.34);
             return QSize(qRound(column), qRound(column * 2.4));

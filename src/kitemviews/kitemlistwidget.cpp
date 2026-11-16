@@ -7,6 +7,8 @@
  */
 
 #include "kitemlistwidget.h"
+#include <QUrl>
+#include <QGraphicsObject>
 
 #include "kitemlistview.h"
 #include "private/kitemlistselectiontoggle.h"
@@ -278,6 +280,48 @@ NgCardStyle ngCardStyle()
         return NgCardStyle::Dossier;
     }
     return NgCardStyle::Tessera;
+}
+
+NgCardStyle ngCardStyle(const QGraphicsItem *item)
+{
+    for (const QGraphicsItem *it = item; it; it = it->parentItem()) {
+        if (const QGraphicsObject *object = it->toGraphicsObject()) {
+            const QVariant own = object->property("_ng_card_style");
+            if (own.isValid() && own.toInt() >= 0) {
+                return NgCardStyle(qBound(0, own.toInt(), 2));
+            }
+        }
+    }
+    return ngCardStyle();
+}
+
+static KConfigGroup ngFolderLooks()
+{
+    return KSharedConfig::openConfig(QStringLiteral("dolphin-ng-foldersrc"))->group(QStringLiteral("CardLook"));
+}
+
+static QString ngFolderKey(const QUrl &url)
+{
+    return url.adjusted(QUrl::StripTrailingSlash | QUrl::NormalizePathSegments).toString();
+}
+
+QString ngFolderCardLook(const QUrl &url)
+{
+    return url.isEmpty() ? QString() : ngFolderLooks().readEntry(ngFolderKey(url), QString());
+}
+
+void ngSetFolderCardLook(const QUrl &url, const QString &look)
+{
+    if (url.isEmpty()) {
+        return;
+    }
+    KConfigGroup group = ngFolderLooks();
+    if (look.isEmpty()) {
+        group.deleteEntry(ngFolderKey(url));
+    } else {
+        group.writeEntry(ngFolderKey(url), look);
+    }
+    group.sync();
 }
 
 bool ngCardsStretch()

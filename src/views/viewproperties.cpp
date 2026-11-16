@@ -227,6 +227,10 @@ ViewProperties::ViewProperties(const QUrl &url)
         // On subsequent visits the user's saved properties should be preserved.
         || (useGlobalViewProps && !(useSearchView || useTrashView || useRecentDocumentsView || useDownloadsView));
 
+    // dolphin-ng: properties of the folder's own, not the defaults
+    m_ngOwn = propsOpt && !useDefaultSettings && !useGlobalViewProps && !(useSearchView || useTrashView || useRecentDocumentsView || useDownloadsView)
+        && (propsOpt->config()->hasGroup(QStringLiteral("Dolphin")) || propsOpt->config()->hasGroup(QStringLiteral("Settings")));
+
     if (propsOpt) {
         m_node = propsOpt;
     } else {
@@ -586,6 +590,34 @@ void ViewProperties::update()
 {
     m_changedProps = true;
     m_node->setTimestamp(QDateTime::currentDateTime());
+}
+
+bool ViewProperties::ngHasOwn() const
+{
+    return m_ngOwn;
+}
+
+void ViewProperties::ngForget()
+{
+    // the properties live in the folder's extended attributes, or in its .directory file (whose other groups, like
+    // a custom icon, stay)
+    KFileMetaData::UserMetaData metaData(m_filePath);
+    if (metaData.isSupported() && !metaData.attribute(MetaDataKey).isEmpty()) {
+        metaData.setAttribute(MetaDataKey, QString());
+    }
+    const QString settingsFile = m_filePath + QDir::separator() + ViewPropertiesFileName;
+    if (QFile::exists(settingsFile)) {
+        KConfig cfg(settingsFile, KConfig::OpenFlag::SimpleConfig);
+        cfg.deleteGroup(QStringLiteral("Dolphin"));
+        cfg.deleteGroup(QStringLiteral("Settings"));
+        if (cfg.groupList().isEmpty()) {
+            QFile::remove(settingsFile);
+        } else {
+            cfg.sync();
+        }
+    }
+    m_ngOwn = false;
+    m_changedProps = false; // nothing to save on the way out
 }
 
 void ViewProperties::save()

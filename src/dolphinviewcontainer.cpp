@@ -560,6 +560,17 @@ public:
                 rebuild();
             });
         });
+        connect(view, &DolphinView::viewSettingsChanged, this, [this] {
+            QTimer::singleShot(0, this, [this] {
+                if (m_ownView && m_view) {
+                    const bool show = m_view->ngFolderHasOwnView();
+                    if (show != m_ownView->isVisible()) {
+                        m_ownView->setVisible(show);
+                        fitSorting();
+                    }
+                }
+            });
+        });
         connect(view, &DolphinView::groupRoleChanged, this, [this] {
             QTimer::singleShot(0, this, [this] {
                 rebuild();
@@ -940,7 +951,7 @@ public:
         m_sortCompact->setVisible(compact);
         // and if the one line is still too wide: the groups, the filters, the cards and the sorting keep only their
         // icon, one after the other, until it fits (their names are in the tooltips)
-        const QList<QToolButton *> named = {m_groups.data(), m_filters.data(), m_cards.data(), qobject_cast<QToolButton *>(m_sortCompact.data())};
+        const QList<QToolButton *> named = {m_ownView.data(), m_groups.data(), m_filters.data(), m_cards.data(), qobject_cast<QToolButton *>(m_sortCompact.data())};
         for (QToolButton *button : named) {
             if (button) {
                 button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
@@ -1144,7 +1155,7 @@ private:
             cards->setCheckable(true);
             cards->setChecked(cardsOn);
             cards->setPopupMode(QToolButton::MenuButtonPopup);
-            cards->setText(cardsOn ? ngTr("Cards: %1", "Card: %1").arg(QLatin1String(looks[int(ngCardStyle())])) : ngTr("Cards", "Card"));
+            cards->setText(cardsOn ? ngTr("Cards: %1", "Card: %1").arg(QLatin1String(looks[m_view->ngCardLook()])) : ngTr("Cards", "Card"));
             m_cards = cards;
             cards->setToolTip(cardsOn ? ngTr("A click goes to the next kind of card (Tessera, Scheda, Dossier); the arrow picks one, or another view (list, icons).",
                                              "Un clic passa al tipo di card seguente (Tessera, Scheda, Dossier); la freccia ne sceglie uno, o un'altra vista (lista, icone).")
@@ -1155,12 +1166,10 @@ private:
             for (int i = 0; i < 3; ++i) {
                 QAction *action = menu->addAction(QStringLiteral("%1 · %2").arg(QChar(QLatin1Char('A' + i)), QLatin1String(looks[i])));
                 action->setCheckable(true);
-                action->setChecked(int(ngCardStyle()) == i);
+                action->setChecked(m_view->ngCardLook() == i);
                 group->addAction(action);
                 connect(action, &QAction::triggered, this, [this, i] {
-                    static const char *const keys[] = {"a", "b", "c"};
-                    setNgSetting("CARDS", QLatin1String(keys[i]));
-                    ngSettingsInvalidate();
+                    m_view->ngSetCardLook(i); // this folder's own look (the default one is in the settings)
                     if (m_view->viewMode() != DolphinView::CardsView) {
                         m_modeBeforeCards = m_view->viewMode();
                         m_view->setViewMode(DolphinView::CardsView);
@@ -1215,6 +1224,22 @@ private:
                     });
                 }
             }
+            // the look chosen here is this folder's own; the default one is for every folder that has none
+            menu->addSeparator();
+            QAction *everywhere = menu->addAction(QIcon::fromTheme(QStringLiteral("folder-copy")), ngTr("Use this look in every folder", "Usa questo aspetto in tutte le cartelle"));
+            connect(everywhere, &QAction::triggered, this, [this] {
+                m_view->ngSetCardLook(m_view->ngCardLook(), true);
+                rebuild();
+            });
+            if (m_view->ngFolderHasOwnCardLook()) {
+                static const char *const lookNames[] = {"Tessera", "Scheda", "Dossier"};
+                QAction *back = menu->addAction(QIcon::fromTheme(QStringLiteral("edit-undo")),
+                                                ngTr("Back to the default look (%1)", "Torna all'aspetto predefinito (%1)").arg(QLatin1String(lookNames[int(ngCardStyle())])));
+                connect(back, &QAction::triggered, this, [this] {
+                    m_view->ngSetCardLook(-1);
+                    rebuild();
+                });
+            }
             cards->setMenu(menu);
             menuButton(cards);
             // a click: the cards view in the look used last; already there, the next look
@@ -1225,9 +1250,7 @@ private:
                     m_view->setViewMode(DolphinView::CardsView);
                     return;
                 }
-                static const char *const keys[] = {"a", "b", "c"};
-                setNgSetting("CARDS", QLatin1String(keys[(int(ngCardStyle()) + 1) % 3]));
-                ngSettingsInvalidate();
+                m_view->ngSetCardLook((m_view->ngCardLook() + 1) % 3); // this folder's own look
                 rebuild();
             });
             m_flow->addWidget(cards);
@@ -1361,6 +1384,38 @@ private:
             m_groupsTextWidth = groups->sizeHint().width();
         }
 
+        // ---- this folder has a view of its own (its look of cards, its sorting or groups): a chip says so, and a click
+        // forgets it, back to the default view. (Shown a moment later: the view saves its properties after it changes)
+        {
+            auto *own = new QToolButton(this);
+            own->setAutoRaise(true);
+            own->setCheckable(true);
+            own->setChecked(true); // in the accent: it stands out from the controls
+            own->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+            own->setIcon(QIcon::fromTheme(QStringLiteral("folder-favorites"), QIcon::fromTheme(QStringLiteral("bookmarks"))));
+            own->setText(ngTr("This folder's view", "Vista di questa cartella"));
+            own->setToolTip(ngTr("This folder has a view of its own (look of the cards, sorting, groups). Click to go back to the default view.",
+                                 "Questa cartella ha una vista sua (aspetto delle card, ordinamento, gruppi). Clic per tornare alla vista predefinita."));
+            own->setVisible(false);
+            connect(own, &QToolButton::clicked, this, [this] {
+                m_view->ngResetFolderView();
+                QTimer::singleShot(0, this, [this] {
+                    rebuild();
+                });
+            });
+            m_flow->addWidget(own);
+            m_ownView = own;
+            QTimer::singleShot(0, this, [this] {
+                if (m_ownView && m_view) {
+                    const bool show = m_view->ngFolderHasOwnView();
+                    if (show != m_ownView->isVisible()) {
+                        m_ownView->setVisible(show);
+                        fitSorting();
+                    }
+                }
+            });
+        }
+
         if (!list) {
             m_flow->invalidate();
             return;
@@ -1439,6 +1494,7 @@ private:
     int m_trailingTextWidth = 0; // the width their names take
     QPointer<QToolButton> m_groups; // the groups button (icon only when even the compact bar is too wide)
     QPointer<QToolButton> m_filters, m_cards; // the filters and cards buttons (icon only when narrower still)
+    QPointer<QToolButton> m_ownView; // "this folder's view": shown when the folder has one of its own
     int m_groupsTextWidth = 0;
     QList<QPointer<QWidget>> m_gaps; // the spaces between the groups of the bar (narrower when the bar is)
     DolphinView::Mode m_modeBeforeCards = DolphinView::DetailsView; // the cards button goes back to this

@@ -2098,13 +2098,13 @@ void KStandardItemListWidget::updatePixmapCache()
             // dolphin-ng: the preview of a card is scaled once to the place it is shown in (the band of a Tessera, the
             // column of a Scheda), not down to the icon size and up again when painted
             QSizeF cardPicture;
-            if (m_layout == CardsLayout && ngCardStyle() == NgCardStyle::Tessera) {
+            if (m_layout == CardsLayout && ngCardStyle(this) == NgCardStyle::Tessera) {
                 cardPicture = QSizeF(widgetSize.width(), qRound(qMin(widgetSize.width() * 0.40, QFontMetricsF(m_customizedFont).height() * 9.0)));
-            } else if (m_layout == CardsLayout && ngCardStyle() == NgCardStyle::Scheda) {
+            } else if (m_layout == CardsLayout && ngCardStyle(this) == NgCardStyle::Scheda) {
                 // the object's column: a page as wide as it (see updateCardsLayoutTextCache())
                 const qreal column = qMin(widgetSize.height() * 1.3, widgetSize.width() * 0.38);
                 cardPicture = QSizeF(column, column);
-            } else if (m_layout == CardsLayout && ngCardStyle() == NgCardStyle::Dossier) {
+            } else if (m_layout == CardsLayout && ngCardStyle(this) == NgCardStyle::Dossier) {
                 const qreal column = qMin(qRound(widgetSize.height() * 0.38) * 1.6, widgetSize.width() * 0.34);
                 cardPicture = QSizeF(column, column);
             }
@@ -3771,7 +3771,7 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
 {
     const KItemListStyleOption &option = styleOption();
     const QHash<QByteArray, QVariant> values = data();
-    const NgCardStyle look = ngCardStyle();
+    const NgCardStyle look = ngCardStyle(this);
     const bool hovered = isHovered() || ngDemoHovered();
     const QLocale locale;
     const qreal dpr = KItemViewsUtils::devicePixelRatio(this);
@@ -3911,7 +3911,7 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                 m_ngCardPeekMore = 0;
                 m_ngCardFolderPath.clear();
                 m_ngCardFolderPictures.clear();
-                if (fileItem.isDir() && fileItem.isLocalFile() && ngCardStyle() == NgCardStyle::Tessera) {
+                if (fileItem.isDir() && fileItem.isLocalFile() && ngCardStyle(this) == NgCardStyle::Tessera) {
                     const NgFolderPeek peek = ngFolderPeek(fileItem.localPath());
                     m_ngCardPeek = peek.names;
                     m_ngCardPeekMore = peek.more;
@@ -4395,7 +4395,7 @@ void KStandardItemListWidget::ngPlaceCardPixmap()
         return;
     }
     QSize pixelSize = m_pixmap.size();
-    if (ngCardStyle() == NgCardStyle::Tessera && m_ngCardPreview) {
+    if (ngCardStyle(this) == NgCardStyle::Tessera && m_ngCardPreview) {
         // the picture covers the band; paintNgCard() clips it
         pixelSize.scale((area.size() * dpr).toSize(), Qt::KeepAspectRatioByExpanding);
     } else {
@@ -4404,7 +4404,7 @@ void KStandardItemListWidget::ngPlaceCardPixmap()
     }
     m_scaledPixmapSize = pixelSize / dpr;
     m_pixmapPos = QPointF(area.center().x() - m_scaledPixmapSize.width() / 2.0, area.center().y() - m_scaledPixmapSize.height() / 2.0);
-    if (ngCardStyle() == NgCardStyle::Tessera && m_ngCardPreview && m_scaledPixmapSize.height() > area.height() * 1.6) {
+    if (ngCardStyle(this) == NgCardStyle::Tessera && m_ngCardPreview && m_scaledPixmapSize.height() > area.height() * 1.6) {
         m_pixmapPos.setY(area.top()); // a page: the band shows its top, where the heading is, not its middle
     }
     m_iconRect = QRectF(m_pixmapPos, QSizeF(m_scaledPixmapSize)).intersected(area);
@@ -5070,7 +5070,7 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
     const QColor text = widget ? textColor(*widget) : option.palette.color(QPalette::Text);
     QColor dim = m_additionalInfoTextColor;
     dim.setAlpha(qRound(dim.alpha() * 0.62));
-    const NgCardStyle look = ngCardStyle();
+    const NgCardStyle look = ngCardStyle(this);
 
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);

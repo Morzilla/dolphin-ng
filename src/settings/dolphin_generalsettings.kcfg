@@ -89,7 +89,8 @@
         </entry>
         <entry name="GlobalViewProps" type="Bool">
             <label>Should the view properties be used for all folders</label>
-            <default>true</default>
+            <!-- dolphin-ng: every folder remembers its own view; the bar shows when one has, and a click forgets it -->
+            <default>false</default>
         </entry>
         <entry name="BrowseThroughArchives" type="Bool">
             <label>Browse through archives</label>

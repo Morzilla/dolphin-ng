@@ -254,7 +254,14 @@ DOLPHIN_EXPORT QColor ngAuroraSelectionText(const QPalette &palette);
  *   Dossier  the list row folded: icon and name, chips, the dates on the left, the big "ago" on the right
  */
 enum class NgCardStyle { Tessera, Scheda, Dossier };
-DOLPHIN_EXPORT NgCardStyle ngCardStyle();
+class QGraphicsItem;
+class QUrl;
+DOLPHIN_EXPORT NgCardStyle ngCardStyle(); // the default look (NG settings)
+// the look of the cards of the view this item belongs to: the folder's own when it has one, else the default
+DOLPHIN_EXPORT NgCardStyle ngCardStyle(const QGraphicsItem *item);
+// a folder's own look of cards: "a", "b", "c", or empty for the default
+DOLPHIN_EXPORT QString ngFolderCardLook(const QUrl &url);
+DOLPHIN_EXPORT void ngSetFolderCardLook(const QUrl &url, const QString &look);
 /** dolphin-ng: cards grow to fill the row (DOLPHIN_NG_CARDS_FIT=stretch) instead of keeping their size. */
 DOLPHIN_EXPORT bool ngCardsStretch();
 

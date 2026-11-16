@@ -2818,9 +2818,60 @@ void DolphinView::applyViewProperties(const ViewProperties &props)
         header->setSidePadding(DetailsModeSettings::leftPadding(), DetailsModeSettings::rightPadding());
     }
 
+    // dolphin-ng: the folder's own look of cards, if it has one
+    const QString ownLook = ngFolderCardLook(url());
+    m_view->ngSetCardLook(ownLook == QLatin1String("a") ? 0 : ownLook == QLatin1String("b") ? 1 : ownLook == QLatin1String("c") ? 2 : -1);
+
     m_view->endTransaction();
 
     Q_EMIT viewSettingsChanged(props.isDefaults());
+}
+
+int DolphinView::ngCardLook() const
+{
+    return int(ngCardStyle(m_view));
+}
+
+bool DolphinView::ngFolderHasOwnCardLook() const
+{
+    return !ngFolderCardLook(url()).isEmpty();
+}
+
+void DolphinView::ngSetCardLook(int look, bool everywhere)
+{
+    if (look < 0) { // the folder's own look forgotten: the default one
+        ngSetFolderCardLook(url(), QString());
+        m_view->ngSetCardLook(-1);
+        Q_EMIT viewSettingsChanged(false);
+        return;
+    }
+    static const char *const keys[] = {"a", "b", "c"};
+    const QString key = QLatin1String(keys[qBound(0, look, 2)]);
+    if (everywhere) {
+        setNgSetting("CARDS", key);
+        ngSetFolderCardLook(url(), QString());
+        ngSettingsInvalidate();
+    } else {
+        ngSetFolderCardLook(url(), key);
+    }
+    m_view->ngSetCardLook(everywhere ? -1 : qBound(0, look, 2));
+    Q_EMIT viewSettingsChanged(false);
+}
+
+bool DolphinView::ngFolderHasOwnView() const
+{
+    return ngFolderHasOwnCardLook() || ViewProperties(viewPropertiesUrl()).ngHasOwn();
+}
+
+void DolphinView::ngResetFolderView()
+{
+    ngSetFolderCardLook(url(), QString());
+    {
+        ViewProperties props(viewPropertiesUrl());
+        props.ngForget();
+    }
+    m_view->ngSetCardLook(-1);
+    applyViewProperties(); // the default view again
 }
 
 void DolphinView::ngSetPinned(const KFileItemList &items, bool pinned)

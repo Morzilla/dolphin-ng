@@ -430,6 +430,18 @@ public Q_SLOTS:
     void reload();
 
     /**
+     * dolphin-ng: the look of the cards (0 Tessera, 1 Scheda, 2 Dossier) in this folder: its own, or the default.
+     * ngSetCardLook() gives the folder a look of its own; with everywhere, it becomes the default of every folder
+     * that has none. ngFolderHasOwnView(): the folder has a look or view properties of its own;
+     * ngResetFolderView() forgets them, and the folder shows the default view again.
+     */
+    int ngCardLook() const;
+    bool ngFolderHasOwnCardLook() const;
+    void ngSetCardLook(int look, bool everywhere = false);
+    bool ngFolderHasOwnView() const;
+    void ngResetFolderView();
+
+    /**
      * Changes the directory to \a url. If the current directory is equal to
      * \a url, nothing will be done (use DolphinView::reload() instead).
      */

@@ -39,6 +39,8 @@ public:
     void setEnabledSelectionToggles(SelectionTogglesEnabled selectionTogglesEnabled);
 
     void readSettings();
+    // dolphin-ng: the look of the cards of the folder shown (0..2), or -1 for the default one
+    void ngSetCardLook(int look);
     void writeSettings();
 
 protected:
