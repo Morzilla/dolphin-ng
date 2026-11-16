@@ -7,13 +7,39 @@
 > 
 > It installs next to Fedora's Dolphin; open it with `dolphin-ng` or from the application menu. The same repository has the rest of the NG desktop: `breeze-ng`, `dolphin-ng`, `dialog-ng`, `neoline-icons` ([project page](https://copr.fedorainfracloud.org/coprs/morzilla/desktop-ng/)).
 >
-> **This is dolphin-ng**, an experimental fork of Dolphin with a different file list.
+> **This is dolphin-ng**, a fork of KDE's Dolphin that rethinks how you work with your files. File operations are
+> Dolphin's own; what changes is how files are shown and how quickly you get to what you need.
 >
 > ![Dolphin NG in Breeze NG's Aurora Glass: cards, pinned items first, the glass sidebar with filters and disks](ng/screenshots/readme/hero.png)
 >
-> **Try it with the graphical installer:** [how it works and how to run it](https://github.com/Morzilla/breeze-ng/blob/ng/NG.md#everything-at-once) (it sets up Dolphin NG and, if you want, the rest of the NG desktop, all in your home folder).
+> What it adds:
 >
-> What it can do, with screenshots: [FEATURES.md](FEATURES.md). What changes, how to build it and what is unfinished: [NG.md](NG.md). Like Dolphin, dolphin-ng is free software under the GNU General Public License, version 2 or (at your option) any later version (GPL-2.0-or-later): see [LICENSE](LICENSE), [COPYING](COPYING) and [LICENSES/](LICENSES/). The rest of this file is Dolphin's own README.
+> - **Cards**, a fourth view mode in three looks: *Tessera* (the picture on top), *Scheda* (compact, three lines) and
+>   *Dossier*, the file's identity card (pages and words, size in pixels, duration, where it was downloaded from).
+>   A file without a preview gets a drawing of what it holds: a page, a sheet, lines of code, a waveform.
+> - **Drawn rows**: the details view where every row carries that drawing, its type, size and how long ago it changed.
+> - **One bar** for sorting, filtering by kind of file and grouping, one click each; it stays on one line in a narrow window.
+> - **Groups that follow the sorting**: by date (today, yesterday, this week…), by size (folders, MB, KB), by name, by type.
+> - **Pinned items**: files and folders that stay first whatever the sorting, with their own section in the sidebar.
+> - **Quick actions** on each file: resize or convert an image, extract an archive, a PDF to images or text,
+>   transcribe audio and video on your computer, convert media… plus your own commands.
+> - **Work in progress on the file itself**: copies, conversions and transcriptions grow next to their source.
+> - **A glass sidebar**: places, recent files, pinned items, filters with their counts, every disk with its usage.
+> - **Selections that read as one**: neighbouring selected items share one outline.
+> - **The same look in every app's Open/Save window** with [Dialog NG](https://github.com/Morzilla/dialog-ng), and
+>   in the whole desktop with [Breeze NG](https://github.com/Morzilla/breeze-ng) (Soft, Glass, Aurora Glass, dark and light).
+>
+> Every setting has a page of its own (Configure › NG): nothing is imposed.
+>
+> **Every feature in detail, with pictures: [NG.md](NG.md)** and the longer tour in [FEATURES.md](FEATURES.md).
+>
+> **Try it:** on Fedora with the COPR packages above; anywhere else with the graphical installer:
+> [how it works and how to run it](https://github.com/Morzilla/breeze-ng/blob/ng/NG.md#everything-at-once) (it sets up
+> Dolphin NG and, if you want, the rest of the NG desktop, all in your home folder, next to the stock Dolphin).
+>
+> Like Dolphin, dolphin-ng is free software under the GNU General Public License, version 2 or (at your option) any
+> later version (GPL-2.0-or-later): see [LICENSE](LICENSE), [COPYING](COPYING) and [LICENSES/](LICENSES/). The rest of
+> this file is Dolphin's own README.
 
 # Dolphin
 

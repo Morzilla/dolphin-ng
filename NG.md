@@ -116,7 +116,7 @@ The pushpin in the quick actions, right-click → Pin to the Top, or Ctrl+Alt+P 
 their folder, whatever the sorting. The mark travels with the file (an extended attribute), the sidebar lists the
 pinned items, and grouped views give them a group of their own.
 
-<img src="ng/screenshots/readme/pinned.png" width="380" alt="Two pinned items in their own group">
+<img src="ng/screenshots/readme/pinned.png" width="380" alt="Three pinned items first, whatever the sorting">
 
 ## Quick actions
 
