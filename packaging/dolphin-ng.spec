@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      5f3e6ffdd08745703d72ed39c22761bc727986f6
+%global commit      b8d2951a40691eb725aaea4037573656e19345fe
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611161428
+%global snapdate    202611161521
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -129,6 +129,9 @@ fi
 %{_datadir}/applications/dolphin-ng.desktop
 
 %changelog
+* Mon Nov 16 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611161521gitb8d2951-1
+- Cards: the words that stand out in a muted tone of the accent
+
 * Mon Nov 16 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611161428git5f3e6ff-1
 - Sort bar stays on one line when narrow
 
