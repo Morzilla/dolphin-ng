@@ -9,6 +9,8 @@
 >
 > **This is dolphin-ng**, an experimental fork of Dolphin with a different file list.
 >
+> ![Dolphin NG in Breeze NG's Aurora Glass: cards, pinned items first, the glass sidebar with filters and disks](ng/screenshots/readme/hero.png)
+>
 > **Try it with the graphical installer:** [how it works and how to run it](https://github.com/Morzilla/breeze-ng/blob/ng/NG.md#everything-at-once) (it sets up Dolphin NG and, if you want, the rest of the NG desktop, all in your home folder).
 >
 > What it can do, with screenshots: [FEATURES.md](FEATURES.md). What changes, how to build it and what is unfinished: [NG.md](NG.md). Like Dolphin, dolphin-ng is free software under the GNU General Public License, version 2 or (at your option) any later version (GPL-2.0-or-later): see [LICENSE](LICENSE), [COPYING](COPYING) and [LICENSES/](LICENSES/). The rest of this file is Dolphin's own README.
