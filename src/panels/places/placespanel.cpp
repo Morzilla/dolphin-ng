@@ -374,10 +374,31 @@ void PlacesPanel::ngPaintPills()
                 option.palette.setColor(role, onSelection);
             }
         }
+        const bool onPill = ngAurora() && index == m_ngPillIndex;
         option.state &= ~(QStyle::State_Selected | QStyle::State_MouseOver | QStyle::State_HasFocus);
         option.showDecorationSelected = false;
         if (QAbstractItemDelegate *delegate = itemDelegateForIndex(index)) {
-            delegate->paint(&painter, option, index);
+            const QColor onSelection = ngAuroraSelectionText(palette());
+            if (onPill && onSelection != palette().color(QPalette::WindowText) && option.rect.isValid()) {
+                // the icon too takes the colour of text on a selection (an icon theme colours its glyphs from the
+                // application's palette, not from the row's): the row is painted aside and laid in that one colour
+                const qreal dpr = devicePixelRatioF();
+                QImage row(option.rect.size() * dpr, QImage::Format_ARGB32_Premultiplied);
+                row.setDevicePixelRatio(dpr);
+                row.fill(Qt::transparent);
+                {
+                    QPainter rowPainter(&row);
+                    rowPainter.setFont(painter.font());
+                    rowPainter.translate(-option.rect.topLeft());
+                    delegate->paint(&rowPainter, option, index);
+                    rowPainter.resetTransform();
+                    rowPainter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+                    rowPainter.fillRect(QRect(QPoint(0, 0), option.rect.size()), onSelection);
+                }
+                painter.drawImage(option.rect.topLeft(), row);
+            } else {
+                delegate->paint(&painter, option, index);
+            }
         }
     };
     if (sliding) {

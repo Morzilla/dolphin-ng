@@ -3261,9 +3261,10 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
         const QRectF body(band.center().x() - width / 2.0, band.center().y() - height / 2.0 + 2 * u, width, height);
         const qreal hue = tint.hslHueF() < 0 ? 0 : tint.hslHueF();
         const qreal sat = tint.hslHueF() < 0 ? 0 : tint.hslSaturationF();
-        const QColor back = QColor::fromHslF(hue, sat * 0.62, 0.40);
-        const QColor front = QColor::fromHslF(hue, sat * 0.78, dark ? 0.70 : 0.72);
-        const QColor frontTop = QColor::fromHslF(hue, sat * 0.78, dark ? 0.74 : 0.76);
+        const QColor back = QColor::fromHslF(hue, sat * 0.62, dark ? 0.40 : 0.56);
+        // (light schemes: paler all over, a folder of light on the frost)
+        const QColor front = QColor::fromHslF(hue, sat * 0.78, dark ? 0.70 : 0.81);
+        const QColor frontTop = QColor::fromHslF(hue, sat * 0.78, dark ? 0.74 : 0.85);
         // what is written and drawn on the folder: the accent colour of the desktop, in a deep tone that reads on the
         // pale front, on either scheme
         const QColor highlight = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);

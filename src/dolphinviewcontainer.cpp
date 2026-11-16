@@ -4132,7 +4132,18 @@ protected:
                 const auto &entry = m_entries.at(i);
                 rowGround(row, entry.active, 1000 + i == m_hover);
                 const int side = qMin(16, int(row.height()) - 6);
-                QIcon::fromTheme(entry.icon).paint(&painter, QRect(int(row.left()) + 12, int(row.center().y() - side / 2.0) + 1, side, side));
+                const QRect iconRect(int(row.left()) + 12, int(row.center().y() - side / 2.0) + 1, side, side);
+                if (entry.active && ngAurora() && ngAuroraSelectionText(palette()) != text) {
+                    // on the selection the icon takes the colour of the text there
+                    QPixmap glyph = QIcon::fromTheme(entry.icon).pixmap(iconRect.size(), devicePixelRatioF());
+                    QPainter tint(&glyph);
+                    tint.setCompositionMode(QPainter::CompositionMode_SourceIn);
+                    tint.fillRect(glyph.rect(), ngAuroraSelectionText(palette()));
+                    tint.end();
+                    painter.drawPixmap(iconRect, glyph);
+                } else {
+                    QIcon::fromTheme(entry.icon).paint(&painter, iconRect);
+                }
                 painter.setPen(entry.active && ngAurora() ? ngAuroraSelectionText(palette()) : text);
                 // the count keeps its place on the right; the label gets what is left and is cut with an ellipsis
                 const QString count = QString::number(entry.count);
