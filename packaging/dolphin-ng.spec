@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      b8d2951a40691eb725aaea4037573656e19345fe
+%global commit      67317d4634f34b4f37919b472d1a8404ed468926
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611161521
+%global snapdate    202611161901
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -129,6 +129,9 @@ fi
 %{_datadir}/applications/dolphin-ng.desktop
 
 %changelog
+* Mon Nov 16 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611161901git67317d4-1
+- Per-folder views, sidebar opacity, window opacity in the settings, scheme changes at once
+
 * Mon Nov 16 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611161521gitb8d2951-1
 - Cards: the words that stand out in a muted tone of the accent
 
