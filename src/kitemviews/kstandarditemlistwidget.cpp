@@ -3840,7 +3840,9 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
             m_ngTint = ngAccent(ngSpecialFolderColour(special), darkScheme); // a well-known folder: its own colour
         } else {
             // any other folder: the accent colour of the desktop (the icon theme's own grey-blue said nothing)
-            m_ngTint = ngAccent(QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight), darkScheme);
+            // (its hue made vivid as Aurora's accent is: a scheme's own highlight is often a dull blue, which on a
+            // dark scheme gave grey folders)
+            m_ngTint = ngAccent(ngAuroraAccent(QGuiApplication::palette(), 1.0), darkScheme);
         }
     }
 
