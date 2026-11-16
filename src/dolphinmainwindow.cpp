@@ -979,6 +979,26 @@ bool DolphinMainWindow::event(QEvent *event)
     if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) {
         QTimer::singleShot(700, this, &DolphinMainWindow::ngUpdateAurora); // a global theme writes the decoration last
     }
+    if (event->type() == QEvent::ApplicationPaletteChange) {
+        // (once more when the change has settled: a colour scheme is written in more than one step)
+        QTimer::singleShot(800, this, [this] {
+            ngStyleReparsed();
+        });
+        // dolphin-ng: a new colour scheme. Widgets with a style sheet of their own (the location bar, the fields and
+        // buttons NG styles) keep the palette they were polished with and showed the old scheme's text colours, white
+        // on a light field: their sheets are applied again, against the new palette, once the change has gone round
+        QTimer::singleShot(0, this, [this] {
+            const auto all = findChildren<QWidget *>();
+            for (QWidget *child : all) {
+                if (!child->styleSheet().isEmpty()) {
+                    const QString sheet = child->styleSheet();
+                    child->setStyleSheet(QString());
+                    child->setStyleSheet(sheet);
+                }
+            }
+            ngStyleReparsed();
+        });
+    }
     if (m_ngTitleTabs && (event->type() == QEvent::Resize || event->type() == QEvent::WindowStateChange)) {
         // dolphin-ng: without a frame the window rounds its own corners (not when it fills the screen)
         // (the widget style cuts them, wherever it lays the window's sheet: property "_breeze_ng_radius"; with the

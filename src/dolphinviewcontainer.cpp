@@ -617,13 +617,15 @@ protected:
         // the old theme in it: a button with its menu open stayed light under a dark theme. So: at every sign, and
         // once more when the change has settled. Setting the sheet is itself a style change: applyChipStyle() skips
         // a sheet that did not change, which ends the round.
-        if (!m_sheetApplying && (event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange)) {
+        // (ApplicationPaletteChange too: with its style sheet the bar does not get PaletteChange for a new colour scheme)
+        if (!m_sheetApplying && (event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange || event->type() == QEvent::ApplicationPaletteChange)) {
             applyChipStyle();
             if (!m_sheetSettling) {
                 m_sheetSettling = true;
                 QTimer::singleShot(700, this, [this] {
                     m_sheetSettling = false;
                     applyChipStyle(true);
+                    rebuild(); // (the pill of the sorting and the other pieces take their colours when they are made)
                 });
             }
         }
@@ -639,9 +641,12 @@ private:
     // pill for the checked one, a fainter one on hover, no outlines that depend on the style's hover tracking.
     void applyChipStyle(bool force = false)
     {
-        const QString ink = ngIsDark(palette()) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
+        // (the application's palette: a widget with a style sheet does not take the new one when the scheme changes,
+        // so its own palette kept the colours of the old scheme, and so did the text of the buttons)
+        const QPalette palette = QApplication::palette();
+        const QString ink = ngIsDark(palette) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
         // the sheet of a menu, as Breeze paints it: the window colour mixed with 30 % of the base colour
-        const QColor window = palette().color(QPalette::Window), base = palette().color(QPalette::Base);
+        const QColor window = palette.color(QPalette::Window), base = palette.color(QPalette::Base);
         const QColor menuSheet(qRound(window.red() * 0.7 + base.red() * 0.3), qRound(window.green() * 0.7 + base.green() * 0.3), qRound(window.blue() * 0.7 + base.blue() * 0.3));
         // the outline of a menu in Breeze NG: 10 % of ink (Soft), 16 % (Glass); the open button continues it
         const bool glass = KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2")).readEntry("theme", QString()).contains(QLatin1String("Glass"));
@@ -673,17 +678,17 @@ private:
                                      // button gets its menu only when clicked, and showed an arrow stuck to its icon while open
                                      "QWidget#ngTrailing QToolButton::menu-indicator { image: none; width: 0px; }"
                                      "QWidget#ngTrailing QToolButton[popupMode=\"2\"] { padding-right: 7px; }")
-                          .arg(ink, menuSheet.name(), menuEdge, palette().color(QPalette::WindowText).name());
+                          .arg(ink, menuSheet.name(), menuEdge, palette.color(QPalette::WindowText).name());
         if (aurora) {
             sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); }").arg(ink));
             sheet.replace(QStringLiteral("QLineEdit { border: 1px solid rgba(%1, 0.14);").arg(ink), QStringLiteral("QLineEdit { border: 1px solid transparent;"));
             sheet.replace(QStringLiteral("QLineEdit:hover { border-color: rgba(%1, 0.22); }").arg(ink), QStringLiteral("QLineEdit:hover { background: rgba(%1, 0.10); }").arg(ink));
             // one intensity for every surface at rest (Breeze NG's setting), the accent for what is on
-            const bool dark = ngIsDark(palette());
+            const bool dark = ngIsDark(palette);
             const QString veil = QString::number(ngAuroraVeil(dark, true).alphaF(), 'f', 3);
             const QString veilInk = QStringLiteral("255, 255, 255"); // (light schemes: frost, not black ink)
-            const QColor accent = ngAuroraSelection(palette());
-            const QColor accentHover = ngAuroraSelection(palette(), 0.08);
+            const QColor accent = ngAuroraSelection(palette);
+            const QColor accentHover = ngAuroraSelection(palette, 0.08);
             const QString accentRgb = QStringLiteral("%1, %2, %3").arg(accent.red()).arg(accent.green()).arg(accent.blue());
             if (!dark) {
                 // light schemes: the pointer brings frost, not a shade of ink
@@ -692,7 +697,7 @@ private:
             }
             sheet.replace(QStringLiteral("padding: 3px 8px; background: rgba(%1, 0.06);").arg(ink), QStringLiteral("padding: 3px 8px; background: rgba(%1, %2);").arg(veilInk, veil));
             sheet.replace(QStringLiteral("QWidget#navPill { background: rgba(%1, 0.05); border: 1px solid rgba(%1, 0.09);").arg(ink), QStringLiteral("QWidget#navPill { background: rgba(%1, %2); border: 0;").arg(veilInk, veil));
-            sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); }").arg(ink), QStringLiteral("QToolButton:checked { background: rgba(%1, %2); color: %3; }").arg(accentRgb, QString::number(accent.alphaF(), 'f', 2), ngAuroraSelectionText(palette()).name()));
+            sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); }").arg(ink), QStringLiteral("QToolButton:checked { background: rgba(%1, %2); color: %3; }").arg(accentRgb, QString::number(accent.alphaF(), 'f', 2), ngAuroraSelectionText(palette).name()));
             sheet.replace(QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked:hover { background: rgba(%1, %2, %3, %4); }").arg(accentHover.red()).arg(accentHover.green()).arg(accentHover.blue()).arg(QString::number(accentHover.alphaF(), 'f', 2)));
             // the open button wears the menu's sheet: see-through in Aurora, at the menu's own opacity (Breeze NG's
             // setting; solid there means the 74 % of a joined menu in Aurora), over the window's glass
@@ -1157,7 +1162,7 @@ private:
         }
         {
             // fully rounded ends: the radius is half the height (a larger one would switch the rounding off)
-            const QString ink = ngIsDark(palette()) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
+            const QString ink = ngIsDark(QApplication::palette()) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
             const int inner = pill->findChild<QToolButton *>() ? pill->findChild<QToolButton *>()->sizeHint().height() : 24;
             pill->setStyleSheet(QStringLiteral("QWidget#sortPill { background: rgba(%1, %4); border: %5; border-radius: %2px; }"
                                                "QToolButton { border-radius: %3px; padding: 3px 11px; }")
@@ -1834,7 +1839,7 @@ public:
         });
 
         {
-            const QString ink = ngIsDark(palette()) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
+            const QString ink = ngIsDark(QApplication::palette()) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
             const int inner = fontMetrics().height() + 14;
             actionPill->setStyleSheet(QStringLiteral("QWidget#actionPill { background: rgba(%1, 0.05); border: 1px solid rgba(%1, 0.09); border-radius: %2px; }"
                                                      "QPushButton { border: 1px solid transparent; border-radius: %3px; padding: 0 10px; background: transparent; font-weight: 500; }"
