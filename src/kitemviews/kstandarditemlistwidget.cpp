@@ -3261,12 +3261,17 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
         const QRectF body(band.center().x() - width / 2.0, band.center().y() - height / 2.0 + 2 * u, width, height);
         const qreal hue = tint.hslHueF() < 0 ? 0 : tint.hslHueF();
         const qreal sat = tint.hslHueF() < 0 ? 0 : tint.hslSaturationF();
-        const QColor back = QColor::fromHslF(hue, sat * 0.62, 0.40);
-        const QColor front = QColor::fromHslF(hue, sat * 0.78, dark ? 0.70 : 0.72);
-        const QColor frontTop = QColor::fromHslF(hue, sat * 0.78, dark ? 0.74 : 0.76);
-        // what is written and drawn on the folder: slate, the text colour of Breeze NG Light, on every hue (a dark
-        // tone of the folder's own hue was nearly black on the pale front)
-        const QColor ink(43, 54, 72), ink2(74, 88, 110);
+        const QColor back = QColor::fromHslF(hue, sat * 0.62, dark ? 0.34 : 0.40);
+        // (dark schemes: deep enough for the pale text written on it)
+        const QColor front = QColor::fromHslF(hue, sat * 0.78, dark ? 0.56 : 0.72);
+        const QColor frontTop = QColor::fromHslF(hue, sat * 0.78, dark ? 0.60 : 0.76);
+        // what is written and drawn on the folder: the accent colour of the desktop, in a tone for the scheme: deep
+        // on the pale folders of a light scheme, pale on the deeper folders of a dark one
+        const QColor highlight = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);
+        const qreal accentHue = highlight.hslHueF() < 0 ? 0.58 : highlight.hslHueF();
+        const qreal accentSat = qBound(0.45, highlight.hslSaturationF() * 1.2, 0.90);
+        const QColor ink = QColor::fromHslF(accentHue, accentSat, dark ? 0.93 : 0.26);
+        const QColor ink2 = QColor::fromHslF(accentHue, accentSat * 0.9, dark ? 0.86 : 0.36);
         const qreal radius = qMin(width, height) * 0.09;
         const qreal tabDepth = height * 0.16;
         QPainterPath backShape;
