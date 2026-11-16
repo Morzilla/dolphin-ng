@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      67e6b3d85efc9d56a34a361dd885094b98a57640
+%global commit      c241bab05b66fb6890d047b95e23bfaa7add5868
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611141558
+%global snapdate    202611161405
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -129,6 +129,9 @@ fi
 %{_datadir}/applications/dolphin-ng.desktop
 
 %changelog
+* Mon Nov 16 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611161405gitc241bab-1
+- Aurora light, accent folders, tabs in the title bar, Breeze NG settings button
+
 * Sat Nov 14 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611141326git8c34db9-1
 - Breeze NG Aurora: the whole window, file views and sidebar are glass
 
