@@ -146,7 +146,7 @@ public:
         : QAbstractButton(parent)
         , m_kind(kind)
     {
-        setFixedSize(26, 26);
+        setFixedSize(22, 26); // (an 18 px disc every 24 px, as the buttons of Breeze NG's window decoration)
         setFocusPolicy(Qt::NoFocus);
         setAttribute(Qt::WA_Hover);
         setCursor(Qt::ArrowCursor);
@@ -160,7 +160,7 @@ protected:
         const bool dark = palette().color(QPalette::Window).lightnessF() < 0.5;
         const QColor ink = dark ? QColor(255, 255, 255) : QColor(0, 0, 0);
         const bool hovered = underMouse();
-        const QRectF circle = QRectF(rect()).adjusted(4, 4, -4, -4);
+        const QRectF circle = QRectF(rect()).adjusted(2, 4, -2, -4);
         QColor fill = ink;
         fill.setAlphaF(isDown() ? 0.30 : hovered ? 0.22 : 0.12);
         if (m_kind == Close) {
@@ -519,7 +519,7 @@ DolphinMainWindow::DolphinMainWindow()
             const bool buttonsLeft = decoration.readEntry("ButtonsOnLeft", QStringLiteral("MS")).contains(QLatin1Char('X'));
             auto *buttons = new QWidget(m_ngTabsToolBar);
             auto *buttonsLayout = new QHBoxLayout(buttons);
-            buttonsLayout->setContentsMargins(4, 0, 4, 0);
+            buttonsLayout->setContentsMargins(buttonsLeft ? 0 : 4, 0, buttonsLeft ? 4 : 0, 5);
             buttonsLayout->setSpacing(2);
             auto *minimize = new NgWindowButton(NgWindowButton::Minimize, buttons);
             auto *maximize = new NgWindowButton(NgWindowButton::Maximize, buttons);
@@ -546,7 +546,13 @@ DolphinMainWindow::DolphinMainWindow()
             if (!buttonsLeft) {
                 m_ngTabsToolBar->addWidget(buttons);
             }
-            m_ngTabsToolBar->setContentsMargins(8, 4, 4, 2);
+            // (the buttons where the decoration of every other window has them: measured against KWin's)
+            m_ngTabsToolBar->setContentsMargins(buttonsLeft ? 0 : 8, 2, buttonsLeft ? 4 : 0, 4);
+            if (QLayout *rowLayout = m_ngTabsToolBar->layout()) {
+                QMargins margins = rowLayout->contentsMargins(); // (the style's own margin of a tool bar pushed the buttons inwards)
+                buttonsLeft ? margins.setLeft(0) : margins.setRight(0);
+                rowLayout->setContentsMargins(margins);
+            }
             new NgFrameless(this, {m_ngTabsToolBar, drag, buttons});
         } else {
             m_ngTabsToolBar->addWidget(topBar);

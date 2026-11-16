@@ -635,7 +635,7 @@ private:
                                      "QToolButton[popupMode=\"1\"] { padding-right: 12px; }"
                                      "QToolButton::menu-button { border: none; width: 18px; padding-right: 6px; }"
                                      "QToolButton[menuOpen=\"true\"], QToolButton[menuOpen=\"true\"]:hover, QToolButton[menuOpen=\"true\"]:checked, QToolButton[menuOpen=\"true\"]:pressed { background: %2; border-color: rgba(%1, %3); border-bottom-color: %2; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }"
-                                     "QLineEdit { border: 1px solid rgba(%1, 0.14); border-radius: 6px; padding: 3px 8px; background: rgba(%1, 0.06); color: %4; }"
+                                     "QLineEdit { border: 1px solid rgba(%1, 0.14); border-radius: 9px; padding: 3px 8px; background: rgba(%1, 0.06); color: %4; }"
                                      "QLineEdit { placeholder-text-color: rgba(%1, 0.5); }"
                                      "QLineEdit:hover { border-color: rgba(%1, 0.22); }"
                                      "QLineEdit:focus { border-color: rgba(%1, 0.34); background: rgba(%1, 0.08); }"
@@ -657,12 +657,12 @@ private:
             sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); }").arg(ink), QStringLiteral("QToolButton:checked { background: rgba(%1, 0.34); }").arg(accentRgb));
             sheet.replace(QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.42); }").arg(accentRgb));
             // the open button wears the menu's sheet: see-through in Aurora, at the menu's own opacity (Breeze NG's
-            // setting; solid there means Aurora's 38 %), over the window's glass
+            // setting; solid there means the 74 % of a joined menu in Aurora), over the window's glass
             const int menuOpacity = KSharedConfig::openConfig(QStringLiteral("breezengrc"))->group(QStringLiteral("Style")).readEntry("MenuOpacity", 100);
-            // (Aurora's menu: a tone lifted 10 % from the window's colour, at 38 %: as Helper::menuSheet in Breeze NG)
+            // (Aurora's menu: a tone lifted 10 % from the window's colour, at 74 % when joined: as Helper::menuSheet in Breeze NG)
             const QColor inkColor = dark ? QColor(255, 255, 255) : QColor(0, 0, 0);
             const QColor lifted(qRound(window.red() * 0.9 + inkColor.red() * 0.1), qRound(window.green() * 0.9 + inkColor.green() * 0.1), qRound(window.blue() * 0.9 + inkColor.blue() * 0.1));
-            const QString menuGlass = QStringLiteral("rgba(%1, %2, %3, %4)").arg(lifted.red()).arg(lifted.green()).arg(lifted.blue()).arg(QString::number((menuOpacity >= 100 ? 38 : qMax(menuOpacity, 30)) / 100.0, 'f', 2));
+            const QString menuGlass = QStringLiteral("rgba(%1, %2, %3, %4)").arg(lifted.red()).arg(lifted.green()).arg(lifted.blue()).arg(QString::number((menuOpacity >= 100 ? 74 : qMax(menuOpacity, 30)) / 100.0, 'f', 2));
             sheet.replace(menuSheet.name(), menuGlass);
         }
         m_sheetApplying = true; // setting a sheet sends style changes of its own: changeEvent() ignores them
