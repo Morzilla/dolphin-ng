@@ -31,6 +31,11 @@
 #include <QToolButton>
 #include <functional>
 #include <QComboBox>
+#include <QDir>
+#include <QFileInfo>
+#include <QProcess>
+#include <QPushButton>
+#include <QStandardPaths>
 #include <QFormLayout>
 #include <QScrollArea>
 #include <QHBoxLayout>
@@ -923,6 +928,36 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     previewNote->setEnabled(false);
     previewNote->setFixedWidth(250);
     left->addWidget(previewNote);
+    // Breeze NG's own settings (widget style, decoration, Aurora): the user's build or the system-wide one
+    const QString homeBuild = QDir::homePath() + QStringLiteral("/.local/breeze-ng");
+    QString breezeSettings = QStandardPaths::findExecutable(QStringLiteral("breezeng-settings"));
+    if (breezeSettings.isEmpty()) {
+        breezeSettings = QStandardPaths::findExecutable(QStringLiteral("breezeng-settings"),
+                                                        {homeBuild + QStringLiteral("/bin"), QStringLiteral("/opt/ng/breeze-ng/bin")});
+    }
+    if (!breezeSettings.isEmpty()) {
+        auto *breezeButton = new QPushButton(QIcon::fromTheme(QStringLiteral("preferences-desktop-theme")),
+                                             ngTr("Breeze NG settings…", "Impostazioni di Breeze NG…"), this);
+        breezeButton->setToolTip(ngTr("Widget style, window decoration and the Aurora lights", "Stile dei widget, decorazione delle finestre e luci di Aurora"));
+        connect(breezeButton, &QPushButton::clicked, this, [breezeSettings, homeBuild] {
+            QProcess process;
+            process.setProgram(breezeSettings);
+            if (breezeSettings.startsWith(homeBuild)) {
+                // the user's build finds its plugins through QT_PLUGIN_PATH, set only from the next login after installing
+                QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+                QStringList paths = env.value(QStringLiteral("QT_PLUGIN_PATH")).split(QLatin1Char(':'), Qt::SkipEmptyParts);
+                for (const QString &lib : {QStringLiteral("/lib64/plugins"), QStringLiteral("/lib/plugins")}) {
+                    if (QFileInfo::exists(homeBuild + lib) && !paths.contains(homeBuild + lib)) {
+                        paths.prepend(homeBuild + lib);
+                    }
+                }
+                env.insert(QStringLiteral("QT_PLUGIN_PATH"), paths.join(QLatin1Char(':')));
+                process.setProcessEnvironment(env);
+            }
+            process.startDetached();
+        });
+        left->addWidget(breezeButton, 0, Qt::AlignLeft);
+    }
     left->addStretch();
     outer->addLayout(left);
 
