@@ -5473,9 +5473,18 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
     }
 
     // ---- the texts
+    // what stands out on a card (the facts, the bold words of a line): the desktop's accent, a little warmer and at half
+    // its colour, between the accent and the text: a mid tone on light schemes, a pastel on dark ones. A selection that
+    // has its own text colour (the full accent) keeps it
+    QColor strong = text;
+    if (text == option.palette.color(QPalette::Text)) {
+        const QColor highlight = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);
+        const qreal hue = std::fmod((highlight.hslHueF() < 0 ? 0.58 : highlight.hslHueF()) + 4.0 / 360.0, 1.0);
+        strong = dark ? QColor::fromHslF(hue, 0.40, 0.84) : QColor::fromHslF(hue, 0.28, 0.44);
+    }
     for (const NgCardText &entry : std::as_const(m_ngCardTexts)) {
         painter->setFont(entry.font);
-        painter->setPen(entry.tone == 1 ? text : entry.tone == 2 ? dim : entry.tone == 3 ? QColor(232, 192, 72) : m_additionalInfoTextColor);
+        painter->setPen(entry.tone == 1 ? strong : entry.tone == 2 ? dim : entry.tone == 3 ? QColor(232, 192, 72) : m_additionalInfoTextColor);
         painter->drawText(entry.pos, entry.text);
     }
 
