@@ -491,6 +491,7 @@ public:
         // the buttons that stood after the location bar in the tool bar (split, search, the menu), when the window
         // moves them here and takes the field above next to the location bar (see setTrailingActions)
         m_trailing = new QWidget(this);
+        m_trailing->setObjectName(QStringLiteral("ngTrailing"));
         auto *trailing = new QHBoxLayout(m_trailing);
         trailing->setContentsMargins(4, 0, 0, 0);
         trailing->setSpacing(2);
@@ -641,7 +642,11 @@ private:
                                      "QLineEdit:focus { border-color: rgba(%1, 0.34); background: rgba(%1, 0.08); }"
                                      // back and forward in one pill, round ends (its height is fixed: 32)
                                      "QWidget#navPill { background: rgba(%1, 0.05); border: 1px solid rgba(%1, 0.09); border-radius: 16px; }"
-                                     "QWidget#navPill QToolButton { padding: 2px 11px; border-radius: 13px; }")
+                                     "QWidget#navPill QToolButton { padding: 2px 11px; border-radius: 13px; }"
+                                     // the buttons moved in from the tool bar (the menu, stash...) are icons: no arrow. The menu
+                                     // button gets its menu only when clicked, and showed an arrow stuck to its icon while open
+                                     "QWidget#ngTrailing QToolButton::menu-indicator { image: none; width: 0px; }"
+                                     "QWidget#ngTrailing QToolButton[popupMode=\"2\"] { padding-right: 7px; }")
                           .arg(ink, menuSheet.name(), menuEdge, palette().color(QPalette::WindowText).name());
         if (aurora) {
             sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); }").arg(ink));
