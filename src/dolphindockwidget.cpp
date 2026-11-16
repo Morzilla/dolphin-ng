@@ -5,6 +5,7 @@
  */
 
 #include "dolphindockwidget.h"
+#include <KSharedConfig>
 
 #include "dolphinplacesmodelsingleton.h"
 #include "kitemviews/kitemlistwidget.h"
@@ -663,6 +664,30 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
     } else if (ngAurora()) {
         // Breeze NG Aurora: the whole window is already glass; the card is a faint veil of ink on it, not a hole
         opaque = false;
+        // the sidebar's own opacity (Breeze NG's setting, -1: the window's): the window's glass under the card is
+        // thinned to it (or thickened, with the window's colour) before the veil
+        {
+            const KConfigGroup common = KSharedConfig::openConfig(QStringLiteral("breezengrc"))->group(QStringLiteral("Common"));
+            const int side = common.readEntry("AuroraSidebarOpacity", -1);
+            if (side >= 0) {
+                const QString theme = KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2")).readEntry("theme", QString());
+                const bool lightGlass = theme.endsWith(QLatin1String("Light"), Qt::CaseInsensitive) && ngIsDark(palette());
+                const qreal window = qBound(10, common.readEntry("AuroraBodyOpacity", 60) - (lightGlass ? 22 : 0), 100) / 100.0;
+                const qreal wanted = qBound(0, side, 100) / 100.0;
+                painter.save();
+                if (wanted < window) {
+                    painter.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+                    painter.setBrush(QColor::fromRgbF(0, 0, 0, 1.0 - wanted / window));
+                } else {
+                    QColor thicker = palette().color(QPalette::Window);
+                    thicker.setAlphaF((wanted - window) / (1.0 - window + 1e-6));
+                    painter.setBrush(thicker);
+                }
+                painter.setPen(Qt::NoPen);
+                painter.drawRoundedRect(card, radius, radius);
+                painter.restore();
+            }
+        }
         painter.setBrush(ngAuroraVeil(ngIsDark(palette())));
         if (!ngIsDark(palette())) {
             painter.setPen(QPen(QColor(255, 255, 255, 140), 1)); // frost has a bright hairline edge
