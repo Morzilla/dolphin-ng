@@ -3269,8 +3269,8 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
         const QColor highlight = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);
         const qreal accentHue = highlight.hslHueF() < 0 ? 0.58 : highlight.hslHueF();
         const qreal accentSat = qBound(0.45, highlight.hslSaturationF() * 1.2, 0.90);
-        const QColor ink = QColor::fromHslF(accentHue, accentSat, dark ? 0.24 : 0.26);
-        const QColor ink2 = QColor::fromHslF(accentHue, accentSat * 0.9, dark ? 0.33 : 0.36);
+        const QColor ink = QColor::fromHslF(accentHue, accentSat, dark ? 0.24 : 0.38); // (light schemes: a lighter tone, the accent itself more than a navy)
+        const QColor ink2 = QColor::fromHslF(accentHue, accentSat * 0.9, dark ? 0.33 : 0.46);
         const qreal radius = qMin(width, height) * 0.09;
         const qreal tabDepth = height * 0.16;
         QPainterPath backShape;
