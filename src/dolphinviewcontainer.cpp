@@ -806,6 +806,10 @@ public:
             layout->addWidget(button);
         }
         m_trailing->setVisible(layout->count() > 0);
+        m_trailingIconsOnly = false; // new buttons, with their names
+        QTimer::singleShot(0, this, [this] {
+            fitSorting(); // the room left for the sorting changed
+        });
     }
 
     void setLeadingActions(const QList<QAction *> &actions)
@@ -858,9 +862,16 @@ public:
             m_fitting = false;
         });
         const QMargins margins = layout()->contentsMargins();
-        int room = width() - margins.left() - margins.right() - 210 - layout()->spacing();
+        // the search box counts only while it is in this bar (the window may have moved it next to the location
+        // bar); the buttons moved here from the tool bar (split, stash, the menu...) always count
+        const bool ownFilter = m_filter && m_filter->parentWidget() == this && !m_filter->isHidden();
+        int room = width() - margins.left() - margins.right() - (ownFilter ? 210 + layout()->spacing() : 0);
         if (m_leading->isVisible()) {
             room -= m_leading->sizeHint().width() + layout()->spacing();
+        }
+        const int trailingWidth = m_trailing->isVisible() ? m_trailing->sizeHint().width() : 0;
+        if (m_trailing->isVisible()) {
+            room -= trailingWidth + layout()->spacing();
         }
         // what one line needs: each widget at its width (a fixed-width gap has no size hint: its minimum width counts)
         // and the spacing between them, with a little to spare so that nothing wraps on the edge
@@ -882,7 +893,9 @@ public:
                 gap->setFixedWidth(compact ? 6 : 22);
             }
         }
-        m_filter->setFixedWidth(compact ? 150 : 210);
+        if (ownFilter) {
+            m_filter->setFixedWidth(compact ? 150 : 210);
+        }
         if (m_groups) {
             // narrower still: the groups button keeps only its icon (its label is in the tooltip)
             int compactNeeded = 12;
@@ -894,14 +907,64 @@ public:
                 const int width = widget == m_groups ? m_groupsTextWidth : m_gaps.contains(widget) ? 6 : qMax(widget->sizeHint().width(), widget->minimumWidth());
                 compactNeeded += width + spacing;
             }
-            const bool iconOnly = compact && compactNeeded > room + 60;
-            m_groups->setToolButtonStyle(iconOnly ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextBesideIcon);
+            // narrower still: the buttons on the right with a name (new folder, split, stash) keep only their icon
+            // too; the name stays in the tooltip. (Their width is in the room above: checked with the names on, so
+            // that the names come back only when they fit)
+            const bool trailingIcons = compact && (m_trailingIconsOnly ? compactNeeded + m_trailingTextWidth + 20 > room : compactNeeded > room);
+            if (trailingIcons != m_trailingIconsOnly) {
+                const int before = m_trailing->sizeHint().width();
+                for (QToolButton *button : m_trailing->findChildren<QToolButton *>(Qt::FindDirectChildrenOnly)) {
+                    if (trailingIcons && button->toolButtonStyle() == Qt::ToolButtonTextBesideIcon) {
+                        button->setProperty("_ng_named", true);
+                        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+                    } else if (!trailingIcons && button->property("_ng_named").toBool()) {
+                        button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+                    }
+                }
+                m_trailing->layout()->activate();
+                if (trailingIcons) {
+                    m_trailingTextWidth = before - m_trailing->sizeHint().width(); // what the names took
+                }
+                m_trailingIconsOnly = trailingIcons;
+            }
         }
         m_sortPill->setVisible(!compact);
         if (m_sortCaption) {
             m_sortCaption->setVisible(!compact);
         }
         m_sortCompact->setVisible(compact);
+        // and if the one line is still too wide: the groups, the filters, the cards and the sorting keep only their
+        // icon, one after the other, until it fits (their names are in the tooltips)
+        const QList<QToolButton *> named = {m_groups.data(), m_filters.data(), m_cards.data(), qobject_cast<QToolButton *>(m_sortCompact.data())};
+        for (QToolButton *button : named) {
+            if (button) {
+                button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+            }
+        }
+        if (compact) {
+            const int roomNow = room + trailingWidth - (m_trailing->isVisible() ? m_trailing->sizeHint().width() : 0);
+            const auto line = [&] {
+                int width = 12;
+                for (int i = 0; i < m_flow->count(); ++i) {
+                    QWidget *widget = m_flow->itemAt(i)->widget();
+                    if (!widget || widget->isHidden()) {
+                        continue;
+                    }
+                    width += (m_gaps.contains(widget) ? 6 : qMax(widget->sizeHint().width(), widget->minimumWidth())) + spacing;
+                }
+                return width;
+            };
+            for (QToolButton *button : named) {
+                if (!button || line() <= roomNow) {
+                    break;
+                }
+                if (button->toolTip().isEmpty() || button->property("_ng_tip_is_text").toBool()) {
+                    button->setToolTip(button->text());
+                    button->setProperty("_ng_tip_is_text", true);
+                }
+                button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+            }
+        }
         m_flow->invalidate();
     }
 
@@ -1077,6 +1140,7 @@ private:
             cards->setChecked(cardsOn);
             cards->setPopupMode(QToolButton::MenuButtonPopup);
             cards->setText(cardsOn ? ngTr("Cards: %1", "Card: %1").arg(QLatin1String(looks[int(ngCardStyle())])) : ngTr("Cards", "Card"));
+            m_cards = cards;
             cards->setToolTip(cardsOn ? ngTr("A click goes to the next kind of card (Tessera, Scheda, Dossier); the arrow picks one, or another view (list, icons).",
                                              "Un clic passa al tipo di card seguente (Tessera, Scheda, Dossier); la freccia ne sceglie uno, o un'altra vista (lista, icone).")
                                       : ngTr("Cards view: every item is a card with all its details. The arrow picks the kind of card, or another view (list, icons).",
@@ -1207,6 +1271,7 @@ private:
         button->setMenu(menu);
         menuButton(button);
         button->setText(ngTr("Filters: %1", "Filtri: %1").arg(current));
+        m_filters = button;
         m_flow->addWidget(button);
 
         // ---- groups: none, by date (modified or created), by kind, by size (Dolphin's "Group By", at hand)
@@ -1365,7 +1430,10 @@ private:
     QPointer<QWidget> m_sortPill, m_sortCaption, m_sortCompact; // the sorting as a pill, or as one button when narrow
     bool m_fitting = false; // fitSorting() is running
     bool m_fitPending = false; // fitSorting() is scheduled
+    bool m_trailingIconsOnly = false; // the named buttons on the right show only their icon (see fitSorting)
+    int m_trailingTextWidth = 0; // the width their names take
     QPointer<QToolButton> m_groups; // the groups button (icon only when even the compact bar is too wide)
+    QPointer<QToolButton> m_filters, m_cards; // the filters and cards buttons (icon only when narrower still)
     int m_groupsTextWidth = 0;
     QList<QPointer<QWidget>> m_gaps; // the spaces between the groups of the bar (narrower when the bar is)
     DolphinView::Mode m_modeBeforeCards = DolphinView::DetailsView; // the cards button goes back to this
