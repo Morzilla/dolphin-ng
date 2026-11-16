@@ -668,8 +668,11 @@ private:
             const int menuOpacity = KSharedConfig::openConfig(QStringLiteral("breezengrc"))->group(QStringLiteral("Style")).readEntry("MenuOpacity", 100);
             // (Aurora's menu: a tone lifted 10 % from the window's colour, at 74 % when joined: as Helper::menuSheet in Breeze NG)
             const QColor inkColor = dark ? QColor(255, 255, 255) : QColor(0, 0, 0);
-            const QColor lifted(qRound(window.red() * 0.9 + inkColor.red() * 0.1), qRound(window.green() * 0.9 + inkColor.green() * 0.1), qRound(window.blue() * 0.9 + inkColor.blue() * 0.1));
-            const QString menuGlass = QStringLiteral("rgba(%1, %2, %3, %4)").arg(lifted.red()).arg(lifted.green()).arg(lifted.blue()).arg(QString::number((menuOpacity >= 100 ? 74 : qMax(menuOpacity, 30)) / 100.0, 'f', 2));
+            // (light schemes: frost, towards white and denser, as there)
+            const qreal lift = dark ? 0.1 : 0.7;
+            const QColor liftTo = dark ? inkColor : QColor(255, 255, 255);
+            const QColor lifted(qRound(window.red() * (1 - lift) + liftTo.red() * lift), qRound(window.green() * (1 - lift) + liftTo.green() * lift), qRound(window.blue() * (1 - lift) + liftTo.blue() * lift));
+            const QString menuGlass = QStringLiteral("rgba(%1, %2, %3, %4)").arg(lifted.red()).arg(lifted.green()).arg(lifted.blue()).arg(QString::number((menuOpacity >= 100 ? (dark ? 74 : 84) : qMax(menuOpacity, 30)) / 100.0, 'f', 2));
             sheet.replace(menuSheet.name(), menuGlass);
         }
         m_sheetApplying = true; // setting a sheet sends style changes of its own: changeEvent() ignores them
