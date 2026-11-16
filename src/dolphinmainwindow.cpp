@@ -3956,8 +3956,9 @@ void DolphinMainWindow::ngMoveToolbarButtons()
     // back, forward and up as one pill of glass, the veil of every other button (Breeze NG's setting in Aurora)
     {
         const bool dark = ngIsDark(palette());
-        const QString ink = dark ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
-        const qreal veil = ngAurora() ? ngAuroraVeilAlpha(dark, true) : 0.06;
+        // (Aurora on a light scheme: frost, white and denser, not black ink)
+        const QString ink = (dark || ngAurora()) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
+        const qreal veil = ngAurora() ? ngAuroraVeil(dark, true).alphaF() : 0.06;
         QList<QWidget *> pill;
         for (const char *name : {"go_back", "go_forward", "go_up"}) {
             QAction *action = actionCollection()->action(QString::fromLatin1(name));

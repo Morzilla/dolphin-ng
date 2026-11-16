@@ -649,13 +649,15 @@ private:
             sheet.replace(QStringLiteral("QLineEdit:hover { border-color: rgba(%1, 0.22); }").arg(ink), QStringLiteral("QLineEdit:hover { background: rgba(%1, 0.10); }").arg(ink));
             // one intensity for every surface at rest (Breeze NG's setting), the accent for what is on
             const bool dark = ngIsDark(palette());
-            const QString veil = QString::number(ngAuroraVeilAlpha(dark, true), 'f', 3);
-            const QColor accent = ngAuroraAccent(palette(), 1.0);
+            const QString veil = QString::number(ngAuroraVeil(dark, true).alphaF(), 'f', 3);
+            const QString veilInk = QStringLiteral("255, 255, 255"); // (light schemes: frost, not black ink)
+            const QColor accent = ngAuroraSelection(palette());
+            const QColor accentHover = ngAuroraSelection(palette(), 0.08);
             const QString accentRgb = QStringLiteral("%1, %2, %3").arg(accent.red()).arg(accent.green()).arg(accent.blue());
-            sheet.replace(QStringLiteral("padding: 3px 8px; background: rgba(%1, 0.06);").arg(ink), QStringLiteral("padding: 3px 8px; background: rgba(%1, %2);").arg(ink, veil));
-            sheet.replace(QStringLiteral("QWidget#navPill { background: rgba(%1, 0.05); border: 1px solid rgba(%1, 0.09);").arg(ink), QStringLiteral("QWidget#navPill { background: rgba(%1, %2); border: 0;").arg(ink, veil));
-            sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); }").arg(ink), QStringLiteral("QToolButton:checked { background: rgba(%1, 0.34); }").arg(accentRgb));
-            sheet.replace(QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.42); }").arg(accentRgb));
+            sheet.replace(QStringLiteral("padding: 3px 8px; background: rgba(%1, 0.06);").arg(ink), QStringLiteral("padding: 3px 8px; background: rgba(%1, %2);").arg(veilInk, veil));
+            sheet.replace(QStringLiteral("QWidget#navPill { background: rgba(%1, 0.05); border: 1px solid rgba(%1, 0.09);").arg(ink), QStringLiteral("QWidget#navPill { background: rgba(%1, %2); border: 0;").arg(veilInk, veil));
+            sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); }").arg(ink), QStringLiteral("QToolButton:checked { background: rgba(%1, %2); color: %3; }").arg(accentRgb, QString::number(accent.alphaF(), 'f', 2), ngAuroraSelectionText(palette()).name()));
+            sheet.replace(QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked:hover { background: rgba(%1, %2, %3, %4); }").arg(accentHover.red()).arg(accentHover.green()).arg(accentHover.blue()).arg(QString::number(accentHover.alphaF(), 'f', 2)));
             // the open button wears the menu's sheet: see-through in Aurora, at the menu's own opacity (Breeze NG's
             // setting; solid there means the 74 % of a joined menu in Aurora), over the window's glass
             const int menuOpacity = KSharedConfig::openConfig(QStringLiteral("breezengrc"))->group(QStringLiteral("Style")).readEntry("MenuOpacity", 100);
@@ -1044,10 +1046,10 @@ private:
             const int inner = pill->findChild<QToolButton *>() ? pill->findChild<QToolButton *>()->sizeHint().height() : 24;
             pill->setStyleSheet(QStringLiteral("QWidget#sortPill { background: rgba(%1, %4); border: %5; border-radius: %2px; }"
                                                "QToolButton { border-radius: %3px; padding: 3px 11px; }")
-                                    .arg(ink)
+                                    .arg(ngAurora() ? QStringLiteral("255, 255, 255") : ink)
                                     .arg(inner / 2 + 2) // the pill is the button plus 3 px of margin and the border on each side
                                     .arg(inner / 2 - 1)
-                                    .arg(ngAurora() ? QString::number(ngAuroraVeilAlpha(ngIsDark(palette()), true), 'f', 3) : QStringLiteral("0.05"),
+                                    .arg(ngAurora() ? QString::number(ngAuroraVeil(ngIsDark(palette()), true).alphaF(), 'f', 3) : QStringLiteral("0.05"),
                                          ngAurora() ? QStringLiteral("1px solid transparent") : QStringLiteral("1px solid rgba(%1, 0.09)").arg(ink)));
         }
 
@@ -4079,7 +4081,7 @@ protected:
                 QColor fill = veil;
                 fill.setAlpha(active ? veil.alpha() : veil.alpha() / 2);
                 if (ngAurora()) {
-                    fill = active ? ngAuroraAccent(palette(), hovered ? 0.42 : 0.34) : veil;
+                    fill = active ? ngAuroraSelection(palette(), hovered ? 0.08 : 0.0) : veil;
                 }
                 painter.setPen(active ? QPen(edge, 1) : QPen(Qt::NoPen));
                 painter.setBrush(fill);
@@ -4123,7 +4125,7 @@ protected:
                 rowGround(row, entry.active, 1000 + i == m_hover);
                 const int side = qMin(16, int(row.height()) - 6);
                 QIcon::fromTheme(entry.icon).paint(&painter, QRect(int(row.left()) + 12, int(row.center().y() - side / 2.0) + 1, side, side));
-                painter.setPen(text);
+                painter.setPen(entry.active && ngAurora() ? ngAuroraSelectionText(palette()) : text);
                 // the count keeps its place on the right; the label gets what is left and is cut with an ellipsis
                 const QString count = QString::number(entry.count);
                 const int countWidth = painter.fontMetrics().horizontalAdvance(count);

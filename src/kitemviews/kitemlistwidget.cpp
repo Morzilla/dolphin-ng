@@ -1596,6 +1596,7 @@ void ngSetAurora(bool aurora)
 
 static int s_ngAuroraPanel = 7;
 static int s_ngAuroraButton = 7;
+static bool s_ngAuroraFull = false;
 
 void ngLoadAuroraSettings()
 {
@@ -1604,6 +1605,7 @@ void ngLoadAuroraSettings()
     const KConfigGroup common = config->group(QStringLiteral("Common"));
     s_ngAuroraPanel = qBound(0, common.readEntry("AuroraPanelVeil", 7), 40);
     s_ngAuroraButton = qBound(0, common.readEntry("AuroraButtonVeil", 7), 40);
+    s_ngAuroraFull = common.readEntry("AuroraFullSelection", false);
 }
 
 qreal ngAuroraVeilAlpha(bool dark, bool button)
@@ -1613,9 +1615,41 @@ qreal ngAuroraVeilAlpha(bool dark, bool button)
 
 QColor ngAuroraVeil(bool dark, bool button)
 {
-    QColor ink = dark ? QColor(255, 255, 255) : QColor(0, 0, 0);
-    ink.setAlphaF(ngAuroraVeilAlpha(dark, button));
+    // light schemes: frost, white and denser (black ink on light glass read as grey): as Helper::auroraVeilColor in
+    // Breeze NG
+    QColor ink(255, 255, 255);
+    ink.setAlphaF(dark ? ngAuroraVeilAlpha(dark, button) : qMin(ngAuroraVeilAlpha(dark, button) * (button ? 10.5 : 8.8), 0.92));
     return ink;
+}
+
+bool ngAuroraFull()
+{
+    return s_ngAuroraFull;
+}
+
+QColor ngAuroraSelection(const QPalette &palette, qreal more)
+{
+    const bool dark = palette.color(QPalette::Window).lightnessF() < 0.5;
+    if (s_ngAuroraFull) {
+        const QColor accent = ngAuroraAccent(palette, 1.0);
+        float h, s, l;
+        accent.getHslF(&h, &s, &l);
+        return QColor::fromHslF(h, s, qBound(0.0, (dark ? 0.54 : 0.52) + more * 0.5, 1.0));
+    }
+    return ngAuroraAccent(palette, qMin(1.0, (dark ? 0.34 : 0.22) + more));
+}
+
+QColor ngAuroraSelectionText(const QPalette &palette)
+{
+    if (s_ngAuroraFull) {
+        return QColor(255, 255, 255);
+    }
+    if (palette.color(QPalette::Window).lightnessF() >= 0.5) {
+        float h, s, l;
+        ngAuroraAccent(palette, 1.0).getHslF(&h, &s, &l);
+        return QColor::fromHslF(h, s, 0.38); // on a light sheet of the accent: the accent itself, deep enough to read
+    }
+    return palette.color(QPalette::WindowText);
 }
 
 QColor ngAuroraAccent(const QPalette &palette, qreal alpha)

@@ -241,6 +241,11 @@ DOLPHIN_EXPORT qreal ngAuroraVeilAlpha(bool dark, bool button = false);
 DOLPHIN_EXPORT QColor ngAuroraVeil(bool dark, bool button = false);
 // the accent as a light: its hue, always luminous (as the style's Helper::auroraAccent)
 DOLPHIN_EXPORT QColor ngAuroraAccent(const QPalette &palette, qreal alpha);
+// Aurora: what is selected or switched on: a light sheet of the accent, or the full accent with white text (Breeze
+// NG's setting AuroraFullSelection); \a more adds to it (hover)
+DOLPHIN_EXPORT bool ngAuroraFull();
+DOLPHIN_EXPORT QColor ngAuroraSelection(const QPalette &palette, qreal more = 0.0);
+DOLPHIN_EXPORT QColor ngAuroraSelectionText(const QPalette &palette);
 
 /**
  * dolphin-ng: the look of the cards view (DOLPHIN_NG_CARDS = a | b | c):

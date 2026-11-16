@@ -355,7 +355,7 @@ void PlacesPanel::ngPaintPills()
         const qreal radius = pill.height() / 2.0;
         if (ngAurora()) {
             painter.setPen(Qt::NoPen);
-            painter.setBrush(strength >= 1.0 ? ngAuroraAccent(palette(), dark ? 0.34 : 0.30) : ngAuroraVeil(dark, true));
+            painter.setBrush(strength >= 1.0 ? ngAuroraSelection(palette()) : ngAuroraVeil(dark, true));
         } else {
             painter.setPen(QPen(dark ? QColor(255, 255, 255, qRound(46 * strength)) : QColor(0, 0, 0, qRound(30 * strength)), 1));
             painter.setBrush(dark ? QColor(255, 255, 255, qRound(30 * strength)) : QColor(255, 255, 255, qRound(150 * strength)));
@@ -440,7 +440,7 @@ void PlacesPanel::ngApplyPalette()
         // a translucent white (black on light schemes) turns that into a glass pill over the backdrop
         // the pill itself is painted in paintEvent(); the style must not draw a second one
         glass.setColor(QPalette::Highlight, QColor(255, 255, 255, 0)); // white, not black: the style mixes the rgb with its own alpha
-        glass.setColor(QPalette::HighlightedText, glass.color(QPalette::WindowText));
+        glass.setColor(QPalette::HighlightedText, ngAurora() ? ngAuroraSelectionText(glass) : glass.color(QPalette::WindowText));
     }
     setPalette(glass);
     viewport()->setPalette(glass);
