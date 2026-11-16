@@ -3269,7 +3269,7 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
         // pale front, on either scheme
         const QColor highlight = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);
         const qreal accentHue = highlight.hslHueF() < 0 ? 0.58 : highlight.hslHueF();
-        const qreal accentSat = qBound(0.45, highlight.hslSaturationF() * 1.2, 0.90);
+        const qreal accentSat = (highlight.hslSaturationF() < 0.15 ? highlight.hslSaturationF() : qBound(0.45, highlight.hslSaturationF() * 1.2, 0.90));
         const QColor ink = QColor::fromHslF(accentHue, accentSat, dark ? 0.24 : 0.38); // (light schemes: a lighter tone, the accent itself more than a navy)
         const QColor ink2 = QColor::fromHslF(accentHue, accentSat * 0.9, dark ? 0.33 : 0.46);
         const qreal radius = qMin(width, height) * 0.09;
@@ -4801,7 +4801,7 @@ void KStandardItemListWidget::paintNgFamily(QPainter *painter)
         kindColour = ngKindFor(parentUrl.adjusted(QUrl::StripTrailingSlash).fileName(), parentDir).tint;
     }
     const qreal hue = kindColour.hslHueF() < 0 ? 0.55 : kindColour.hslHueF();
-    const qreal saturation = kindColour.hslHueF() < 0 ? 0.0 : qMax<qreal>(kindColour.hslSaturationF(), 0.55);
+    const qreal saturation = (kindColour.hslHueF() < 0 || kindColour.hslSaturationF() < 0.15) ? kindColour.hslSaturationF() : qMax<qreal>(kindColour.hslSaturationF(), 0.55);
     QColor accent = QColor::fromHslF(hue, saturation, ngIsDark(styleOption().palette) ? 0.64 : 0.5);
     QColor fill = accent, border = accent;
     const qreal in = (1 - std::pow(1 - activity->growth(data().value("url").toUrl()), 3)) * activity->fading(data().value("url").toUrl());
@@ -4831,7 +4831,7 @@ void KStandardItemListWidget::paintNgActivity(QPainter *painter)
     const NgActivity::Entry e = activity->entry(url);
     // the accent of the desktop, lifted: drawn over pictures and dark previews it has to stand out
     QColor accent = styleOption().palette.color(QPalette::Highlight);
-    accent = QColor::fromHslF(accent.hslHueF() < 0 ? 0.55 : accent.hslHueF(), qMax<qreal>(accent.hslSaturationF(), 0.65), 0.62);
+    accent = QColor::fromHslF(accent.hslHueF() < 0 ? 0.55 : accent.hslHueF(), accent.hslSaturationF() < 0.15 ? accent.hslSaturationF() : qMax<qreal>(accent.hslSaturationF(), 0.65), 0.62);
     const bool busy = e.percent < 0;
     const bool waiting = busy && activity->parentOf(url).isValid(); // a file being made from another one: it waits, quietly
     const bool stoppable = activity->canCancel(url);
@@ -5480,7 +5480,8 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
     if (text == option.palette.color(QPalette::Text)) {
         const QColor highlight = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);
         const qreal hue = std::fmod((highlight.hslHueF() < 0 ? 0.58 : highlight.hslHueF()) + 4.0 / 360.0, 1.0);
-        strong = dark ? QColor::fromHslF(hue, 0.40, 0.84) : QColor::fromHslF(hue, 0.28, 0.44);
+        const qreal tone = highlight.hslSaturationF() < 0.15 ? 0.0 : 1.0; // (a grey accent: a grey ink)
+        strong = dark ? QColor::fromHslF(hue, 0.40 * tone, 0.84) : QColor::fromHslF(hue, 0.28 * tone, 0.44);
     }
     for (const NgCardText &entry : std::as_const(m_ngCardTexts)) {
         painter->setFont(entry.font);

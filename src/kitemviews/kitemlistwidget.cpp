@@ -1701,7 +1701,7 @@ QColor ngAuroraAccent(const QPalette &palette, qreal alpha)
 {
     const QColor highlight = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight); // the application's: panels blank their own
     const qreal hue = highlight.hslHueF() < 0 ? 0.58 : highlight.hslHueF();
-    const qreal saturation = qBound(0.55, highlight.hslSaturationF() * 1.3, 0.90);
+    const qreal saturation = (highlight.hslSaturationF() < 0.15 ? highlight.hslSaturationF() : qBound(0.55, highlight.hslSaturationF() * 1.3, 0.90));
     QColor accent = QColor::fromHslF(hue, saturation, palette.color(QPalette::Window).lightnessF() < 0.5 ? 0.66 : 0.52);
     accent.setAlphaF(alpha);
     return accent;
@@ -1722,7 +1722,7 @@ QColor ngAccent(const QColor &colour, bool dark)
 {
     float h, s, l;
     colour.getHslF(&h, &s, &l);
-    return QColor::fromHslF(h < 0 ? 0 : h, dark ? s : qMin(1.0f, s * 1.15f + 0.05f), dark ? qMax(l, 0.64f) : qMin(l, 0.40f));
+    return QColor::fromHslF(h < 0 ? 0 : h, (dark || s < 0.15f) ? s : qMin(1.0f, s * 1.15f + 0.05f), dark ? qMax(l, 0.64f) : qMin(l, 0.40f)); // (a grey stays grey)
 }
 
 bool ngNoIcons()
