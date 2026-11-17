@@ -39,11 +39,11 @@ the files sorts and filters instead.
 
 ## Files drawn, not iconised
 
-- **Type and size are written into a drawing of the file** instead of a badge: printed on the box of an archive,
-  as the title of a page, on the front of a folder.
+- **Type and size are written into a drawing of the file** instead of a badge: as the title of a page (an archive
+  is a page with a zip down its side), on the front of a folder.
 - **Real previews become objects:** a picture is a print with its white margin (type and size on it), a PDF a
   page with a footer, a video a frame on a strip of film.
-- **Folders** are flat folders with their item count, and their size when Dolphin measures folders
+- **Folders** wear the accent colour, so they stand out from files; they are flat folders with their item count, and their size when Dolphin measures folders
   (NG settings → Rows; it keeps the disk busy for a while, and the option says so).
 - **The well-known folders of the home** (Desktop, Downloads, Documents, Pictures, Music, Videos, Templates,
   Public, from xdg-user-dirs) are recognised by where they are, with their own colour and sign.
@@ -111,10 +111,11 @@ The bar above the files has, from left to right:
 - **Sort** – one button per criterion (click the active one to reverse); a single "Sort: …" button when the window
   is narrow. Sorted by date modified, a folder counts as modified when something inside it was, not only when
   files were added or removed.
+- **Groups** – right beside the sorting: like the sorting (dynamic), none, date modified, date created, type or
+  size; grouping by a date sorts by it too.
 - **Cards / view** – switches between views and card looks.
 - **Filters** – only files, only folders, or one kind (images, documents, spreadsheets, archives, audio and video,
   code…), each with its count. The same list is in the sidebar.
-- **Groups** – none, date modified, date created, type or size; grouping by a date sorts by it too.
 - **Search in folder** – narrows the list as you type.
 
 ![Grouped by date modified](ng/screenshots/features/groups.png)
@@ -125,7 +126,12 @@ The places sit on a card of glass that shows the desktop behind it, blurred by t
 of the wallpaper, or a plain panel). Below them come the **Pinned** items and the **Filters**; at the foot, the
 disks: the home one first, then every other disk and partition as a box with its usage (an unmounted one is dashed:
 a click mounts and opens it). NG settings → Sidebar chooses between these boxes, the classic **Devices** section or
-none, and lists the disks to hide any one of them.
+none, and lists the disks to hide any one of them; phones through KDE Connect get a box too. One setting puts the
+sections right after the places instead of at the foot. With the opaque looks of Breeze NG (Soft, Grey) the card is
+opaque too.
+
+The sidebar takes the whole left side of the window: by default the window has no title bar of its own, and the
+sidebar button, the tabs and the window's buttons make its top row (NG settings → Sidebar → Window to change it).
 
 ![The glass sidebar](ng/screenshots/features/sidebar.png)
 

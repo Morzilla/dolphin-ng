@@ -50,7 +50,9 @@ it can be removed the same way. A longer tour, with every setting: **[FEATURES.m
 - **[Work in progress on the files](#work-in-progress-on-the-files)**: copies and conversions show on the file they concern.
 - **[Pinned to the top](#pinned-to-the-top)**: files and folders that stay first, whatever the sorting.
 - **[Quick actions](#quick-actions)**: resize, convert, extract, transcribe… from the card, and your own commands.
-- **[A glass sidebar](#the-sidebar)**: sections in the order you choose, disks with their usage, one button to hide it.
+- **[A glass sidebar](#the-sidebar)**: the whole left side of the window, sections in the order you choose, filters by
+  kind, pinned items, disks and phones as boxes.
+- **[Tabs in the title bar](#the-window)**: the sidebar button and the tabs where a title bar would be.
 - **[Folder sizes that are remembered](#folder-sizes)**: no recounting every time a folder opens.
 - **[The same in every app's file dialog](#dialog-ng)**: Dialog NG, the Open/Save window in this look.
 
@@ -64,6 +66,8 @@ that follows the window. A click on the button goes to the next look:
 - **Scheda**: the picture on the left, everything in three lines; the compact one.
 - **Dossier**: the file's identity card: pages and words, size in pixels, duration, where it was downloaded from,
   its tags and rating.
+
+Folders wear the accent colour (a well-known folder of the home its own colour), so they stand out from files.
 
 | Tessera | Scheda | Dossier |
 |---|---|---|
@@ -87,8 +91,8 @@ widens it; like the rest of the view, the choice is remembered per folder.
 
 ## The bar
 
-Above the files: sort (by name, size, type, date modified or created), the view and its look, the filters by kind
-of file with how many there are, and the groups. Each button says the current choice; in a narrow window the
+Above the files: sort (by name, size, type, date modified or created) and, right beside it, the groups that follow
+it; then the view and its look, and the filters by kind of file with how many there are. Each button says the current choice; in a narrow window the
 sorting folds into one button.
 
 <img src="ng/screenshots/readme/bar.png" width="560" alt="The bar: sort, cards, filters, groups">
@@ -142,9 +146,17 @@ application.
 - **Disks**: every disk and partition as a box with its usage; an unmounted one is dashed and a click mounts it.
   Phones through KDE Connect and other devices get a box too, which opens them.
   The classic Devices section is one setting away, and each disk can be hidden.
-- **One button**: the button at the top left of the toolbar hides and shows the whole sidebar (F9 too).
+- **One button**: the button at the top left of the window hides and shows the whole sidebar (F9 too).
+- **Opaque looks**: with Breeze NG Soft or Grey the sidebar is an opaque card, white on a light scheme.
 
 <img src="ng/screenshots/readme/sidebar.png" width="220" alt="The glass sidebar: places, recent, disks, filters">
+
+## The window
+
+The window has no title bar of its own: the sidebar button, the tabs and the window's buttons make the top row,
+and the sidebar takes the whole left side of the window, with back, forward and up between it and the location bar.
+NG settings → Sidebar → Window puts the tabs back above the location bar (under the system's title bar) or above
+the files, as in Dolphin.
 
 ## Folder sizes
 
