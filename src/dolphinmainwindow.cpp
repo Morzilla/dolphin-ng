@@ -592,6 +592,15 @@ DolphinMainWindow::DolphinMainWindow()
             settings->setShowZoomSlider(false); // Zooming can be done with pinch gestures instead and we are short on horizontal space.
             settings->setRenameInline(false); // This works around inline renaming currently not working well with virtual keyboards.
             settings->save(); // Otherwise the RenameInline setting is not picked up for the first time Dolphin is used.
+        } else if (auto *placesDock = qobject_cast<QDockWidget *>(m_placesPanel->parentWidget())) {
+            // dolphin-ng: the glass sidebar took its narrow size hint on a first start (entries cut short, disk boxes
+            // without their names): it starts about 15 em wide, never more than a third of the window
+            QTimer::singleShot(0, this, [this, placesDock] {
+                const int wanted = qMin(fontMetrics().averageCharWidth() * 30, width() / 3);
+                if (placesDock->isVisible() && placesDock->width() < wanted) {
+                    resizeDocks({placesDock}, {wanted}, Qt::Horizontal);
+                }
+            });
         }
     }
 
