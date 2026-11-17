@@ -557,11 +557,19 @@ DolphinMainWindow::DolphinMainWindow()
         } else {
             m_ngTabsToolBar->addWidget(topBar);
         }
-        insertToolBar(toolBar(), m_ngTabsToolBar);
-        if (m_ngTitleTabs && m_ngCentralLayout) {
+        if (m_ngTitleTabs || !m_ngCentralLayout) {
+            insertToolBar(toolBar(), m_ngTabsToolBar);
+        }
+        if (m_ngCentralLayout) {
             // the tool bar with the location bar goes above the files only: the sidebar reaches up to its level,
             // right under the row of tabs
             m_ngCentralLayout->insertWidget(0, toolBar());
+            if (!m_ngTitleTabs) {
+                // with the window manager's title bar the row of tabs goes above the files too: the sidebar takes
+                // the whole left side of the window, and back, forward and up sit between it and the location bar
+                // (they were at the top left corner, above the sidebar)
+                m_ngCentralLayout->insertWidget(0, m_ngTabsToolBar);
+            }
             if (m_ngSortBar && m_ngSortBar->layout()) {
                 // the sort bar's first button starts where the pill of back and forward does, right above it
                 QMargins margins = m_ngSortBar->layout()->contentsMargins();
