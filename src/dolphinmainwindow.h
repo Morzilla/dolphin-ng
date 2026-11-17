@@ -794,6 +794,7 @@ private:
     QWidget *m_ngSortBar = nullptr; // dolphin-ng: the sort/filter bar above the tabs
     QToolBar *m_ngTabsToolBar = nullptr; // dolphin-ng: the row of tabs above the location bar
     void ngUpdateTabsRow();
+    void ngStyleTitleRow(); // dolphin-ng: the row of tabs as a title bar: its tone, the current tab in the body's colour
     QVBoxLayout *m_ngCentralLayout = nullptr;
     QWidget *m_ngTitleToggle = nullptr; // the sidebar's button in the row of tabs
     QList<QWidget *> m_ngCorners; // the corners of the window without a frame, cut round over opaque children

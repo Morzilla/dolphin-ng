@@ -87,6 +87,7 @@
 #include <QTabBar>
 #include <QToolBar>
 #include <QWindow>
+#include <KColorUtils>
 #include <KConfigGroup>
 #include <KSharedConfig>
 #include <QProxyStyle>
@@ -608,6 +609,7 @@ DolphinMainWindow::DolphinMainWindow()
                 rowLayout->setContentsMargins(margins);
             }
             new NgFrameless(this, {m_ngTabsToolBar, drag, buttons});
+            QTimer::singleShot(0, this, &DolphinMainWindow::ngStyleTitleRow);
         } else {
             m_ngTabsToolBar->addWidget(topBar);
         }
@@ -1049,6 +1051,7 @@ bool DolphinMainWindow::event(QEvent *event)
 {
     if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) {
         QTimer::singleShot(700, this, &DolphinMainWindow::ngUpdateAurora); // a global theme writes the decoration last
+        QTimer::singleShot(750, this, &DolphinMainWindow::ngStyleTitleRow); // (after the style has said glass or not)
     }
     if (event->type() == QEvent::ApplicationPaletteChange) {
         // (once more when the change has settled: a colour scheme is written in more than one step)
@@ -1314,9 +1317,46 @@ void DolphinMainWindow::paintEvent(QPaintEvent *event)
     KXmlGuiWindow::paintEvent(event);
 }
 
+void DolphinMainWindow::ngStyleTitleRow()
+{
+    if (!m_ngTitleTabs || !m_ngTabsToolBar || !m_tabWidget->ngHasTopBar()) {
+        return;
+    }
+    QTabBar *top = m_tabWidget->ngCreateTopBar(m_ngTabsToolBar); // (the bar made already)
+    const QPalette app = QApplication::palette();
+    const QColor body = app.color(QPalette::Window);
+    const bool dark = body.lightnessF() < 0.5;
+    QPalette rowPalette = app, tabPalette = app;
+    if (ngAurora()) {
+        // Aurora: the current tab is the accent's pill already; the row is the window's glass
+        m_ngTabsToolBar->setAutoFillBackground(false);
+    } else if (property("_breeze_ng_glass").toBool()
+               || KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2")).readEntry("theme", QString()).contains(QLatin1String("Glass"))) {
+        // (the decoration says it too, before the style has marked the window)
+        // Glass: the row stays glass, the current tab a veil on it (the colour of lists made an opaque block)
+        m_ngTabsToolBar->setAutoFillBackground(false);
+        tabPalette.setColor(QPalette::Base, dark ? QColor(255, 255, 255, 26) : QColor(255, 255, 255, 150));
+    } else {
+        // opaque looks: the row a tone deeper than the window, the current tab in the window's own colour, down to
+        // the row's edge, so that it runs into the body below as a browser's does (it took the colour of lists: a
+        // dark block on a dark scheme, white on white or grey on grey on the light ones)
+        const QColor row = KColorUtils::mix(body, QColor(0, 0, 0), dark ? 0.28 : 0.06);
+        rowPalette.setColor(QPalette::Window, row);
+        rowPalette.setColor(QPalette::Button, row);
+        m_ngTabsToolBar->setAutoFillBackground(true);
+        tabPalette.setColor(QPalette::Window, row);
+        tabPalette.setColor(QPalette::Base, body);
+    }
+    m_ngTabsToolBar->setPalette(rowPalette);
+    top->setPalette(tabPalette);
+    top->update();
+    m_ngTabsToolBar->update();
+}
+
 void DolphinMainWindow::ngStyleReparsed()
 {
     ngLoadAuroraSettings();
+    QTimer::singleShot(0, this, &DolphinMainWindow::ngStyleTitleRow);
     QTimer::singleShot(0, this, &DolphinMainWindow::ngMoveToolbarButtons); // (the pill of back, forward and up follows the veil)
     const auto all = findChildren<QWidget *>();
     for (QWidget *child : all) {
