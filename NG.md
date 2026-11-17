@@ -137,8 +137,10 @@ application.
 - **Glass**: the places on a card over the desktop's blur (or a blurred wallpaper, an animated gradient, or a
   plain panel).
 - **Sections in any order**: pinned items, filters and disks are dragged into their order in the settings;
-  above the places they stay at the top, below them at the foot, and the places scroll in between.
+  above the places they stay at the top, below them at the foot (or, with one setting, right after the places),
+  and the places scroll in between.
 - **Disks**: every disk and partition as a box with its usage; an unmounted one is dashed and a click mounts it.
+  Phones through KDE Connect and other devices get a box too, which opens them.
   The classic Devices section is one setting away, and each disk can be hidden.
 - **One button**: the button at the top left of the toolbar hides and shows the whole sidebar (F9 too).
 

@@ -100,6 +100,7 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *event) override; // dolphin-ng: section titles as pills
+    void updateGeometries() override; // dolphin-ng: the sections that follow the list move with its end
     void enterEvent(QEnterEvent *event) override; // dolphin-ng: the scroll bar shows while the pointer is over the panel
     void leaveEvent(QEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override; // dolphin-ng: a click on a section title folds it

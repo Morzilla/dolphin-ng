@@ -59,6 +59,8 @@ public:
         qint64 free = 0;
         bool home = false;
         bool removable = false; // a USB stick, a card: it can be removed safely
+        QUrl url; // a device that is not a disk (a phone through KDE Connect, a media player): where it opens
+        QString kind; // what it is, said on the right of its box ("KDE Connect", "Device")
     };
     static QList<NgDisk> ngSidebarDisks();
     /** dolphin-ng: the height the disk boxes take at the foot of the card, with the gap above the card's edge. */
@@ -99,6 +101,7 @@ private:
         QString udi;
         bool removable = false;
         QRectF eject; // the eject button of a mounted removable device
+        QUrl url; // a device that is not a disk: opened at this address
     };
     void ngDiskMenu(const NgDiskHit &target, const QPoint &globalPos); // right click: open, mount, unmount, remove
     void ngDiskMount(const QString &udi); // mount it, then open its root

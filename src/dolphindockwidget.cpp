@@ -788,8 +788,9 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
             const QVariant disksY = widget() ? widget()->property("ngDisksY") : QVariant();
             qreal top = disksY.isValid() && disksY.toInt() >= 0 ? widget()->mapTo(this, QPoint(0, disksY.toInt())).y() : card.bottom() - room;
             for (const NgDisk &disk : disks) {
-                const bool mounted = !disk.root.isEmpty();
-                const qreal height = !mounted ? 32 : compact ? 40 : 54;
+                const bool device = !disk.url.isEmpty(); // not a disk: one line, its kind on the right, no usage
+                const bool mounted = !disk.root.isEmpty() || device;
+                const qreal height = !mounted || device ? 32 : compact ? 40 : 54;
                 const QRectF box(card.left() + 8, top, card.width() - 16, height);
                 top += height + 6;
                 // a mounted USB stick or card: an eject button at the right, as in KDE's own list
@@ -798,7 +799,7 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
                     const qreal side = metrics.height() + 4;
                     eject = QRectF(box.right() - 8 - side, (!compact ? box.top() + 8 : box.top() + 5) + (metrics.height() - side) / 2.0, side, side);
                 }
-                m_ngDiskBoxes.append({box, disk.root, disk.udi, disk.removable, eject});
+                m_ngDiskBoxes.append({box, disk.root, disk.udi, disk.removable, eject, disk.url});
 
                 if (mounted) {
                     painter.setPen(Qt::NoPen);
@@ -812,7 +813,7 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
                 painter.drawRoundedRect(mounted ? box : box.adjusted(0.5, 0.5, -0.5, -0.5), 10, 10);
 
                 // the name (or, for the home disk alone, its size) on the left, the free space on the right
-                QRectF textRect = !mounted ? box.adjusted(10, 0, -10, 0) : compact ? box.adjusted(10, 5, -10, -17) : box.adjusted(10, 8, -10, -24);
+                QRectF textRect = !mounted || device ? box.adjusted(10, 0, -10, 0) : compact ? box.adjusted(10, 5, -10, -17) : box.adjusted(10, 8, -10, -24);
                 if (!eject.isNull()) {
                     textRect.setRight(eject.left() - 6);
                     // the glyph as tall as the text beside it (it was drawn over the whole hit area, larger than the text);
@@ -827,7 +828,9 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
                 } else {
                     left = disk.fs.isEmpty() ? disk.name : disk.name + QStringLiteral(" · ") + disk.fs;
                 }
-                const QString right = mounted ? i18nc("@info:status Free disk space", "%1 free", KIO::convertSize(disk.free)) : ngTr("not mounted", "non montato");
+                const QString right = device ? disk.kind
+                    : mounted               ? i18nc("@info:status Free disk space", "%1 free", KIO::convertSize(disk.free))
+                                            : ngTr("not mounted", "non montato");
                 QColor text = palette().color(QPalette::WindowText);
                 const int rightWidth = metrics.horizontalAdvance(right);
                 const bool both = rightWidth + 12 + qMin(metrics.horizontalAdvance(left), 40) <= textRect.width();
@@ -840,13 +843,13 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
                                      QFontMetrics(bold).elidedText(left, Qt::ElideRight, int(textRect.width() - rightWidth - 12)));
                     painter.setFont(small);
                 }
-                if (!mounted) {
+                if (!mounted || device) {
                     text.setAlpha(150);
                 }
                 painter.setPen(text);
                 painter.drawText(textRect, (both ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter, metrics.elidedText(right, Qt::ElideRight, int(textRect.width())));
 
-                if (mounted && disk.total > 0) {
+                if (mounted && !device && disk.total > 0) {
                     const qreal used = 1.0 - qreal(disk.free) / qreal(disk.total);
                     const qreal barHeight = compact ? 4 : 6;
                     const QRectF groove(box.left() + 10, box.bottom() - (compact ? 11 : 16), box.width() - 20, barHeight);
@@ -927,7 +930,11 @@ QList<DolphinDockWidget::NgDisk> DolphinDockWidget::ngSidebarDisks()
             disk.udi = QStringLiteral("demo:") + parts.value(0);
             disk.name = parts.value(0);
             disk.fs = parts.value(1);
-            if (parts.size() >= 4) {
+            if (parts.value(1) == QLatin1String("kdeconnect")) { // a phone: "Pixel|kdeconnect"
+                disk.fs.clear();
+                disk.url = QUrl(QStringLiteral("kdeconnect://demo"));
+                disk.kind = QStringLiteral("KDE Connect");
+            } else if (parts.size() >= 4) {
                 disk.root = QDir::homePath();
                 disk.free = qint64(parts.value(2).toDouble() * 1024 * 1024 * 1024);
                 disk.total = qint64(parts.value(3).toDouble() * 1024 * 1024 * 1024);
@@ -946,6 +953,18 @@ QList<DolphinDockWidget::NgDisk> DolphinDockWidget::ngSidebarDisks()
         const Solid::Device device = places->deviceForIndex(index);
         const auto *access = device.as<Solid::StorageAccess>();
         if (!access) {
+            // not a disk: a phone through KDE Connect, a media player... Its row is hidden with the others, so it gets
+            // a box too, without usage, that opens it (it vanished from the sidebar before)
+            const QUrl url = places->url(index);
+            if (url.isEmpty()) {
+                continue;
+            }
+            NgDisk other;
+            other.udi = device.udi();
+            other.name = places->text(index);
+            other.url = url;
+            other.kind = url.scheme() == QLatin1String("kdeconnect") ? QStringLiteral("KDE Connect") : ngTr("Device", "Dispositivo");
+            s_ngDisks.append(other);
             continue;
         }
         NgDisk disk;
@@ -985,7 +1004,7 @@ int DolphinDockWidget::ngDiskRoom()
     const bool compact = disks.size() > 3;
     int room = 8;
     for (const NgDisk &disk : disks) {
-        room += (disk.root.isEmpty() ? 32 : compact ? 40 : 54) + 6;
+        room += (disk.root.isEmpty() || !disk.url.isEmpty() ? 32 : compact ? 40 : 54) + 6;
     }
     return room - 6;
 }
@@ -1060,6 +1079,10 @@ bool DolphinDockWidget::ngDiskBoxEvent(QEvent *event)
         ngDiskUnmount(target.udi); // the eject button
         return true;
     }
+    if (!target.url.isEmpty()) {
+        Q_EMIT ngDiskRootRequested(target.url); // a device that is not a disk: its own address
+        return true;
+    }
     if (!target.root.isEmpty()) {
         Q_EMIT ngDiskRootRequested(QUrl::fromLocalFile(target.root));
         return true;
@@ -1071,7 +1094,11 @@ bool DolphinDockWidget::ngDiskBoxEvent(QEvent *event)
 void DolphinDockWidget::ngDiskMenu(const NgDiskHit &target, const QPoint &globalPos)
 {
     QMenu menu(this);
-    if (!target.root.isEmpty()) {
+    if (!target.url.isEmpty()) {
+        menu.addAction(QIcon::fromTheme(QStringLiteral("document-open")), ngTr("Open", "Apri"), this, [this, url = target.url] {
+            Q_EMIT ngDiskRootRequested(url);
+        });
+    } else if (!target.root.isEmpty()) {
         menu.addAction(QIcon::fromTheme(QStringLiteral("document-open")), ngTr("Open", "Apri"), this, [this, root = target.root] {
             Q_EMIT ngDiskRootRequested(QUrl::fromLocalFile(root));
         });

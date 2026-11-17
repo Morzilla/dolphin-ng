@@ -68,6 +68,7 @@ private:
     void fillDevices();
     QCheckBox *m_sidebarFilters;
     QCheckBox *m_sidebarPinned;
+    QCheckBox *m_sectionsFollow = nullptr; // the sections below the places right after the list (SIDEBAR_FOLLOW)
     QCheckBox *m_folderContentDate;
     // sidebar: picture
     KUrlRequester *m_image;

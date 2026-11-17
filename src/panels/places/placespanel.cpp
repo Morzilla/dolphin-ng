@@ -1293,6 +1293,17 @@ QStringList ngSidebarOrder()
     return order;
 }
 
+void PlacesPanel::updateGeometries()
+{
+    KFilePlacesView::updateGeometries();
+    // the list was laid out again (entries came or went, a section folded): sections that follow its end move with it
+    if (!m_ngLayouting && ngSetting("SIDEBAR_FOLLOW").toLower() == QLatin1String("list")) {
+        m_ngLayouting = true;
+        ngLayoutBottom();
+        m_ngLayouting = false;
+    }
+}
+
 void PlacesPanel::ngLayoutBottom()
 {
     if (!m_ngBarWatched) {
@@ -1342,7 +1353,17 @@ void PlacesPanel::ngLayoutBottom()
             widget->move(14, height() + 20);
         }
     }
-    setViewportMargins(16, 12 + topTotal, 16, 12 + bottomTotal); // (16 at the sides: the pill of the selected entry keeps clear of the card's edges)
+    // SIDEBAR_FOLLOW=list: the sections below the places come right after the last entry, not at the foot of the
+    // card (a short list left a gap above the disks); the list then ends where its entries end
+    int follow = 0;
+    if (sectionsShown && ngSetting("SIDEBAR_FOLLOW").toLower() == QLatin1String("list")) {
+        const int room = height() - 24 - topTotal - bottomTotal;
+        const int content = contentsSize().height();
+        if (content > 0 && content < room) {
+            follow = room - content;
+        }
+    }
+    setViewportMargins(16, 12 + topTotal, 16, 12 + bottomTotal + follow); // (16 at the sides: the pill of the selected entry keeps clear of the card's edges)
     ngPlaceScrollBar();
 
     // top down, then bottom up; the disks are drawn by the dock where they are given room
@@ -1357,7 +1378,7 @@ void PlacesPanel::ngLayoutBottom()
         }
         y += heightOf(name);
     }
-    y = height() - 12;
+    y = height() - 12 - follow;
     for (int i = order.count() - 1; i > placesAt; --i) {
         const QString &name = order.at(i);
         y -= heightOf(name);
