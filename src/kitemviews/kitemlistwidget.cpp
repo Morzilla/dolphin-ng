@@ -1731,6 +1731,12 @@ bool ngNoIcons()
     return !show && ngTwoLineList();
 }
 
+bool ngRowColumns()
+{
+    const QString mark = ngSetting("MARK").toLower();
+    return ngSetting("ROW_COLUMNS").toLower() == QLatin1String("on") && ngNoIcons() && (mark.isEmpty() || mark == QLatin1String("object"));
+}
+
 void KItemListWidget::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
     Q_UNUSED(option)

@@ -6,6 +6,7 @@
  */
 
 #include "kitemlistheaderwidget.h"
+#include "kitemviews/kitemlistwidget.h" // dolphin-ng: ngRowColumns()
 #include "kitemviews/kitemmodelbase.h"
 
 #include <QApplication>
@@ -441,6 +442,43 @@ void KItemListHeaderWidget::slotSortOrderChanged(Qt::SortOrder current, Qt::Sort
 
 void KItemListHeaderWidget::paintRole(QPainter *painter, const QByteArray &role, const QRectF &rect, int orderIndex, QWidget *widget) const
 {
+    // dolphin-ng: over the drawn rows the header is light: no bar of sections, the names in the dim text colour, the
+    // sort arrow beside the sorted one, a faint pill under the pointer (a solid header was a dark block on the glass)
+    if (ngRowColumns()) {
+        const bool sorted = m_model->sortRole() == role;
+        QColor ink = palette().color(QPalette::WindowText);
+        if (m_hoveredIndex == orderIndex || m_pressedRoleIndex == orderIndex) {
+            QColor veil = ink;
+            veil.setAlphaF(m_pressedRoleIndex == orderIndex ? 0.14 : 0.08);
+            painter->save();
+            painter->setRenderHint(QPainter::Antialiasing);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(veil);
+            painter->drawRoundedRect(rect.adjusted(2, 3, -2, -3), 7, 7);
+            painter->restore();
+        }
+        QFont small = font();
+        small.setPointSizeF(small.pointSizeF() * 0.9);
+        small.setWeight(sorted ? QFont::DemiBold : QFont::Normal);
+        ink.setAlphaF(sorted ? 0.85 : 0.6);
+        painter->save();
+        painter->setFont(small);
+        painter->setPen(ink);
+        const QString text = m_model->roleDescription(role);
+        const QRectF textRect = rect.adjusted(10, 0, sorted ? -22 : -10, 0);
+        const bool right = role == "size";
+        painter->drawText(textRect, (right ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter, QFontMetrics(small).elidedText(text, Qt::ElideRight, int(textRect.width())));
+        if (sorted) {
+            QStyleOption arrow;
+            arrow.initFrom(widget);
+            arrow.rect = QRect(int(rect.right()) - 20, int(rect.center().y()) - 5, 10, 10);
+            arrow.palette.setColor(QPalette::WindowText, ink);
+            arrow.palette.setColor(QPalette::ButtonText, ink);
+            style()->drawPrimitive(m_model->sortOrder() == Qt::AscendingOrder ? QStyle::PE_IndicatorArrowUp : QStyle::PE_IndicatorArrowDown, &arrow, painter, widget);
+        }
+        painter->restore();
+        return;
+    }
     // The following code is based on the code from QHeaderView::paintSection().
     // SPDX-FileCopyrightText: 2011 Nokia Corporation and/or its subsidiary(-ies).
     QStyleOptionHeader option;

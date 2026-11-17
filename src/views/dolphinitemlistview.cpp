@@ -27,7 +27,7 @@ DolphinItemListView::DolphinItemListView(QGraphicsWidget *parent)
 {
     // dolphin-ng: the NG settings apply without a restart
     connect(NgSettings::instance(), &NgSettings::changed, this, [this] {
-        setHeaderVisible(itemLayout() == DetailsLayout && !ngTwoLineList());
+        setHeaderVisible(itemLayout() == DetailsLayout && (!ngTwoLineList() || ngRowColumns()));
         updateFont();
         updateGridSize();
         ngRefresh();
@@ -177,7 +177,7 @@ bool DolphinItemListView::itemLayoutSupportsItemExpanding(ItemLayout layout) con
 
 void DolphinItemListView::onItemLayoutChanged(ItemLayout current, ItemLayout previous)
 {
-    setHeaderVisible(current == DetailsLayout && !ngTwoLineList()); // dolphin-ng: the two-line list has no columns
+    setHeaderVisible(current == DetailsLayout && (!ngTwoLineList() || ngRowColumns())); // dolphin-ng: the two-line list has no columns, unless asked
 
     updateFont();
     updateGridSize();

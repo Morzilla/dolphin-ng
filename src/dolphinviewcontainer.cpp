@@ -1438,6 +1438,64 @@ private:
             rebuild();
         });
         m_flow->addWidget(rows);
+
+        // columns of attributes after the name (drawn rows only): on or off, and which ones. Their order and widths are
+        // the header's (drag a column header to move it); the choice is the folder's, as Dolphin keeps it
+        if (ngNoIcons() && (ngSetting("MARK").isEmpty() || ngSetting("MARK").toLower() == QLatin1String("object"))) {
+            const bool on = ngRowColumns();
+            auto *columns = new QToolButton(this);
+            columns->setAutoRaise(true);
+            columns->setCheckable(true);
+            columns->setChecked(on);
+            columns->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+            columns->setIcon(QIcon::fromTheme(QStringLiteral("view-split-left-right"), QIcon::fromTheme(QStringLiteral("view-list-details"))));
+            columns->setText(ngTr("Columns", "Colonne"));
+            columns->setPopupMode(QToolButton::InstantPopup);
+            auto *menu = new QMenu(columns);
+            QAction *show = menu->addAction(ngTr("Show columns", "Mostra le colonne"));
+            show->setCheckable(true);
+            show->setChecked(on);
+            connect(show, &QAction::toggled, this, [this](bool checked) {
+                setNgSetting("ROW_COLUMNS", checked ? QStringLiteral("on") : QString());
+                ngSettingsInvalidate();
+                QTimer::singleShot(0, this, [this] {
+                    rebuild();
+                });
+            });
+            menu->addSeparator();
+            const QList<QByteArray> visible = m_view->visibleRoles();
+            QString group;
+            const auto infos = KFileItemModel::rolesInformation();
+            for (const KFileItemModel::RoleInfo &info : infos) {
+                if (info.role == "text") {
+                    continue;
+                }
+                if (info.group != group) {
+                    group = info.group;
+                    if (!group.isEmpty()) {
+                        menu->addSection(group);
+                    }
+                }
+                QAction *action = menu->addAction(info.translation);
+                action->setCheckable(true);
+                action->setChecked(visible.contains(info.role));
+                action->setEnabled(on);
+                const QByteArray role = info.role;
+                connect(action, &QAction::toggled, this, [this, role](bool checked) {
+                    QList<QByteArray> roles = m_view->visibleRoles();
+                    if (checked && !roles.contains(role)) {
+                        roles.append(role);
+                    } else if (!checked) {
+                        roles.removeAll(role);
+                    }
+                    m_view->setVisibleRoles(roles);
+                });
+            }
+            columns->setMenu(menu);
+            menuButton(columns);
+            columns->setToolTip(ngTr("Attributes in columns after the name: dates, size, owner, permissions, tags…", "Attributi in colonne dopo il nome: date, dimensione, proprietario, permessi, tag…"));
+            m_flow->addWidget(columns);
+        }
         m_flow->invalidate();
     }
 

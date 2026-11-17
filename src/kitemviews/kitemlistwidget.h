@@ -223,6 +223,8 @@ DOLPHIN_EXPORT bool ngTwoLineList();
  * (a watermark), the size has a bar and hovering a row shows its actions. DOLPHIN_NG_ICONS=show keeps the icons.
  */
 DOLPHIN_EXPORT bool ngNoIcons();
+// dolphin-ng: the drawn rows with columns of attributes after the name (ROW_COLUMNS=on), under Dolphin's own header
+DOLPHIN_EXPORT bool ngRowColumns();
 
 /** dolphin-ng: is this a dark colour scheme? The fork's own painting picks its shades from the answer. */
 DOLPHIN_EXPORT bool ngIsDark(const QPalette &palette);

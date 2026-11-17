@@ -79,6 +79,10 @@ The details view without icons and without column headers: each row starts with 
 (the folder with its item count, the page with its type and size), the second line says the kind in words, and
 the end of the row the dates. Narrow windows drop the dates first.
 
+**Columns**: the Columns button in the bar puts the attributes you choose in columns after the name, under a header
+(dates, size, type, owner, permissions, tags, rating…). A click on a column's name sorts by it, dragging moves or
+widens it; like the rest of the view, the choice is remembered per folder.
+
 <img src="ng/screenshots/readme/rows.png" width="640" alt="Drawn rows">
 
 ## The bar

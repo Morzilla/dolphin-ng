@@ -2554,7 +2554,14 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         // a narrow view drops the date first, then the size column
         // dolphin-ng: rows drawn like the cards: the drawing says type and size, the dates are the two lines at the end
         m_ngObjectRow = noIcons && ngMark() == NgMark::Object;
-        const bool objectDates = m_ngObjectRow && ngSetting("ROW_DATES").toLower() != QLatin1String("hide");
+        // with columns: the name and its line end where the header's name column ends; every other role goes in its
+        // column, at the place of the header's (no dates block, no chips for them)
+        const bool columns = m_ngObjectRow && ngRowColumns();
+        if (columns) {
+            dateRole.clear();
+            m_ngDateRole.clear();
+        }
+        const bool objectDates = m_ngObjectRow && !columns && ngSetting("ROW_DATES").toLower() != QLatin1String("hide");
         const bool roomForDate = (!noIcons || size().width() >= fontHeight * 36) && !objectDates;
         const bool roomForSize = size().width() >= fontHeight * 26;
         if (!dateRole.isEmpty() && !roomForDate) {
@@ -2636,7 +2643,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         // ---- the dates of the item (the creation time is not a requested role: read it from the item itself)
         QDateTime created;
         QDateTime modified = ngDateTimeOf(values.value("modificationtime"));
-        const bool wantDates = noIcons && ngSetting("ROW_DATES").toLower() != QLatin1String("hide");
+        const bool wantDates = noIcons && !columns && ngSetting("ROW_DATES").toLower() != QLatin1String("hide");
         if (wantDates) {
             if (values.contains("creationtime")) {
                 created = ngDateTimeOf(values.value("creationtime"));
@@ -2701,6 +2708,10 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
                 line(modifiedLabel, modified, top + (smallMetrics.height() + 1) / 2.0);
             }
             blockLeft = timeLeft;
+        }
+        if (columns) {
+            blockLeft = qMin(blockLeft, leftPadding() + columnWidth("text"));
+            m_ngActionsRect = QRectF();
         }
         qreal textRight = blockLeft - 2 * gap;
 
@@ -2795,8 +2806,25 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         };
         QString typeText;
         QStringList plainChips;
+        qreal columnX = leftPadding() + columnWidth("text"); // where the first column after the name starts
         for (const QByteArray &role : std::as_const(m_sortedVisibleRoles)) {
             TextInfo *textInfo = m_textInfo.value(role);
+            if (columns && role != "text") {
+                // in its column, vertically centred, elided to it; sizes and counts to the right, as in Dolphin
+                const qreal roleWidth = columnWidth(role);
+                QString text = roleText(role, values);
+                const qreal available = qMax(qreal(0), roleWidth - columnWidthInc);
+                qreal width = m_customizedFontMetrics.horizontalAdvance(text);
+                if (width > available) {
+                    text = m_customizedFontMetrics.elidedText(text, Qt::ElideRight, available);
+                    width = m_customizedFontMetrics.horizontalAdvance(text);
+                }
+                textInfo->staticText.setText(text);
+                const qreal x = isRoleRightAligned(role) ? columnX + roleWidth - columnWidthInc / 2 - width : columnX + columnWidthInc / 2;
+                textInfo->pos = QPointF(x, (widgetHeight - fontHeight) / 2.0);
+                columnX += roleWidth;
+                continue;
+            }
             if (role == "text") {
                 QString text = escapeString(roleText(role, values));
                 qreal width = m_customizedFontMetrics.horizontalAdvance(text);
