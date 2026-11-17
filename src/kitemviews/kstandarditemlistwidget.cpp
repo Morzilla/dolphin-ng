@@ -3507,37 +3507,41 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
             write(text, sizeText, 11 * u, QFont::Bold, shade(0.82, 0.5), Qt::AlignRight | Qt::AlignVCenter);
         }
     } else if (category == int(NgKind::Archive) || category == int(NgKind::Package)) {
-        // a parcel: a box with its tape and a label
-        // whole (the Scheda): the box takes most of its column and stands entire, its lid included
-        const qreal width = whole ? qMin(band.width() * 0.84, band.height() * 1.15) : qMin(band.width() * 0.46, band.height() * 1.3);
-        const QRectF box = whole ? QRectF(band.center().x() - width / 2.0, band.top() + 16 * u, width, band.height() - 22 * u)
-                                 : QRectF(band.center().x() - width / 2.0, band.top() + 18 * u, width, band.height());
-        QColor card = tint;
-        card.setAlphaF(1.0);
+        // a page like the others (the type as its heading, the size under it), with a zip down its right side in the
+        // type's colour: an archive among documents, not a coloured box that stood apart from every other drawing.
+        // A package has a strip of tape instead of the zip.
+        const QRectF page = sheet(0.56);
+        const qreal zipWidth = qMax(6.0, 12 * u);
+        const QRectF zip(page.right() - zipWidth - 8 * u, page.top() - 1, zipWidth, page.height() + 2);
+        QColor zipColour = tint;
+        zipColour.setAlphaF(1.0);
         painter->setPen(Qt::NoPen);
-        painter->setBrush(card.darker(dark ? 135 : 110));
-        painter->drawRoundedRect(box, 5 * u, 5 * u);
-        painter->setBrush(card.lighter(118));
-        painter->drawRoundedRect(QRectF(box.left() - 4 * u, box.top() - 6 * u, box.width() + 8 * u, 15 * u), 4 * u, 4 * u);
+        painter->setBrush(zipColour);
+        painter->drawRect(zip);
         if (category == int(NgKind::Archive)) {
-            // the zip: teeth down the middle (down the left side when the box carries its type and size)
-            const qreal teeth = info ? box.left() + 11 * u : box.center().x();
-            for (int i = 0; i < 7; ++i) {
-                bar(teeth - (i % 2 ? 0 : 5 * u), box.top() + 14 * u + i * 8 * u, 5 * u, 4.5 * u, QColor(255, 255, 255, 190));
+            const qreal tooth = qMax(2.0, 4 * u);
+            for (qreal y = zip.top() + 6 * u; y < page.bottom(); y += tooth * 2) {
+                const bool left = int((y - zip.top()) / (tooth * 2)) % 2 == 0;
+                painter->setBrush(QColor(255, 255, 255, 200));
+                painter->drawRect(QRectF(left ? zip.left() + zipWidth * 0.18 : zip.center().x(), y, zipWidth * 0.32, tooth));
             }
+            // the pull of the zip
+            painter->setBrush(zipColour.darker(130));
+            painter->drawRoundedRect(QRectF(zip.left() - 2 * u, page.top() + 20 * u, zipWidth + 4 * u, 14 * u), 3 * u, 3 * u);
         } else {
             painter->setBrush(QColor(255, 255, 255, 70));
-            painter->drawRect(QRectF(box.center().x() - 5 * u, box.top() - 6 * u, 10 * u, band.height()));
-            if (!info) {
-                painter->setBrush(paper);
-                painter->drawRoundedRect(QRectF(box.left() + 8 * u, box.top() + 22 * u, box.width() * 0.34, 20 * u), 2 * u, 2 * u);
-            }
+            painter->drawRect(QRectF(zip.left(), zip.top(), zipWidth * 0.3, zip.height()));
         }
+        const qreal left = page.left() + 11 * u, width = zip.left() - 7 * u - left;
         if (info) {
-            // printed on the side of the box, in a pale shade of the box itself
-            const QRectF side = box.adjusted(category == int(NgKind::Archive) ? 20 * u : 6 * u, 16 * u, -6 * u, 0);
-            write(QRectF(side.left(), side.top(), side.width(), 32 * u), sigla, 29 * u, QFont::Black, shade(0.86, 0.95), Qt::AlignHCenter | Qt::AlignVCenter);
-            write(QRectF(side.left(), side.top() + 31 * u, side.width(), 18 * u), sizeText, 13 * u, QFont::Bold, shade(0.8, 0.75), Qt::AlignHCenter | Qt::AlignVCenter);
+            write(QRectF(left, page.top() + 4 * u, width, 26 * u), sigla, 23 * u, QFont::Black, shade(0.48, 1.0), Qt::AlignLeft | Qt::AlignVCenter);
+            write(QRectF(left, page.top() + 28 * u, width, 16 * u), sizeText, 12.5 * u, QFont::Bold, shade(0.42, 0.4), Qt::AlignLeft | Qt::AlignVCenter);
+        } else {
+            bar(left, page.top() + 14 * u, width * 0.62, 5 * u, tint);
+        }
+        static const qreal lines[] = {1.0, 0.8, 1.0, 0.6};
+        for (int i = 0; i < 4; ++i) {
+            bar(left, page.top() + 50 * u + i * 10 * u, width * lines[i], 4 * u, i < 2 ? grey : faint);
         }
     } else if (category == int(NgKind::Image)) {
         // a picture that could not be previewed: sky, sun and hills
