@@ -907,30 +907,6 @@ protected:
     }
 };
 
-// Breeze NG's settings (breezengrc [Common]) and the key of its window opacity for the look in use: Aurora's or
-// Glass's; empty when the style is not Breeze NG or the look is Soft (opaque windows)
-static KConfigGroup breezeNgCommon()
-{
-    return KSharedConfig::openConfig(QStringLiteral("breezengrc"))->group(QStringLiteral("Common"));
-}
-
-static QString ngBreezeOpacityKey()
-{
-    if (KSharedConfig::openConfig(QStringLiteral("kdeglobals"))->group(QStringLiteral("KDE")).readEntry("widgetStyle", QString()).compare(QLatin1String("BreezeNG"), Qt::CaseInsensitive) != 0) {
-        return QString();
-    }
-    const QString theme = KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2")).readEntry("theme", QString());
-    breezeNgCommon().config()->reparseConfiguration();
-    const QString variant = breezeNgCommon().readEntry("Variant", QString());
-    if (theme.contains(QLatin1String("Aurora")) || variant == QLatin1String("Aurora")) {
-        return QStringLiteral("AuroraBodyOpacity");
-    }
-    if (theme.contains(QLatin1String("Glass")) || variant == QLatin1String("Glass")) {
-        return QStringLiteral("WindowOpacity");
-    }
-    return QString();
-}
-
 NgSettingsPage::NgSettingsPage(QWidget *parent)
     : SettingsPageBase(parent)
 {
@@ -1160,14 +1136,6 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     m_liveBlur->setToolTip(ngTr("The blur strength of the compositor (KWin's Blur or Better Blur effect). It is a desktop setting: every blurred window changes with it.",
                                 "L'intensità del blur del compositor (effetto Sfocatura di KWin o Better Blur). È un'impostazione del desktop: cambia per tutte le finestre sfocate."));
     formRow(ngTr("Blur (whole desktop):", "Sfocatura (tutto il desktop):"), m_liveBlur);
-    // the see-through window is Breeze NG's (Glass or Aurora): its opacity, here too, next to the blur
-    m_windowOpacity = percentSlider(this, 20, 100);
-    m_windowOpacity->setToolTip(ngTr("How opaque the window is, in Breeze NG's Glass and Aurora looks (Breeze NG's setting: every application changes with it).",
-                                     "Quanto è opaca la finestra, negli aspetti Glass e Aurora di Breeze NG (impostazione di Breeze NG: cambia per tutte le applicazioni)."));
-    formRow(ngTr("Window opacity:", "Opacità della finestra:"), m_windowOpacity);
-    m_sidebarOpacity = percentSlider(this, 0, 100);
-    m_sidebarOpacity->setToolTip(ngTr("How opaque the sidebar's glass is, apart from the window's (Breeze NG Aurora).", "Quanto è opaco il vetro della barra laterale, a parte da quello della finestra (Breeze NG Aurora)."));
-    formRow(ngTr("Sidebar opacity:", "Opacità della barra laterale:"), m_sidebarOpacity);
     m_lavaStyle = new QComboBox(this);
     m_lavaStyle->addItem(ngTr("Flowing gradient", "Gradiente che scorre"), QString());
     m_lavaStyle->addItem(ngTr("Blobs (lava lamp)", "Macchie (lava lamp)"), QStringLiteral("blobs"));
@@ -1473,7 +1441,7 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     for (QComboBox *combo : {m_backdrop, m_devices, m_disksPos, m_lavaStyle, m_lavaColours, m_rim, m_rows, m_mark, m_sigla, m_cards, m_cardsFit, m_cardsInfo, m_cardsMark, m_cardsBadge, m_activitySize}) {
         connect(combo, &QComboBox::currentIndexChanged, this, &NgSettingsPage::changed);
     }
-    for (QSlider *slider : {m_glass, m_blur, m_liveBlur, m_windowOpacity, m_sidebarOpacity, m_lavaSize, m_lavaSpeed}) {
+    for (QSlider *slider : {m_glass, m_blur, m_liveBlur, m_lavaSize, m_lavaSpeed}) {
         connect(slider, &QSlider::valueChanged, this, &NgSettingsPage::changed);
     }
     connect(m_image, &KUrlRequester::textChanged, this, &NgSettingsPage::changed);
@@ -1604,8 +1572,6 @@ void NgSettingsPage::updateDependencies()
     showOption(m_glass, picture);
     showOption(m_blur, picture);
     showOption(m_liveBlur, glass && mode == QLatin1String("live"));
-    showOption(m_windowOpacity, !ngBreezeOpacityKey().isEmpty());
-    showOption(m_sidebarOpacity, ngBreezeOpacityKey() == QLatin1String("AuroraBodyOpacity"));
     showOption(m_motion, picture);
     showOption(m_lavaStyle, gradient);
     showOption(m_lavaSize, gradient);
@@ -1632,11 +1598,6 @@ void NgSettingsPage::loadSettings()
     m_glass->setValue(qBound(0, ngSettingInt("GLASS", 55), 100));
     m_blur->setValue(qBound(0, ngSettingInt("GLASS_BLUR", 45), 100));
     m_liveBlur->setValue(qBound(1, kwinBlurGroup().readEntry("BlurStrength", 15), 15));
-    if (const QString key = ngBreezeOpacityKey(); !key.isEmpty()) {
-        m_windowOpacity->setValue(qBound(20, breezeNgCommon().readEntry(key.toLatin1().constData(), key == QLatin1String("AuroraBodyOpacity") ? 60 : 70), 100));
-        const int side = breezeNgCommon().readEntry("AuroraSidebarOpacity", -1);
-        m_sidebarOpacity->setValue(side < 0 ? m_windowOpacity->value() : side);
-    }
     m_motion->setChecked(ngSetting("GLASS_MOTION").toLower() == QLatin1String("drift"));
     m_lavaStyle->setCurrentIndex(ngSetting("LAVA_STYLE").toLower() == QLatin1String("blobs") ? 1 : 0);
     m_lavaSize->setValue(qBound(10, ngSettingInt("LAVA_SIZE", 55), 100));
@@ -1725,22 +1686,6 @@ void NgSettingsPage::applySettings()
         blur.writeEntry("BlurStrength", m_liveBlur->value());
         blur.sync();
         reloadKWinBlur();
-    }
-    if (const QString key = ngBreezeOpacityKey(); !key.isEmpty()) {
-        KConfigGroup common = breezeNgCommon();
-        const int side = key == QLatin1String("AuroraBodyOpacity") ? (m_sidebarOpacity->value() == m_windowOpacity->value() ? -1 : m_sidebarOpacity->value()) : common.readEntry("AuroraSidebarOpacity", -1);
-        if (common.readEntry(key.toLatin1().constData(), -1) != m_windowOpacity->value() || common.readEntry("AuroraSidebarOpacity", -1) != side) {
-            common.writeEntry(key.toLatin1().constData(), m_windowOpacity->value());
-            if (side < 0) {
-                common.deleteEntry("AuroraSidebarOpacity");
-            } else {
-                common.writeEntry("AuroraSidebarOpacity", side);
-            }
-            common.sync();
-            // every application with the style reads its settings again on this signal
-            QDBusConnection::sessionBus().send(QDBusMessage::createSignal(QStringLiteral("/BreezeStyle"), QStringLiteral("org.kde.Breeze.Style"), QStringLiteral("reparseConfiguration")));
-            QDBusConnection::sessionBus().send(QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"), QStringLiteral("org.kde.KWin"), QStringLiteral("reconfigure")));
-        }
     }
     setNgSetting("GLASS_MOTION", m_motion->isChecked() ? QStringLiteral("drift") : QString());
     setNgSetting("LAVA_STYLE", m_lavaStyle->currentData().toString());
