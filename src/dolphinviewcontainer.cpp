@@ -1173,6 +1173,92 @@ private:
                                          ngAurora() ? QStringLiteral("1px solid transparent") : QStringLiteral("1px solid rgba(%1, 0.09)").arg(ink)));
         }
 
+        // ---- groups: none, by date (modified or created), by kind, by size (Dolphin's "Group By", at hand); right after
+        // the sorting, which the groups follow
+        {
+            auto *groupsGap = new QWidget(this);
+            groupsGap->setFixedWidth(8);
+            m_flow->addWidget(groupsGap); // (close to the sorting: not one of the wide gaps between the parts of the bar)
+            auto *groups = new QToolButton(this);
+            groups->setAutoRaise(true);
+            groups->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+            groups->setIcon(QIcon::fromTheme(QStringLiteral("view-group")));
+            groups->setPopupMode(QToolButton::InstantPopup);
+            const bool grouped = m_view->groupedSorting();
+            // an empty raw role: the groups follow whatever the folder is sorted by ("dynamic")
+            const QByteArray role = grouped ? m_view->rawGroupRole() : QByteArray();
+            const bool dynamicGroups = grouped && role.isEmpty();
+            groups->setCheckable(true);
+            groups->setChecked(grouped);
+            auto *groupMenu = new QMenu(groups);
+            auto *groupActions = new QActionGroup(groupMenu);
+            QString currentGroup = ngTr("None", "Nessuno");
+            const QList<std::tuple<QByteArray, QString, QString>> choices{
+                {QByteArray(), ngTr("None", "Nessuno"), QStringLiteral("view-list-details")},
+                {QByteArrayLiteral("@sort"), ngTr("Like the sorting (dynamic)", "Come l'ordinamento (dinamici)"), QStringLiteral("view-sort")},
+                {QByteArrayLiteral("modificationtime"), ngTr("Date modified", "Data di modifica"), QStringLiteral("view-calendar-day")},
+                {QByteArrayLiteral("creationtime"), ngTr("Date created", "Data di creazione"), QStringLiteral("view-calendar")},
+                {QByteArrayLiteral("type"), ngTr("Type", "Tipo"), QStringLiteral("view-media-genre")},
+                {QByteArrayLiteral("size"), ngTr("Size", "Dimensione"), QStringLiteral("kt-check-data")},
+            };
+            for (const auto &[choiceRole, label, icon] : choices) {
+                QAction *action = groupMenu->addAction(QIcon::fromTheme(icon), label);
+                action->setCheckable(true);
+                const bool isDynamic = choiceRole == "@sort";
+                const bool isCurrent = choiceRole.isEmpty() ? !grouped : isDynamic ? dynamicGroups : (grouped && role == choiceRole);
+                action->setChecked(isCurrent);
+                groupActions->addAction(action);
+                if (isCurrent) {
+                    currentGroup = isDynamic ? ngTr("dynamic", "dinamici") : label;
+                }
+                if (isDynamic) {
+                    action->setToolTip(ngTr("The groups follow the sorting: periods by date, letters by name, kinds by type, sizes by size",
+                                            "I gruppi seguono l'ordinamento: periodi per data, lettere per nome, tipi per tipo, taglie per dimensione"));
+                    groupMenu->addSeparator();
+                }
+                connect(action, &QAction::triggered, this, [this, choiceRole] {
+                    if (choiceRole.isEmpty()) {
+                        m_view->setGroupedSorting(false);
+                    } else if (choiceRole == "@sort") {
+                        // dynamic: no group role of its own, so the groups are made from the sort role, whatever it is
+                        m_view->setGroupedSorting(true);
+                        m_view->setGroupRole(QByteArray());
+                    } else {
+                        // the groups come in the order of the sorting: sorted by something else, the same date would
+                        // be split all over the folder. Group by a date: newest first; by kind or size: by that
+                        m_view->setSortRole(choiceRole);
+                        if (choiceRole.endsWith("time")) {
+                            m_view->setSortOrder(Qt::DescendingOrder);
+                        }
+                        m_view->setGroupedSorting(true);
+                        m_view->setGroupRole(choiceRole);
+                    }
+                    QTimer::singleShot(0, this, [this] {
+                        rebuild(); // the label says the new choice
+                    });
+                });
+            }
+            // folders as items like the files (each in the group of its size, date...), or first as Dolphin keeps them
+            groupMenu->addSeparator();
+            QAction *foldersWithFiles = groupMenu->addAction(ngTr("Folders with the files", "Cartelle insieme ai file"));
+            foldersWithFiles->setCheckable(true);
+            foldersWithFiles->setChecked(ngSetting("GROUPS_FOLDERS").toLower() != QLatin1String("first"));
+            foldersWithFiles->setEnabled(grouped);
+            foldersWithFiles->setToolTip(ngTr("In groups, each folder goes where its own size, date or name puts it, not first",
+                                              "Nei gruppi ogni cartella va dove la mettono la sua dimensione, data o nome, non per prima"));
+            connect(foldersWithFiles, &QAction::toggled, this, [](bool on) {
+                setNgSetting("GROUPS_FOLDERS", on ? QString() : QStringLiteral("first"));
+                ngSettingsInvalidate();
+            });
+            groups->setMenu(groupMenu);
+            menuButton(groups);
+            groups->setText(ngTr("Groups: %1", "Gruppi: %1").arg(currentGroup));
+            groups->setToolTip(groups->text());
+            m_flow->addWidget(groups);
+            m_groups = groups;
+            m_groupsTextWidth = groups->sizeHint().width();
+        }
+
         // ---- the cards view: the button switches it on and off, its menu picks the look
         {
             auto *spacer = new QWidget(this);
@@ -1335,87 +1421,6 @@ private:
         m_filters = button;
         m_flow->addWidget(button);
 
-        // ---- groups: none, by date (modified or created), by kind, by size (Dolphin's "Group By", at hand)
-        {
-            auto *groups = new QToolButton(this);
-            groups->setAutoRaise(true);
-            groups->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-            groups->setIcon(QIcon::fromTheme(QStringLiteral("view-group")));
-            groups->setPopupMode(QToolButton::InstantPopup);
-            const bool grouped = m_view->groupedSorting();
-            // an empty raw role: the groups follow whatever the folder is sorted by ("dynamic")
-            const QByteArray role = grouped ? m_view->rawGroupRole() : QByteArray();
-            const bool dynamicGroups = grouped && role.isEmpty();
-            groups->setCheckable(true);
-            groups->setChecked(grouped);
-            auto *groupMenu = new QMenu(groups);
-            auto *groupActions = new QActionGroup(groupMenu);
-            QString currentGroup = ngTr("None", "Nessuno");
-            const QList<std::tuple<QByteArray, QString, QString>> choices{
-                {QByteArray(), ngTr("None", "Nessuno"), QStringLiteral("view-list-details")},
-                {QByteArrayLiteral("@sort"), ngTr("Like the sorting (dynamic)", "Come l'ordinamento (dinamici)"), QStringLiteral("view-sort")},
-                {QByteArrayLiteral("modificationtime"), ngTr("Date modified", "Data di modifica"), QStringLiteral("view-calendar-day")},
-                {QByteArrayLiteral("creationtime"), ngTr("Date created", "Data di creazione"), QStringLiteral("view-calendar")},
-                {QByteArrayLiteral("type"), ngTr("Type", "Tipo"), QStringLiteral("view-media-genre")},
-                {QByteArrayLiteral("size"), ngTr("Size", "Dimensione"), QStringLiteral("kt-check-data")},
-            };
-            for (const auto &[choiceRole, label, icon] : choices) {
-                QAction *action = groupMenu->addAction(QIcon::fromTheme(icon), label);
-                action->setCheckable(true);
-                const bool isDynamic = choiceRole == "@sort";
-                const bool isCurrent = choiceRole.isEmpty() ? !grouped : isDynamic ? dynamicGroups : (grouped && role == choiceRole);
-                action->setChecked(isCurrent);
-                groupActions->addAction(action);
-                if (isCurrent) {
-                    currentGroup = isDynamic ? ngTr("dynamic", "dinamici") : label;
-                }
-                if (isDynamic) {
-                    action->setToolTip(ngTr("The groups follow the sorting: periods by date, letters by name, kinds by type, sizes by size",
-                                            "I gruppi seguono l'ordinamento: periodi per data, lettere per nome, tipi per tipo, taglie per dimensione"));
-                    groupMenu->addSeparator();
-                }
-                connect(action, &QAction::triggered, this, [this, choiceRole] {
-                    if (choiceRole.isEmpty()) {
-                        m_view->setGroupedSorting(false);
-                    } else if (choiceRole == "@sort") {
-                        // dynamic: no group role of its own, so the groups are made from the sort role, whatever it is
-                        m_view->setGroupedSorting(true);
-                        m_view->setGroupRole(QByteArray());
-                    } else {
-                        // the groups come in the order of the sorting: sorted by something else, the same date would
-                        // be split all over the folder. Group by a date: newest first; by kind or size: by that
-                        m_view->setSortRole(choiceRole);
-                        if (choiceRole.endsWith("time")) {
-                            m_view->setSortOrder(Qt::DescendingOrder);
-                        }
-                        m_view->setGroupedSorting(true);
-                        m_view->setGroupRole(choiceRole);
-                    }
-                    QTimer::singleShot(0, this, [this] {
-                        rebuild(); // the label says the new choice
-                    });
-                });
-            }
-            // folders as items like the files (each in the group of its size, date...), or first as Dolphin keeps them
-            groupMenu->addSeparator();
-            QAction *foldersWithFiles = groupMenu->addAction(ngTr("Folders with the files", "Cartelle insieme ai file"));
-            foldersWithFiles->setCheckable(true);
-            foldersWithFiles->setChecked(ngSetting("GROUPS_FOLDERS").toLower() != QLatin1String("first"));
-            foldersWithFiles->setEnabled(grouped);
-            foldersWithFiles->setToolTip(ngTr("In groups, each folder goes where its own size, date or name puts it, not first",
-                                              "Nei gruppi ogni cartella va dove la mettono la sua dimensione, data o nome, non per prima"));
-            connect(foldersWithFiles, &QAction::toggled, this, [](bool on) {
-                setNgSetting("GROUPS_FOLDERS", on ? QString() : QStringLiteral("first"));
-                ngSettingsInvalidate();
-            });
-            groups->setMenu(groupMenu);
-            menuButton(groups);
-            groups->setText(ngTr("Groups: %1", "Gruppi: %1").arg(currentGroup));
-            groups->setToolTip(groups->text());
-            m_flow->addWidget(groups);
-            m_groups = groups;
-            m_groupsTextWidth = groups->sizeHint().width();
-        }
 
 
         if (!list) {
