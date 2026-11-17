@@ -186,12 +186,13 @@ Name=Dolphin NG
 GenericName=File Manager
 Comment=Experimental fork of Dolphin with a different file list
 Exec=$COMMAND %u
-Icon=system-file-manager
+Icon=dolphin-ng
 Terminal=false
 Categories=Qt;KDE;System;FileTools;FileManager;
 MimeType=inode/directory;
 StartupWMClass=dolphin
 ENTRY
+install -Dm644 "$ROOT/ng/icons/dolphin-ng.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/dolphin-ng.svg"
 if [ ! -e "$HOME/.local/share/kxmlgui5/dolphin/dolphinui.rc" ]; then
     mkdir -p "$HOME/.local/share/kxmlgui5/dolphin"
     cp "$ROOT/ng/dolphinui.rc.example" "$HOME/.local/share/kxmlgui5/dolphin/dolphinui.rc" # toolbar with New Folder, Up and Root

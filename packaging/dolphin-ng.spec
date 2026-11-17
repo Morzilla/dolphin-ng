@@ -94,6 +94,7 @@ ln -s %{ngprefix}/bin/ng-job %{buildroot}%{_bindir}/ng-job
 ln -s %{ngprefix}/bin/ng-transcribe %{buildroot}%{_bindir}/ng-transcribe
 # the NG toolbar (New Folder, Up, Root): found in the prefix's data folder, which the launcher puts first
 install -Dm644 ng/dolphinui.rc.example %{buildroot}%{ngprefix}/share/kxmlgui5/dolphin/dolphinui.rc
+install -Dm644 ng/icons/dolphin-ng.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 mkdir -p %{buildroot}%{_datadir}/applications
 cat > %{buildroot}%{_datadir}/applications/dolphin-ng.desktop <<EOT
 [Desktop Entry]
@@ -102,7 +103,7 @@ Name=Dolphin NG
 GenericName=File Manager
 Comment=A fork of Dolphin with cards, quick filters and quick actions
 Exec=%{_bindir}/dolphin-ng %u
-Icon=system-file-manager
+Icon=dolphin-ng
 Terminal=false
 Categories=Qt;KDE;System;FileTools;FileManager;
 MimeType=inode/directory;
@@ -127,6 +128,7 @@ fi
 %{_bindir}/ng-job
 %{_bindir}/ng-transcribe
 %{_datadir}/applications/dolphin-ng.desktop
+%{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
 * Tue Nov 17 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611171037git405b32b-1

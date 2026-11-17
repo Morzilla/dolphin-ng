@@ -114,7 +114,8 @@ int main(int argc, char **argv)
     if (qEnvironmentVariableIsSet("DOLPHIN_NG_DEBUG_NATIVE")) {
         app.installEventFilter(new NgNativeProbe);
     }
-    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("org.kde.dolphin"), app.windowIcon()));
+    // dolphin-ng: its own icon (the folder with a fin), Dolphin's when the icon is not installed
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("dolphin-ng"), QIcon::fromTheme(QStringLiteral("org.kde.dolphin"), app.windowIcon())));
 
 #if HAVE_STYLE_MANAGER
     /**
@@ -167,6 +168,9 @@ int main(int argc, char **argv)
     aboutData.addAuthor(i18nc("@info:credit", "Max Blazejak"), i18nc("@info:credit", "Developer"), QStringLiteral("m43ksrocks@gmail.com"));
     aboutData.addAuthor(i18nc("@info:credit", "Michael Austin"), i18nc("@info:credit", "Documentation"), QStringLiteral("tuxedup@users.sourceforge.net"));
 
+    // dolphin-ng: the window says it is dolphin-ng.desktop (on Wayland its app id), so that the task manager shows
+    // Dolphin NG's name and icon instead of taking it for Fedora's Dolphin
+    aboutData.setDesktopFileName(QStringLiteral("dolphin-ng"));
     KAboutData::setApplicationData(aboutData);
     KCrash::initialize();
 

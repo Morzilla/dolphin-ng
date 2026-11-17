@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Dolphin NG: a folder whose tab is a dorsal fin, the drawn rows in front, a light wave on its edge -->
+  <defs>
+    <linearGradient id="dng-back" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1366c4"/><stop offset="1" stop-color="#0b2f78"/></linearGradient>
+    <linearGradient id="dng-front" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2cc2ee"/><stop offset=".6" stop-color="#3a86ff"/><stop offset="1" stop-color="#5a5cf0"/></linearGradient>
+    <linearGradient id="dng-sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".32"/><stop offset=".4" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  </defs>
+  <path d="M20 90a20 20 0 0 1 20-20h10C60 54 70 36 92 24c-3 18 2 34 16 46h108a20 20 0 0 1 20 20v110a20 20 0 0 1-20 20H40a20 20 0 0 1-20-20z" fill="url(#dng-back)"/>
+  <path d="M20 112a20 20 0 0 1 20-20h176a20 20 0 0 1 20 20v88a20 20 0 0 1-20 20H40a20 20 0 0 1-20-20z" fill="url(#dng-front)"/>
+  <path d="M20 112a20 20 0 0 1 20-20h176a20 20 0 0 1 20 20v88a20 20 0 0 1-20 20H40a20 20 0 0 1-20-20z" fill="url(#dng-sheen)"/>
+  <path d="M22 116c26-12 52 10 106 0s80-12 106 0" fill="none" stroke="#fff" stroke-opacity=".45" stroke-width="3" stroke-linecap="round"/>
+  <rect x="42" y="134" width="172" height="20" rx="10" fill="#fff" fill-opacity=".92"/>
+  <rect x="48" y="138" width="12" height="12" rx="4" fill="#ff6fa8"/>
+  <rect x="68" y="141" width="70" height="6" rx="3" fill="#7b88b8"/>
+  <rect x="176" y="141" width="30" height="6" rx="3" fill="#b9c1dd"/>
+  <rect x="42" y="162" width="172" height="20" rx="10" fill="#fff" fill-opacity=".92"/>
+  <rect x="48" y="166" width="12" height="12" rx="4" fill="#ffc244"/>
+  <rect x="68" y="169" width="56" height="6" rx="3" fill="#7b88b8"/>
+  <rect x="176" y="169" width="30" height="6" rx="3" fill="#b9c1dd"/>
+  <rect x="42" y="190" width="172" height="20" rx="10" fill="#fff" fill-opacity=".55"/>
+  <rect x="48" y="194" width="12" height="12" rx="4" fill="#4fd38c"/>
+  <rect x="68" y="197" width="64" height="6" rx="3" fill="#7b88b8"/>
+  <rect x="176" y="197" width="30" height="6" rx="3" fill="#b9c1dd"/>
+</svg>
