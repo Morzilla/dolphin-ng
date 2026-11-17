@@ -120,6 +120,9 @@ private Q_SLOTS:
 private:
     void ngApplyPalette(); // dolphin-ng: glass highlight
     void ngPaintPills(); // dolphin-ng: glass pill under the selected / hovered entry
+public:
+    QColor ngBarColour() const; // dolphin-ng: the colour of the free space bars on the glass card (invalid: no change)
+private:
     void ngApplyDevices(KFilePlacesModel *placesModel); // dolphin-ng: hide the Devices section when switched off
     bool ngDeviceRowHidden(int group) const; // a row of this group gives way to the disk boxes, or is switched off
     bool ngRowShown(const KFilePlacesModel *placesModel, int row) const; // not hidden by KDE, nor given way to the disk boxes

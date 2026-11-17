@@ -86,10 +86,21 @@ public:
         connect(inner, &QAbstractItemDelegate::commitData, this, &QAbstractItemDelegate::commitData);
         connect(inner, &QAbstractItemDelegate::closeEditor, this, &QAbstractItemDelegate::closeEditor);
     }
-    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
+    void paint(QPainter *painter, const QStyleOptionViewItem &original, const QModelIndex &index) const override
     {
         if (m_panel->ngHeaderOnly(index)) {
             return; // the panel paints the title pill
+        }
+        // On the glass card the highlight colour is see-through, so that the style draws no selection of its own (the
+        // panel paints the pills). KIO fills the free space bar of a disk row with that same colour, and the bar
+        // showed empty: a row that is not selected gets the accent back, and no hover from the style (the pill is
+        // the panel's). (A selected row fills its bar with the text colour of a selection, which is visible.)
+        QStyleOptionViewItem option(original);
+        if (const QColor bar = m_panel->ngBarColour(); bar.isValid()) {
+            option.state &= ~QStyle::State_MouseOver;
+            if (!(option.state & QStyle::State_Selected)) {
+                option.palette.setColor(QPalette::Highlight, bar);
+            }
         }
         bool first = false;
         const qreal factor = m_panel->ngRowFactor(index, &first);
@@ -473,6 +484,16 @@ void PlacesPanel::ngApplyPalette()
     }
     setPalette(glass);
     viewport()->setPalette(glass);
+}
+
+QColor PlacesPanel::ngBarColour() const
+{
+    // the accent of the window's own palette, for the free space bars of disk rows on the glass card; invalid with
+    // the plain sidebar, where the palette is the window's and nothing needs changing
+    if (ngSetting("SIDEBAR").toLower() == QLatin1String("plain")) {
+        return QColor();
+    }
+    return m_ngPalette.color(QPalette::Active, QPalette::Highlight);
 }
 
 bool PlacesPanel::ngDeviceRowHidden(int group) const
