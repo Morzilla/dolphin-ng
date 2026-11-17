@@ -796,6 +796,7 @@ private:
     void ngUpdateTabsRow();
     QVBoxLayout *m_ngCentralLayout = nullptr;
     QWidget *m_ngTitleToggle = nullptr; // the sidebar's button in the row of tabs
+    QList<QWidget *> m_ngCorners; // the corners of the window without a frame, cut round over opaque children
     bool m_ngTitleTabs = false; // dolphin-ng: the row of tabs is the window's title bar (no frame of the window manager's)
     QList<QAction *> m_ngMovedActions; // dolphin-ng: toolbar buttons that were moved to the sort bar
     QList<QAction *> m_ngMovedTrailing; // dolphin-ng: the buttons moved from after the location bar to the sort bar

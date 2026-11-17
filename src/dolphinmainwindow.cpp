@@ -200,6 +200,57 @@ private:
     Kind m_kind;
 };
 
+// dolphin-ng: a corner of the window without a frame, cut round over whatever is there. The widget style cuts the
+// corners where it lays the window's sheet, but a child that fills itself (the file view in the Soft look, which is
+// not glass) painted its square corner over the cut: this sits on top of everything in that corner and clears what
+// is outside the rounded shape.
+class NgCornerCut : public QWidget
+{
+public:
+    NgCornerCut(QWidget *window, Qt::Corner corner)
+        : QWidget(window)
+        , m_corner(corner)
+    {
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setAttribute(Qt::WA_NoSystemBackground);
+        setFocusPolicy(Qt::NoFocus);
+        hide();
+    }
+    void place(int radius)
+    {
+        m_radius = radius;
+        if (radius <= 0) {
+            hide();
+            return;
+        }
+        const QRect frame = parentWidget()->rect();
+        const bool right = m_corner == Qt::TopRightCorner || m_corner == Qt::BottomRightCorner;
+        const bool bottom = m_corner == Qt::BottomLeftCorner || m_corner == Qt::BottomRightCorner;
+        setGeometry(right ? frame.right() + 1 - radius : 0, bottom ? frame.bottom() + 1 - radius : 0, radius, radius);
+        show();
+        raise();
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        const QRectF frame(mapFrom(parentWidget(), QPoint(0, 0)), QSizeF(parentWidget()->size()));
+        QPainterPath outside;
+        outside.addRect(QRectF(rect()));
+        QPainterPath shape;
+        shape.addRoundedRect(frame, m_radius, m_radius);
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setCompositionMode(QPainter::CompositionMode_Clear);
+        painter.fillPath(outside.subtracted(shape), Qt::black);
+    }
+
+private:
+    Qt::Corner m_corner;
+    int m_radius = 0;
+};
+
 class NgFrameless : public QObject
 {
 public:
@@ -1025,6 +1076,14 @@ bool DolphinMainWindow::event(QEvent *event)
         if (property("_breeze_ng_radius").toInt() != radius) {
             setProperty("_breeze_ng_radius", radius > 0 ? QVariant(radius) : QVariant());
             update();
+        }
+        if (m_ngCorners.isEmpty()) {
+            for (Qt::Corner corner : {Qt::TopLeftCorner, Qt::TopRightCorner, Qt::BottomLeftCorner, Qt::BottomRightCorner}) {
+                m_ngCorners.append(new NgCornerCut(this, corner));
+            }
+        }
+        for (QWidget *corner : std::as_const(m_ngCorners)) {
+            static_cast<NgCornerCut *>(corner)->place(radius);
         }
         m_ngBlurSet = false;
         QMetaObject::invokeMethod(this, "ngUpdateBlurRegion", Qt::QueuedConnection);
