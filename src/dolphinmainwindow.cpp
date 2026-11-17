@@ -598,7 +598,10 @@ DolphinMainWindow::DolphinMainWindow()
                 m_ngTabsToolBar->addWidget(buttons);
             }
             // (the buttons where the decoration of every other window has them: measured against KWin's)
-            m_ngTabsToolBar->setContentsMargins(buttonsLeft ? 0 : 8, 2, buttonsLeft ? 4 : 0, 4);
+            // (no margin under the row, and the row no taller than a title bar: there was a wide empty band between
+            // the tabs and the sidebar and location bar below them)
+            m_ngTabsToolBar->setContentsMargins(buttonsLeft ? 0 : 8, 2, buttonsLeft ? 4 : 0, 0);
+            m_ngTabsToolBar->setFixedHeight(40);
             if (QLayout *rowLayout = m_ngTabsToolBar->layout()) {
                 QMargins margins = rowLayout->contentsMargins(); // (the style's own margin of a tool bar pushed the buttons inwards)
                 buttonsLeft ? margins.setLeft(0) : margins.setRight(0);
