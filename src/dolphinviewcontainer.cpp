@@ -1463,20 +1463,45 @@ private:
                 });
             });
             menu->addSeparator();
+            // the general attributes (size, dates, type, tags...) in the menu itself; those of documents, images,
+            // audio, video and the rest in a submenu each, which says how many of its columns are on (one long list
+            // ran past the screen, and its first opening did not even scroll)
             const QList<QByteArray> visible = m_view->visibleRoles();
-            QString group;
+            QHash<QString, QMenu *> groups;
+            QHash<QString, int> groupOn;
             const auto infos = KFileItemModel::rolesInformation();
+            for (const KFileItemModel::RoleInfo &info : infos) {
+                if (info.role == "text" || info.group.isEmpty()) {
+                    continue;
+                }
+                if (!groups.contains(info.group)) {
+                    groups.insert(info.group, nullptr);
+                }
+                if (visible.contains(info.role)) {
+                    ++groupOn[info.group];
+                }
+            }
+            QAction *groupsAt = menu->addSeparator(); // the submenus go below the general attributes
+            for (const KFileItemModel::RoleInfo &info : infos) {
+                if (!info.group.isEmpty() && !groups.value(info.group)) {
+                    const int count = groupOn.value(info.group);
+                    auto *sub = new QMenu(count > 0 ? QStringLiteral("%1 (%2)").arg(info.group).arg(count) : info.group, menu);
+                    sub->setEnabled(on);
+                    menu->addMenu(sub);
+                    groups.insert(info.group, sub);
+                }
+            }
             for (const KFileItemModel::RoleInfo &info : infos) {
                 if (info.role == "text") {
                     continue;
                 }
-                if (info.group != group) {
-                    group = info.group;
-                    if (!group.isEmpty()) {
-                        menu->addSection(group);
-                    }
+                QMenu *target = info.group.isEmpty() ? menu : groups.value(info.group);
+                QAction *action = new QAction(info.translation, target);
+                if (target == menu) {
+                    menu->insertAction(groupsAt, action);
+                } else {
+                    target->addAction(action);
                 }
-                QAction *action = menu->addAction(info.translation);
                 action->setCheckable(true);
                 action->setChecked(visible.contains(info.role));
                 action->setEnabled(on);
