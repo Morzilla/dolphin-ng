@@ -662,6 +662,14 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
         tint.setAlphaF(1.0 - qBound(0, ngSettingInt("GLASS", 55), 100) / 100.0); // how much of the picture shows
         painter.fillRect(card, tint);
         painter.restore();
+    } else if (ngSetting("SIDEBAR").toLower() == QLatin1String("card")
+               || KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2")).readEntry("theme", QString()) == QLatin1String("Breeze NG Soft")) {
+        // an opaque look (Breeze NG Soft, with any colours; or SIDEBAR=card): the card is opaque too, not a hole
+        // onto the blurred desktop in a window that is otherwise solid. The colour of fields (white on a light
+        // scheme, a tone lighter than the window on a dark one) on the window's tone
+        const QColor window = palette().color(QPalette::Window);
+        painter.setBrush(ngIsDark(palette()) ? window.lighter(118) : palette().color(QPalette::Base).lightnessF() > window.lightnessF() + 0.03 ? palette().color(QPalette::Base) : QColor(253, 253, 254));
+        painter.drawRoundedRect(card, radius, radius);
     } else if (ngAurora()) {
         // Breeze NG Aurora: the whole window is already glass; the card is a faint veil of ink on it, not a hole
         opaque = false;
