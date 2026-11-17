@@ -3962,10 +3962,12 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
     }
     const bool fullInfo = ngSetting("CARDS_INFO").toLower() == QLatin1String("full"); // type and permissions too
     // CARDS_MARK=type: no icon, the type is the background of the card (its colour and a big faint abbreviation);
-    // pictures keep their preview in any case
+    // pictures keep their preview in any case, folders do not: a folder's preview is the folder icon (a collage at
+    // most) and only some folders get one, so a view mixed folder icons and DIR marks
     const bool markType = ngSetting("CARDS_MARK").toLower() == QLatin1String("type");
-    const bool showPicture = !markType || m_ngCardPreview;
-    m_ngCardWatermark = markType && !m_ngCardPreview;
+    const bool keepsPicture = m_ngCardPreview && !isDir;
+    const bool showPicture = !markType || keepsPicture;
+    m_ngCardWatermark = markType && !keepsPicture;
     auto dateLine = [&locale](const QDateTime &when) {
         // the "ago" part sits between two markers: putRich() draws it in bold
         return QStringLiteral("%1 · \x01%2\x02").arg(locale.toString(when.date(), QStringLiteral("dd/MM/yy")), ngAgoText(when));
