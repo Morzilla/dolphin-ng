@@ -4005,7 +4005,9 @@ void DolphinMainWindow::ngMoveToolbarButtons()
         for (QAction *action : all) {
             if (action == navigator) {
                 after = true;
-            } else if (after && action != m_ngFilterAction) {
+            } else if (after && action != m_ngFilterAction && action != bar->property("_ng_filter_gap").value<QObject *>()) {
+                // (not the gap before the field: a later pass took it for one of the buttons and moved it away with
+                // them, and the field ended up against the location bar)
                 trailing.append(action);
             }
         }
@@ -4020,7 +4022,7 @@ void DolphinMainWindow::ngMoveToolbarButtons()
             if (QWidget *field = ngSortBarFilterField(m_ngSortBar)) {
                 auto *gap = new QWidget(bar); // a little air between the location bar and the field
                 gap->setFixedWidth(12);
-                bar->addWidget(gap);
+                bar->setProperty("_ng_filter_gap", QVariant::fromValue<QObject *>(bar->addWidget(gap)));
                 field->setFixedWidth(240);
                 m_ngFilterAction = bar->addWidget(field);
             }
@@ -4053,8 +4055,11 @@ void DolphinMainWindow::ngMoveToolbarButtons()
     {
         const bool dark = ngIsDark(palette());
         // (Aurora on a light scheme: frost, white and denser, not black ink)
-        const QString ink = (dark || ngAurora()) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
-        const qreal veil = ngAurora() ? ngAuroraVeil(dark, true).alphaF() : 0.06;
+        // (an opaque light look with a toned window, Soft Light: the pill is white like the fields beside it, not a
+        // grey veil of ink)
+        const bool tonedLight = !dark && !ngAurora() && palette().color(QPalette::Window).lightnessF() < 0.95;
+        const QString ink = (dark || ngAurora() || tonedLight) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
+        const qreal veil = ngAurora() ? ngAuroraVeil(dark, true).alphaF() : tonedLight ? 0.78 : 0.06;
         QList<QWidget *> pill;
         for (const char *name : {"go_back", "go_forward", "go_up"}) {
             QAction *action = actionCollection()->action(QString::fromLatin1(name));
@@ -4070,8 +4075,10 @@ void DolphinMainWindow::ngMoveToolbarButtons()
             if (QWidget *field = bar->widgetForAction(m_ngFilterAction)) {
                 // as tall as the row of the tool bar, like the location bar beside it (a fixed height taken from the
                 // location bar's size hint stood taller than it where the tool bar lays it out lower)
+                // (and never taller than the location bar itself: where something else made the row taller, the
+                // field grew with the row and stood above and below the location bar)
                 field->setMinimumHeight(0);
-                field->setMaximumHeight(QWIDGETSIZE_MAX);
+                field->setMaximumHeight(location && location->height() > 20 ? location->height() : QWIDGETSIZE_MAX);
                 field->setSizePolicy(field->sizePolicy().horizontalPolicy(), QSizePolicy::Expanding);
             }
         }
