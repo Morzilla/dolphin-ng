@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      2e9b1ed52da99baa67bc496dec20808355bc02e2
+%global commit      405b32b18be15649f16a74279715910a04ceea62
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611170959
+%global snapdate    202611171037
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -129,6 +129,10 @@ fi
 %{_datadir}/applications/dolphin-ng.desktop
 
 %changelog
+* Tue Nov 17 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611171037git405b32b-1
+- Drawn rows with columns: the attributes you choose after the name
+- Cards with the type as background: every folder shows its mark
+
 * Tue Nov 17 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611170959git2e9b1ed-1
 - Drawn rows with expandable folders; the glass sidebar without a blur effect
 
