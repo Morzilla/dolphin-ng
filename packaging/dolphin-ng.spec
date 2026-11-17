@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      31db29a128e5727129bd0342ea5bfdb3f4fe57e6
+%global commit      3fc537a927ebce719ed45d1dd837c987ac956f94
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611171717
+%global snapdate    202611172030
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -131,6 +131,10 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Tue Nov 17 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611172030git3fc537a-1
+- Folders in the accent colour; archives drawn as pages; groups beside the sorting
+- Round corners and a lower title row; the search field's gap; an opaque sidebar card in the opaque looks
+
 * Tue Nov 17 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611171717git31db29a-1
 - Tabs in the title bar by default, the sidebar button before them; a setting for it
 - The sidebar takes the whole left side of the window
