@@ -633,8 +633,8 @@ void KStandardItemListWidgetInformant::calculateDetailsLayoutItemSizeHints(QVect
 {
     const KItemListStyleOption &option = view->styleOption();
     // dolphin-ng: two text lines per row
-    const int textHeight = ngTwoLineList() ? 2 * option.fontMetrics.height() + 4 : option.fontMetrics.height();
-    const qreal height = ngNoIcons() ? option.padding * 2 + textHeight + (ngMark() == NgMark::Object ? 44 : 24) // no icon: as tall as its two lines (a little more for the drawing)
+    const int textHeight = ngTwoLineList(view) ? 2 * option.fontMetrics.height() + 4 : option.fontMetrics.height();
+    const qreal height = ngNoIcons(view) ? option.padding * 2 + textHeight + (ngMark() == NgMark::Object ? 44 : 24) // no icon: as tall as its two lines (a little more for the drawing)
                                       : option.padding * 2 + qMax(option.iconSize, textHeight);
     logicalHeightHints.fill(std::make_pair(height, false));
     logicalWidthHint = -1.0;
@@ -862,7 +862,7 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
         painter->restore();
     }
 
-    const bool ngRow = m_layout == DetailsLayout && ngNoIcons();
+    const bool ngRow = m_layout == DetailsLayout && ngNoIcons(this);
     if (ngRow && !m_ngSigla.isEmpty()) {
         // the file type as a watermark: large, faint letters at the start of the row, fading out under the name
         const bool openRows = ngRowStyle() == NgRowStyle::Open;
@@ -1142,7 +1142,7 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
     painter->drawStaticText(textInfo->pos, textInfo->staticText);
 
     bool clipAdditionalInfoBounds = false;
-    if (m_supportsItemExpanding && m_sortedVisibleRoles.count() > 1 && !(m_layout == DetailsLayout && ngTwoLineList())) {
+    if (m_supportsItemExpanding && m_sortedVisibleRoles.count() > 1 && !(m_layout == DetailsLayout && ngTwoLineList(this))) {
         // Prevent a possible overlapping of the additional-information-texts with the icon.
         // This will happen if the user has resized the width of the name-column to be very narrow while having folders expanded.
         // We only want to draw additional info text outside the area of the icon or expansion area, so we set a clip rect that does not contain the icon area.
@@ -1351,7 +1351,7 @@ int KStandardItemListWidget::ngActionAt(const QPointF &pos) const
         const QChar ellipsis(0x2026);
         return name->staticText.text().contains(ellipsis) && !data().value("text").toString().contains(ellipsis);
     };
-    if (m_layout == DetailsLayout && ngTwoLineList() && m_ngCardActionsPill.contains(pos)) {
+    if (m_layout == DetailsLayout && ngTwoLineList(this) && m_ngCardActionsPill.contains(pos)) {
         for (int i = 0; i < m_ngCardActions.count(); ++i) {
             if (m_ngCardActions.at(i).rect.contains(pos)) {
                 return 10 + m_ngCardActionIndex.value(i, i);
@@ -1359,7 +1359,7 @@ int KStandardItemListWidget::ngActionAt(const QPointF &pos) const
         }
         return 0; // on the pill, between two buttons: not the row's own buttons
     }
-    if (m_layout == DetailsLayout && ngTwoLineList() && m_ngRowThumb.contains(pos)) {
+    if (m_layout == DetailsLayout && ngTwoLineList(this) && m_ngRowThumb.contains(pos)) {
         return 4; // the small preview of the row: quick view on hover, never a click
     }
     if (m_layout == CardsLayout) {
@@ -1396,7 +1396,7 @@ int KStandardItemListWidget::ngActionAt(const QPointF &pos) const
         return onShortenedName() ? 5 : 0;
     }
     if (!m_ngActions || !m_ngActions->isVisible() || !m_ngActionsRect.contains(pos)) {
-        return m_layout == DetailsLayout && ngTwoLineList() && onShortenedName() ? 5 : 0;
+        return m_layout == DetailsLayout && ngTwoLineList(this) && onShortenedName() ? 5 : 0;
     }
     // same split as NgRowActions: "Open", then two square buttons: preview and menu
     const qreal side = m_ngActionsRect.height();
@@ -1415,7 +1415,7 @@ QRectF KStandardItemListWidget::selectionRectFull() const
 {
     const_cast<KStandardItemListWidget *>(this)->triggerCacheRefreshing();
     const int padding = styleOption().padding;
-    if (m_layout == DetailsLayout && ngTwoLineList()) {
+    if (m_layout == DetailsLayout && ngTwoLineList(this)) {
         // dolphin-ng: there are no columns, the whole row is the item
         return QRectF(leftPadding(), 0, size().width() - leftPadding(), size().height());
     }
@@ -1739,7 +1739,7 @@ void KStandardItemListWidget::hoveredChanged(bool hovered)
     }
 
     // dolphin-ng: actions of the hovered row (not on rows drawn like the cards: they have the pill of quick actions)
-    if (m_layout == DetailsLayout && ngNoIcons() && !m_ngObjectRow) {
+    if (m_layout == DetailsLayout && ngNoIcons(this) && !m_ngObjectRow) {
         if (hovered) {
             if (!m_ngActions) {
                 auto controllerOf = [this]() -> KItemListController * {
@@ -2507,13 +2507,13 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
     qreal x = firstColumnInc;
     const qreal standardY = qMax(qreal(option.padding), (widgetHeight - fontHeight) / 2.0);
 
-    if (ngTwoLineList()) {
+    if (ngTwoLineList(this)) {
         // dolphin-ng, with icons:   +------+  Name                                            Date
         //                            | Icon |  Size · Type · other roles
         // dolphin-ng, icon-less:    TYPE (watermark)  Name                        Size        Date / actions on hover
         //                                              Type · other roles          [bar]
         static const QSet<QByteArray> dateRoles{"modificationtime", "creationtime", "accesstime", "deletiontime"};
-        const bool noIcons = ngNoIcons();
+        const bool noIcons = ngNoIcons(this);
         QByteArray dateRole;
         for (const QByteArray &role : std::as_const(m_sortedVisibleRoles)) {
             if (dateRoles.contains(role)) {
@@ -4652,7 +4652,7 @@ void KStandardItemListWidget::paintNgPin(QPainter *painter)
     if (m_layout == CardsLayout) {
         radius = 11;
         centre = QPointF(rect().right() - 16, rect().top() + 16);
-    } else if (ngTwoLineList()) {
+    } else if (ngTwoLineList(this)) {
         radius = 9.5;
         centre = !m_ngRowObject.isEmpty() ? QPointF(m_ngRowObject.left() + 9, m_ngRowObject.top() + 11)
                : m_ngRowThumb.isEmpty() ? QPointF(rect().left() + 13, rect().top() + 13) : QPointF(m_ngRowThumb.left() + 3, m_ngRowThumb.top() + 3);

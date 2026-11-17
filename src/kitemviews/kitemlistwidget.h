@@ -217,12 +217,17 @@ DOLPHIN_EXPORT void setNgRowStyle(NgRowStyle style);
  * with the date at the right edge) instead of in columns. DOLPHIN_NG_LIST=columns restores the columns.
  */
 DOLPHIN_EXPORT bool ngTwoLineList();
+// dolphin-ng: the same, for one view: false in a view that asked to stay plain ("_ng_plain" on it or a parent: the
+// tree of the Folders panel keeps Dolphin's own rows)
+DOLPHIN_EXPORT bool ngTwoLineList(const QGraphicsItem *item);
+DOLPHIN_EXPORT bool ngPlainItem(const QGraphicsItem *item);
 
 /**
  * dolphin-ng: the two-line list has no icons; the file type is a large, faint abbreviation in the row
  * (a watermark), the size has a bar and hovering a row shows its actions. DOLPHIN_NG_ICONS=show keeps the icons.
  */
 DOLPHIN_EXPORT bool ngNoIcons();
+DOLPHIN_EXPORT bool ngNoIcons(const QGraphicsItem *item);
 // dolphin-ng: the drawn rows with columns of attributes after the name (ROW_COLUMNS=on), under Dolphin's own header
 DOLPHIN_EXPORT bool ngRowColumns();
 

@@ -387,7 +387,7 @@ void KItemListView::setGeometry(const QRectF &rect)
         if (m_headerWidget->automaticColumnResizing()) {
             applyAutomaticColumnWidths();
         } else {
-            const qreal requiredWidth = (ngTwoLineList() && !ngRowColumns()) ? 0 : (m_headerWidget->leftPadding() + columnWidthsSum() + m_headerWidget->rightPadding()); // dolphin-ng: no columns
+            const qreal requiredWidth = (ngTwoLineList(this) && !ngRowColumns()) ? 0 : (m_headerWidget->leftPadding() + columnWidthsSum() + m_headerWidget->rightPadding()); // dolphin-ng: no columns
             const QSizeF dynamicItemSize(qMax(newSize.width(), requiredWidth), m_itemSize.height());
             m_layouter->setItemSize(dynamicItemSize);
         }
@@ -2464,7 +2464,7 @@ QHash<QByteArray, qreal> KItemListView::preferredColumnWidths(const KItemRangeLi
 void KItemListView::applyColumnWidthsFromHeader()
 {
     // Apply the new size to the layouter
-    const qreal requiredWidth = (ngTwoLineList() && !ngRowColumns()) ? 0 : (m_headerWidget->leftPadding() + columnWidthsSum() + m_headerWidget->rightPadding()); // dolphin-ng: no columns
+    const qreal requiredWidth = (ngTwoLineList(this) && !ngRowColumns()) ? 0 : (m_headerWidget->leftPadding() + columnWidthsSum() + m_headerWidget->rightPadding()); // dolphin-ng: no columns
     const QSizeF dynamicItemSize(qMax(size().width(), requiredWidth), m_itemSize.height());
     m_layouter->setItemSize(dynamicItemSize);
 
@@ -2584,7 +2584,7 @@ void KItemListView::applyAutomaticColumnWidths()
         requiredWidth -= firstColumnWidth - shrinkedFirstColumnWidth;
     }
 
-    dynamicItemSize.rwidth() = (ngTwoLineList() && !ngRowColumns()) ? availableWidth : qMax(requiredWidth, availableWidth); // dolphin-ng: rows never exceed the view
+    dynamicItemSize.rwidth() = (ngTwoLineList(this) && !ngRowColumns()) ? availableWidth : qMax(requiredWidth, availableWidth); // dolphin-ng: rows never exceed the view
 
     m_layouter->setItemSize(dynamicItemSize);
 

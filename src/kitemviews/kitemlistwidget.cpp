@@ -1731,6 +1731,26 @@ bool ngNoIcons()
     return !show && ngTwoLineList();
 }
 
+bool ngPlainItem(const QGraphicsItem *item)
+{
+    for (const QGraphicsItem *it = item; it; it = it->parentItem()) {
+        if (const QGraphicsObject *object = it->toGraphicsObject(); object && object->property("_ng_plain").toBool()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ngTwoLineList(const QGraphicsItem *item)
+{
+    return !ngPlainItem(item) && ngTwoLineList();
+}
+
+bool ngNoIcons(const QGraphicsItem *item)
+{
+    return !ngPlainItem(item) && ngNoIcons();
+}
+
 bool ngRowColumns()
 {
     const QString mark = ngSetting("MARK").toLower();
@@ -2613,7 +2633,7 @@ void KItemListWidget::ngPaintCheck(QPainter *painter, QWidget *widget)
 
 bool KItemListWidget::ngOwnSelection() const
 {
-    return m_alternateBackground && ngTwoLineList();
+    return m_alternateBackground && ngTwoLineList(this);
 }
 
 qreal KItemListWidget::ngSelectionRadius() const
@@ -2781,7 +2801,7 @@ void KItemListWidget::drawItemStyleOption(QPainter *painter, QWidget *widget, QS
         style()->drawPrimitive(QStyle::PE_PanelItemViewItem, &viewItemOption, painter, widget);
 
         // Focus decoration (dolphin-ng: not in the two-line list, where it shows as a light line under the row)
-        if (current && !(m_alternateBackground && ngTwoLineList())) {
+        if (current && !(m_alternateBackground && ngTwoLineList(this))) {
             QStyleOptionFocusRect focusRectOption;
             initStyleOption(&focusRectOption);
             focusRectOption.state = QStyle::State_HasFocus;

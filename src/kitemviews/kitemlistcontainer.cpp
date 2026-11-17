@@ -411,7 +411,7 @@ void KItemListContainer::updateGeometries()
         static_cast<KItemListContainerViewport *>(viewport())->viewport()->setGeometry(m_controller->view()->geometry().toRect());
 
         // dolphin-ng: some styles (Breeze) draw a thin line between a frameless view and its scrollbar; cover it
-        if (ngTwoLineList() && !ngAurora()) { // (Aurora: the view is glass, there is no line and nothing to cover it with)
+        if (ngTwoLineList(m_controller->view()) && !ngAurora()) { // (Aurora: the view is glass, there is no line and nothing to cover it with)
             if (!m_ngScrollBarCover) {
                 m_ngScrollBarCover = new QWidget(this);
                 m_ngScrollBarCover->setAttribute(Qt::WA_TransparentForMouseEvents);
