@@ -1331,6 +1331,7 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     m_cardsMark->addItem(QString(), QStringLiteral("type"));
     tilesFor(m_cardsMark, QStringLiteral("cardsmark"), ngTr("Type mark", "Segno del tipo"),
              {{ngTr("Type icon", "Icona del tipo"), {}}, {ngTr("Type as background", "Tipo come sfondo"), {}}}, 5);
+    m_flatDrawings = toggle(ngTr("Flat drawings: no shadows, whole pages with a band of the type's colour", "Disegni flat: niente ombre, fogli interi con una fascia del colore del tipo"));
     m_cardsBadge = new QComboBox(this);
     m_cardsBadge->addItem(QString(), QString());
     m_cardsBadge->addItem(QString(), QStringLiteral("glass"));
@@ -1451,7 +1452,7 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     quickSideRow->setEnabled(m_quickView->isChecked());
 
     connect(m_dialogQuick, &QCheckBox::toggled, this, &NgSettingsPage::changed);
-    for (QCheckBox *box : {m_sectionsFollow, m_glassPanel, m_motion, m_twoLines, m_icons, m_ago, m_tiles, m_hoverPreview, m_folderSizes, m_rowDates, m_float, m_sidebarFilters, m_sidebarPinned, m_rowWash, m_folderContentDate}) {
+    for (QCheckBox *box : {m_flatDrawings, m_sectionsFollow, m_glassPanel, m_motion, m_twoLines, m_icons, m_ago, m_tiles, m_hoverPreview, m_folderSizes, m_rowDates, m_float, m_sidebarFilters, m_sidebarPinned, m_rowWash, m_folderContentDate}) {
         connect(box, &QCheckBox::toggled, this, &NgSettingsPage::changed);
     }
     connect(m_hoverDelay, &QSpinBox::valueChanged, this, &NgSettingsPage::changed);
@@ -1644,6 +1645,7 @@ void NgSettingsPage::loadSettings()
     m_sidebarFilters->setChecked(ngSetting("SIDEBAR_FILTERS").toLower() != QLatin1String("hide"));
     m_sidebarPinned->setChecked(ngSetting("SIDEBAR_PINNED").toLower() != QLatin1String("hide"));
     m_sectionsFollow->setChecked(ngSetting("SIDEBAR_FOLLOW").toLower() == QLatin1String("list"));
+    m_flatDrawings->setChecked(ngSetting("DRAWINGS").toLower() == QLatin1String("flat"));
     m_folderContentDate->setChecked(ngSetting("SORT_FOLDERS_BY_CONTENT").toLower() != QLatin1String("off"));
 
     m_twoLines->setChecked(ngSetting("LIST").toLower() != QLatin1String("columns"));
@@ -1720,6 +1722,7 @@ void NgSettingsPage::applySettings()
     setNgSetting("DISKS_POS", m_disksPos->currentData().toString());
     setNgSetting("TABS", m_tabsPlace->currentData().toString());
     setNgSetting("SIDEBAR_FOLLOW", m_sectionsFollow->isChecked() ? QStringLiteral("list") : QString());
+    setNgSetting("DRAWINGS", m_flatDrawings->isChecked() ? QStringLiteral("flat") : QString());
     {
         QStringList order;
         bool disks = true;
@@ -1807,6 +1810,7 @@ void NgSettingsPage::restoreDefaults()
     m_disksPos->setCurrentIndex(0);
     m_tabsPlace->setCurrentIndex(0);
     m_sectionsFollow->setChecked(false);
+    m_flatDrawings->setChecked(false);
     fillSectionOrder({QStringLiteral("places"), QStringLiteral("pinned"), QStringLiteral("filters"), QStringLiteral("disks")}, true, true, true);
     for (const auto &entry : std::as_const(m_deviceBoxes)) {
         entry.second->setChecked(true);

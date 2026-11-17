@@ -3244,9 +3244,15 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
                           const QFont *font, int special, bool whole)
 {
     painter->setRenderHint(QPainter::Antialiasing);
+    // DRAWINGS=flat: flat drawings: no edge, no gradient, whole pages with a folded corner and a band of the type's
+    // colour at their foot, where the type and the size are written in white
+    const bool flat = ngSetting("DRAWINGS").toLower() == QLatin1String("flat");
+    const bool flatBand = flat && font != nullptr
+        && (category == int(NgKind::Sheet) || category == int(NgKind::Image) || category == int(NgKind::Document) || category == int(NgKind::Other));
+    QRectF flatPage; // the last page drawn, for its band and its fold
     // CARDS_BADGE=inside: the type and the size are part of the drawing (printed on the box, the type as the page's
-    // title, the size as its last line...), in the drawing's own colours
-    const bool info = font != nullptr;
+    // title, the size as its last line...), in the drawing's own colours (flat pages: on their band instead)
+    bool info = font != nullptr && !flatBand;
     auto write = [&](const QRectF &r, const QString &t, qreal px, QFont::Weight weight, const QColor &colour, Qt::Alignment align) {
         if (!info || t.isEmpty()) {
             return;
@@ -3277,7 +3283,7 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
     static const QSet<QString> slides{QStringLiteral("ppt"), QStringLiteral("pptx"), QStringLiteral("odp"), QStringLiteral("key")};
     const qreal u = band.height() / 100.0; // the drawing is laid out for a band 100 high
     const QColor paper = dark ? QColor(232, 234, 238) : QColor(255, 255, 255);
-    const QColor paperEdge = dark ? QColor(0, 0, 0, 0) : QColor(0, 0, 0, 40);
+    const QColor paperEdge = (dark || flat) ? QColor(0, 0, 0, 0) : QColor(0, 0, 0, 40);
     const QColor grey(150, 156, 166);
     const QColor faint(198, 202, 209);
     auto bar = [painter](qreal x, qreal y, qreal width, qreal height, const QColor &colour) {
@@ -3287,6 +3293,8 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
     };
     // a sheet of paper in the middle of the band, running off its bottom edge
     auto sheet = [&](qreal widthFactor) {
+        const bool whole0 = whole;
+        const bool whole = whole0 || flat; // (flat: the page stands entire, its band at its foot)
         const qreal width = qMin(band.width() * (whole ? qMin(1.0, widthFactor * 1.25) : widthFactor), band.height() * 2.1);
         // whole (the Scheda): the page stands entire in the middle of its column; else it runs off the bottom of the band
         const QRectF page = whole ? QRectF(band.center().x() - width / 2.0, band.top() + 6 * u, width, band.height() - 12 * u)
@@ -3300,6 +3308,7 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
             sheetClip.addRoundedRect(page, 5 * u, 5 * u);
             painter->setClipPath(sheetClip, Qt::IntersectClip);
         }
+        flatPage = page;
         return page;
     };
 
@@ -3341,7 +3350,7 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
         painter->drawPath(backShape);
         const QRectF cover(body.left(), body.top() + tabDepth, body.width(), body.height() - tabDepth);
         QLinearGradient shine(cover.topLeft(), cover.bottomLeft());
-        shine.setColorAt(0.0, frontTop);
+        shine.setColorAt(0.0, flat ? front : frontTop);
         shine.setColorAt(1.0, front);
         painter->setBrush(shine);
         painter->drawRoundedRect(cover, radius, radius);
@@ -3568,7 +3577,14 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
     } else if (slides.contains(ext)) {
         // a slide: a title and a small chart
         const qreal width = qMin(band.width() * 0.66, band.height() * 2.2);
-        const QRectF slide(band.center().x() - width / 2.0, band.top() + 14 * u, width, band.height());
+        const QRectF slide = flat ? QRectF(band.center().x() - width / 2.0, band.top() + 6 * u, width, band.height() - 12 * u)
+                                  : QRectF(band.center().x() - width / 2.0, band.top() + 14 * u, width, band.height());
+        if (flat) {
+            flatPage = slide;
+            QPainterPath slideClip;
+            slideClip.addRoundedRect(slide, 5 * u, 5 * u);
+            painter->setClipPath(slideClip, Qt::IntersectClip);
+        }
         painter->setPen(paperEdge.alpha() ? QPen(paperEdge, 1) : QPen(Qt::NoPen));
         painter->setBrush(paper);
         painter->drawRoundedRect(slide, 5 * u, 5 * u);
@@ -3607,6 +3623,42 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
                 bar(left, page.top() + 30 * u + i * 10 * u, width * lines[i], 4 * u, i < 3 ? grey : faint);
             }
         }
+    }
+    if (flat && flatPage.isValid()) {
+        const qreal fold = qMin(flatPage.width(), flatPage.height()) * 0.2;
+        if (flatBand) {
+            // the band of the type's colour at the foot of the page, the type and the size on it in white
+            info = true;
+            const qreal height = qMax(14.0, qMin(26 * u, flatPage.height() * 0.3));
+            const QRectF strip(flatPage.left(), flatPage.bottom() - height, flatPage.width(), height);
+            QColor solid = tint;
+            solid.setAlphaF(1.0);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(solid.darker(dark ? 100 : 108));
+            painter->drawRect(strip);
+            const QRectF text = strip.adjusted(height * 0.35, 0, -height * 0.35, 0);
+            // the size beside the type when both fit on the band
+            QFont typeFont(*font), sizeFont(*font);
+            typeFont.setPixelSize(qMax(7, qRound(height * 0.62)));
+            typeFont.setWeight(QFont::Black);
+            sizeFont.setPixelSize(qMax(7, qRound(height * 0.46)));
+            sizeFont.setWeight(QFont::Bold);
+            const bool both = QFontMetricsF(typeFont).horizontalAdvance(sigla) + QFontMetricsF(sizeFont).horizontalAdvance(sizeText) + height * 0.5 < text.width();
+            write(text, sigla, height * 0.62, QFont::Black, QColor(255, 255, 255), Qt::AlignLeft | Qt::AlignVCenter);
+            if (both) {
+                write(text, sizeText, height * 0.46, QFont::Bold, QColor(255, 255, 255, 225), Qt::AlignRight | Qt::AlignVCenter);
+            }
+        }
+        // the folded corner, in a light shade of the type
+        QColor dogEar = tint;
+        dogEar.setAlphaF(0.45);
+        QPainterPath ear;
+        ear.moveTo(flatPage.right() - fold, flatPage.top());
+        ear.lineTo(flatPage.right(), flatPage.top() + fold);
+        ear.lineTo(flatPage.right() - fold, flatPage.top() + fold);
+        ear.closeSubpath();
+        painter->setPen(Qt::NoPen);
+        painter->fillPath(ear, dogEar);
     }
 }
 }
@@ -4569,6 +4621,11 @@ void KStandardItemListWidget::paintNgPreviewObject(QPainter *painter, const QRec
     const QString mime = data().value("mimetype").toString();
     painter->setRenderHint(QPainter::Antialiasing);
     painter->setRenderHint(QPainter::SmoothPixmapTransform);
+    // DRAWINGS=flat: no shadows and no tilt; the line of type and size on a band of the type's colour
+    const bool flat = ngSetting("DRAWINGS").toLower() == QLatin1String("flat");
+    QColor flatBand = m_ngTint;
+    flatBand.setAlphaF(1.0);
+    flatBand = flatBand.darker(ngIsDark(styleOption().palette) ? 100 : 108);
 
     if (m_ngCategory == int(NgKind::Image)) {
         // thin margins and a low foot: the picture takes most of the print
@@ -4580,8 +4637,20 @@ void KStandardItemListWidget::paintNgPreviewObject(QPainter *painter, const QRec
         const QRectF print(-width / 2.0, -printHeight / 2.0, width, printHeight);
         painter->save();
         painter->translate(band.center().x(), band.center().y() + 1);
-        painter->rotate(((int(qHash(name) % 7)) - 3) * 0.5);
         painter->setPen(Qt::NoPen);
+        if (flat) {
+            // flat: the picture straight, without a shadow, its foot a band of the type's colour with the writing in white
+            QPainterPath shape;
+            shape.addRoundedRect(print, 4, 4);
+            painter->setClipPath(shape, Qt::IntersectClip);
+            painter->fillRect(print, QColor(244, 244, 241));
+            picture(print.adjusted(0, 0, 0, -foot));
+            painter->fillRect(QRectF(print.left(), print.bottom() - foot, print.width(), foot), flatBand);
+            writeLine(QRectF(print.left() + 6, print.bottom() - foot, print.width() - 12, foot), foot * 1.08, QColor(255, 255, 255), QColor(255, 255, 255, 225));
+            painter->restore();
+            return;
+        }
+        painter->rotate(((int(qHash(name) % 7)) - 3) * 0.5);
         for (int i = 4; i >= 1; --i) { // its shadow on the band
             painter->setBrush(QColor(0, 0, 0, 22));
             painter->drawRoundedRect(print.translated(0, 2).adjusted(-i, -i + 1, i, i), 3 + i, 3 + i);
@@ -4611,9 +4680,35 @@ void KStandardItemListWidget::paintNgPreviewObject(QPainter *painter, const QRec
         // a sheet: the page itself, with a footer like a printed page
         const qreal foot = qRound(qMax(20.0, base.height() * 1.5));
         const qreal width = qMin(band.width() * 0.94, qMax(qMin(band.width() * 0.56, band.height() * 1.05), lineWidth(foot) + 16));
-        const QRectF page = whole ? QRectF(band.center().x() - width / 2.0, band.top() + 4, width, band.height() - 8)
-                                  : QRectF(band.center().x() - width / 2.0, band.top() + 10, width, band.height());
+        const QRectF page = (whole || flat) ? QRectF(band.center().x() - width / 2.0, band.top() + 4, width, band.height() - 8)
+                                            : QRectF(band.center().x() - width / 2.0, band.top() + 10, width, band.height());
         painter->setPen(Qt::NoPen);
+        if (flat) {
+            // flat: the page entire, without a shadow; its footer a band of the type's colour, a folded corner
+            painter->save();
+            QPainterPath shape;
+            shape.addRoundedRect(page, 4, 4);
+            painter->setClipPath(shape, Qt::IntersectClip);
+            painter->fillRect(page, QColor(255, 255, 255));
+            const QRectF footer(page.left(), page.bottom() - foot, page.width(), foot);
+            painter->save();
+            painter->setClipRect(QRectF(page.left(), page.top(), page.width(), footer.top() - page.top()), Qt::IntersectClip);
+            picture(QRectF(page.left(), page.top(), page.width(), page.width() * 1.414));
+            painter->restore();
+            painter->fillRect(footer, flatBand);
+            writeLine(QRectF(footer.left() + 8, footer.top(), footer.width() - 16, foot), foot, QColor(255, 255, 255), QColor(255, 255, 255, 225));
+            const qreal fold = qMin(page.width(), page.height()) * 0.18;
+            QPainterPath ear;
+            ear.moveTo(page.right() - fold, page.top());
+            ear.lineTo(page.right(), page.top() + fold);
+            ear.lineTo(page.right() - fold, page.top() + fold);
+            ear.closeSubpath();
+            QColor dogEar = m_ngTint;
+            dogEar.setAlphaF(0.45);
+            painter->fillPath(ear, dogEar);
+            painter->restore();
+            return;
+        }
         for (int i = 3; i >= 1; --i) {
             painter->setBrush(QColor(0, 0, 0, 22));
             painter->drawRoundedRect(page.adjusted(-i, -i + 1, i, i), 3 + i, 3 + i);
