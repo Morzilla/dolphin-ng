@@ -863,6 +863,18 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
     }
 
     const bool ngRow = m_layout == DetailsLayout && ngNoIcons(this);
+    if (ngRow && m_ngCategory == int(NgKind::Folder) && ngSetting("FOLDER_TINT").toLower() != QLatin1String("off")) {
+        // a folder's row wears the accent (its own colour for a well-known folder): told from a file at a glance
+        const QRectF rowRect = ngRowStyle() == NgRowStyle::Open ? selectionRectFull() : selectionRectFull().adjusted(3, 3, -3, -3);
+        QColor tint = m_ngTint;
+        tint.setAlphaF(ngIsDark(styleOption().palette) ? 0.17 : 0.15);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(tint);
+        painter->drawRoundedRect(rowRect, 10, 10);
+        painter->restore();
+    }
     if (ngRow && !m_ngSigla.isEmpty()) {
         // the file type as a watermark: large, faint letters at the start of the row, fading out under the name
         const bool openRows = ngRowStyle() == NgRowStyle::Open;
@@ -5115,6 +5127,15 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
 
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
+
+    // ---- a folder's card wears the accent (its own colour for a well-known folder): told from a file at a glance
+    if (m_ngCategory == int(NgKind::Folder) && !m_ngCardWatermark && ngSetting("FOLDER_TINT").toLower() != QLatin1String("off")) {
+        QPainterPath sheet;
+        sheet.addRoundedRect(rect(), 12, 12);
+        QColor tint = m_ngTint;
+        tint.setAlphaF(dark ? 0.17 : 0.15);
+        painter->fillPath(sheet, tint);
+    }
 
     // ---- the type as the background: its colour washes into the card, its abbreviation stays in watermark
     if (m_ngCardWatermark && !m_ngSigla.isEmpty()) {
