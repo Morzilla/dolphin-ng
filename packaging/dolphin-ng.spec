@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      e570ee490aa538345da36ae4f327b837d7ee8829
+%global commit      31db29a128e5727129bd0342ea5bfdb3f4fe57e6
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611171519
+%global snapdate    202611171717
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -131,6 +131,10 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Tue Nov 17 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611171717git31db29a-1
+- Tabs in the title bar by default, the sidebar button before them; a setting for it
+- The sidebar takes the whole left side of the window
+
 * Tue Nov 17 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611171519gite570ee4-1
 - Columns menu: the general attributes, then a submenu per kind
 - First start: the sidebar opens at a usable width; the Folders panel is a tree again
