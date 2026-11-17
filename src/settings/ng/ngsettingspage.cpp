@@ -1229,6 +1229,21 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
         deviceLayout->setSpacing(2);
     }
     page->addWidget(m_deviceList);
+    heading(ngTr("Window", "Finestra"));
+    m_tabsPlace = new QComboBox(this);
+    m_tabsPlace->addItem(ngTr("In the title bar, after the sidebar button", "Nella barra del titolo, dopo il pulsante della barra laterale"), QString());
+    m_tabsPlace->addItem(ngTr("Above the location bar, under the system's title bar", "Sopra la barra degli indirizzi, sotto la barra del titolo di sistema"), QStringLiteral("top"));
+    m_tabsPlace->addItem(ngTr("Above the files, as in Dolphin", "Sopra i file, come in Dolphin"), QStringLiteral("classic"));
+    {
+        auto *row = new QWidget(this);
+        auto *rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->addWidget(new QLabel(ngTr("Tabs:", "Schede:"), row));
+        rowLayout->addWidget(m_tabsPlace);
+        rowLayout->addStretch();
+        page->addWidget(row);
+    }
+    note(ngTr("Applies to the windows opened from now on.", "Vale per le finestre aperte da ora in poi."));
     page->addStretch();
 
     // ================= Rows =================
@@ -1440,7 +1455,7 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
         connect(box, &QCheckBox::toggled, this, &NgSettingsPage::changed);
     }
     connect(m_hoverDelay, &QSpinBox::valueChanged, this, &NgSettingsPage::changed);
-    for (QComboBox *combo : {m_backdrop, m_devices, m_disksPos, m_lavaStyle, m_lavaColours, m_rim, m_rows, m_mark, m_sigla, m_cards, m_cardsFit, m_cardsInfo, m_cardsMark, m_cardsBadge, m_activitySize}) {
+    for (QComboBox *combo : {m_tabsPlace, m_backdrop, m_devices, m_disksPos, m_lavaStyle, m_lavaColours, m_rim, m_rows, m_mark, m_sigla, m_cards, m_cardsFit, m_cardsInfo, m_cardsMark, m_cardsBadge, m_activitySize}) {
         connect(combo, &QComboBox::currentIndexChanged, this, &NgSettingsPage::changed);
     }
     for (QSlider *slider : {m_glass, m_blur, m_liveBlur, m_lavaSize, m_lavaSpeed}) {
@@ -1621,6 +1636,7 @@ void NgSettingsPage::loadSettings()
         const QString devices = ngSetting("DEVICES").toLower();
         m_devices->setCurrentIndex(devices == QLatin1String("hide") ? 2 : devices.isEmpty() ? 0 : 1); // "show" was the old "list"
         m_disksPos->setCurrentIndex(ngSetting("DISKS_POS").toLower() == QLatin1String("above") ? 1 : 0);
+        m_tabsPlace->setCurrentIndex(qMax(0, m_tabsPlace->findData(ngSetting("TABS").toLower() == QLatin1String("titlebar") ? QString() : ngSetting("TABS").toLower())));
     }
     fillSectionOrder(ngSidebarOrder(), ngSetting("SIDEBAR_PINNED").toLower() != QLatin1String("hide"),
                      ngSetting("SIDEBAR_FILTERS").toLower() != QLatin1String("hide"), ngSetting("SIDEBAR_DISKS").toLower() != QLatin1String("hide"));
@@ -1702,6 +1718,7 @@ void NgSettingsPage::applySettings()
     setNgSetting("GLASS_RIM", m_rim->currentData().toString());
     setNgSetting("DEVICES", m_devices->currentData().toString());
     setNgSetting("DISKS_POS", m_disksPos->currentData().toString());
+    setNgSetting("TABS", m_tabsPlace->currentData().toString());
     setNgSetting("SIDEBAR_FOLLOW", m_sectionsFollow->isChecked() ? QStringLiteral("list") : QString());
     {
         QStringList order;
@@ -1788,6 +1805,7 @@ void NgSettingsPage::restoreDefaults()
     m_rim->setCurrentIndex(qMax(0, m_rim->findData(QStringLiteral("diagonal"))));
     m_devices->setCurrentIndex(0);
     m_disksPos->setCurrentIndex(0);
+    m_tabsPlace->setCurrentIndex(0);
     m_sectionsFollow->setChecked(false);
     fillSectionOrder({QStringLiteral("places"), QStringLiteral("pinned"), QStringLiteral("filters"), QStringLiteral("disks")}, true, true, true);
     for (const auto &entry : std::as_const(m_deviceBoxes)) {

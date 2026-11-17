@@ -176,7 +176,7 @@ static QString ngDefault(const QByteArray &name)
         {"CARDS_FIT", QStringLiteral("stretch")},
         {"CARDS_BADGE", QStringLiteral("inside")},
         {"MARK", QStringLiteral("object")},
-        {"TABS", QStringLiteral("top")}, // the tabs above the location bar ("classic": above the files, as in Dolphin)
+        {"TABS", QStringLiteral("titlebar")}, // the tabs in the title bar, with the sidebar button before them ("top": above the location bar, under the window manager's title bar; "classic": above the files, as in Dolphin)
     };
     return defaults.value(name);
 }

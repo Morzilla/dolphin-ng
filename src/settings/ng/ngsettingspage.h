@@ -61,6 +61,7 @@ private:
     QComboBox *m_rim;
     QComboBox *m_devices;
     QComboBox *m_disksPos;
+    QComboBox *m_tabsPlace = nullptr; // where the tabs are (TABS): in the title bar, above the location bar, above the files
     QListWidget *m_sectionOrder; // the sidebar's sections, dragged into their order; the checks show or hide them
     void fillSectionOrder(const QStringList &order, bool pinned, bool filters, bool disks); // the disk boxes at the foot of the panel, or above the pinned items and the filters // disks and partitions: NG boxes at the foot of the panel | a classic section | hidden
     QWidget *m_deviceList; // one box per disk or partition: unticked, it is hidden (the places' own hiding)
