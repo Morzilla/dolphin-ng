@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      67317d4634f34b4f37919b472d1a8404ed468926
+%global commit      626dd6f772bed44db3c2a10f1057d2610dff4176
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611161901
+%global snapdate    202611170915
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -129,6 +129,9 @@ fi
 %{_datadir}/applications/dolphin-ng.desktop
 
 %changelog
+* Tue Nov 17 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611170915git626dd6f-1
+- Search field height, Breeze NG's opacities only in Breeze NG's settings
+
 * Mon Nov 16 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611161901git67317d4-1
 - Per-folder views, sidebar opacity, window opacity in the settings, scheme changes at once
 
