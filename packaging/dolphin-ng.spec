@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      405b32b18be15649f16a74279715910a04ceea62
+%global commit      c9e44d5867d0e810a8af33b5445fddca700b12f1
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611171037
+%global snapdate    202611171241
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -131,6 +131,10 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Tue Nov 17 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611171241gitc9e44d5-1
+- An icon of its own: a folder with a dolphin's fin
+- Sidebar: free space bars of disk rows on the glass card, sections that can follow the places, boxes for phones (KDE Connect)
+
 * Tue Nov 17 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611171037git405b32b-1
 - Drawn rows with columns: the attributes you choose after the name
 - Cards with the type as background: every folder shows its mark
