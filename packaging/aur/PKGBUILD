@@ -1,0 +1,69 @@
+# Maintainer: Morzilla <3956663+Morzilla@users.noreply.github.com>
+# Dolphin NG, built from the latest commit on GitHub. Installed under /opt/ng/dolphin-ng, next to Arch's Dolphin
+# (which stays the default file manager): start it as "Dolphin NG" from the menu, or with the dolphin-ng command.
+
+pkgname=dolphin-ng-git
+_name=dolphin-ng
+pkgver=26.08.1.r0.g0000000
+pkgrel=1
+pkgdesc="A fork of Dolphin with cards, drawn rows, quick filters and quick actions"
+arch=(x86_64)
+url="https://github.com/Morzilla/dolphin-ng"
+license=(GPL-2.0-or-later)
+depends=(baloo baloo-widgets kbookmarks kcmutils kcodecs kcolorscheme kcompletion kconfig kcoreaddons kcrash
+         kdbusaddons kfilemetadata kguiaddons ki18n kiconthemes kio knewstuff knotifications kparts solid
+         ktextwidgets kuserfeedback kwidgetsaddons kwindowsystem qt6-base qt6-multimedia)
+makedepends=(git cmake extra-cmake-modules kdoctools)
+optdepends=('kio-extras: thumbnails and more places'
+            'imagemagick: quick actions on images'
+            'ffmpeg: quick actions on audio and video'
+            'poppler: quick actions on PDF files'
+            'python-gobject: quick actions shown in the notifications')
+provides=($_name)
+conflicts=($_name)
+source=("$_name::git+$url.git#branch=ng")
+sha256sums=(SKIP)
+_prefix=/opt/ng/dolphin-ng
+
+pkgver() {
+  cd $_name
+  printf "26.08.1.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cmake -S $_name -B build -DCMAKE_BUILD_TYPE=None -DCMAKE_INSTALL_PREFIX=$_prefix \
+        -DBUILD_TESTING=OFF -DKDE_INSTALL_USE_QT_SYS_PATHS=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  cd $_name
+  # the launcher sets the paths of the private prefix; the command, the helpers of the quick actions, the menu entry
+  install -Dm755 ng/dolphin-ng "$pkgdir$_prefix/bin/dolphin-ng-launch"
+  install -Dm755 ng/ng-job "$pkgdir$_prefix/bin/ng-job"
+  install -Dm755 ng/ng-transcribe "$pkgdir$_prefix/bin/ng-transcribe"
+  install -dm755 "$pkgdir/usr/bin"
+  printf '#!/bin/sh\nDOLPHIN_NG_PREFIX=%s exec %s/bin/dolphin-ng-launch "$@"\n' "$_prefix" "$_prefix" > "$pkgdir/usr/bin/dolphin-ng"
+  chmod 755 "$pkgdir/usr/bin/dolphin-ng"
+  ln -s "$_prefix/bin/ng-job" "$pkgdir/usr/bin/ng-job"
+  ln -s "$_prefix/bin/ng-transcribe" "$pkgdir/usr/bin/ng-transcribe"
+  # the NG toolbar (New Folder, Up, Root): found in the prefix's data folder, which the launcher puts first
+  install -Dm644 ng/dolphinui.rc.example "$pkgdir$_prefix/share/kxmlgui5/dolphin/dolphinui.rc"
+  install -Dm644 ng/icons/dolphin-ng.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/dolphin-ng.svg"
+  install -dm755 "$pkgdir/usr/share/applications"
+  cat > "$pkgdir/usr/share/applications/dolphin-ng.desktop" <<EOT
+[Desktop Entry]
+Type=Application
+Name=Dolphin NG
+GenericName=File Manager
+Comment=A fork of Dolphin with cards, quick filters and quick actions
+Exec=/usr/bin/dolphin-ng %u
+Icon=dolphin-ng
+Terminal=false
+Categories=Qt;KDE;System;FileTools;FileManager;
+MimeType=inode/directory;
+StartupWMClass=dolphin
+EOT
+  install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" LICENSES/*
+}
