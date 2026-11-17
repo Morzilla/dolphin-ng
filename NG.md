@@ -65,10 +65,6 @@ that follows the window. A click on the button goes to the next look:
 - **Dossier**: the file's identity card: pages and words, size in pixels, duration, where it was downloaded from,
   its tags and rating.
 
-Folders wear the accent colour, so they stand out from files. The drawings can be **flat** (Configure › NG › Cards):
-whole pages without shadows, a folded corner and a band of the type's colour with the type and the size; pictures
-keep their preview, straight, on the same band.
-
 | Tessera | Scheda | Dossier |
 |---|---|---|
 | <img src="ng/screenshots/readme/cards-tessera.png" width="300" alt="Tessera cards"> | <img src="ng/screenshots/readme/cards-scheda.png" width="300" alt="Scheda cards"> | <img src="ng/screenshots/readme/cards-dossier.png" width="230" alt="A Dossier card"> |
