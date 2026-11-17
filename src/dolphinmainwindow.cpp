@@ -1270,9 +1270,14 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
             }
         }
     }
-    // for tests: DOLPHIN_NG_TEST_DOCK_WIDTH narrows the places panel step by step down to that width (no input sent)
+    // for tests: DOLPHIN_NG_TEST_DOCK_WIDTH narrows the places panel step by step down to that width, or widens it to
+    // that width at once (no input sent; the window remembers the width as it does a dragged one)
     if (const int target = qEnvironmentVariableIntValue("DOLPHIN_NG_TEST_DOCK_WIDTH"); target > 0) {
-        if (auto *dock = findChild<QDockWidget *>(QStringLiteral("placesDock"))) {
+        if (auto *dock = findChild<QDockWidget *>(QStringLiteral("placesDock")); dock && dock->width() < target) {
+            QTimer::singleShot(500, this, [this, dock, target] {
+                resizeDocks({dock}, {target}, Qt::Horizontal);
+            });
+        } else if (dock) {
             auto *timer = new QTimer(this);
             connect(timer, &QTimer::timeout, this, [this, dock, timer, target] {
                 const int width = dock->width() - 10;
