@@ -931,7 +931,8 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
         if (m_ngObjectRow) {
             // the drawing of the card, small: type and size written on it; a real preview becomes the object
             // (a print, a page, a film strip). Resting on a preview opens the quick view, as on the cards
-            const QRectF band(rowRect.left() + 10, rowRect.top() + 1, qRound(size().height() * 1.75), rowRect.height() - 1);
+            // (with expandable folders, after the expansion arrow and the tree lines of the parents, not under them)
+            const QRectF band(rowRect.left() + 10 + ngExpansionIndent(), rowRect.top() + 1, qRound(size().height() * 1.75), rowRect.height() - 1);
             m_ngRowObject = band;
             painter->save();
             if (!preview.isNull()) {
@@ -2004,6 +2005,16 @@ void KStandardItemListWidget::triggerCacheRefreshing()
     m_dirtyContentRoles.clear();
 }
 
+// dolphin-ng: in drawn rows the drawing starts after the expansion arrow (and the tree lines of the parents), when the
+// view expands folders in place: they were drawn over the folder
+qreal KStandardItemListWidget::ngExpansionIndent() const
+{
+    if (!m_supportsItemExpanding || m_expansionArea.isEmpty() || layoutDirection() != Qt::LeftToRight) {
+        return 0;
+    }
+    return qMax<qreal>(0, m_expansionArea.right() + 4 - (leftPadding() + 3 + 10));
+}
+
 void KStandardItemListWidget::updateExpansionArea()
 {
     if (m_supportsItemExpanding) {
@@ -2528,7 +2539,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
                 left = leftPadding() + 3 + 62 + 16;
                 break;
             case NgMark::Object:
-                left = leftPadding() + 3 + 10 + qRound(widgetHeight * 1.75) + 18;
+                left = leftPadding() + 3 + 10 + ngExpansionIndent() + qRound(widgetHeight * 1.75) + 18;
                 break;
             default:
                 left = leftPadding() + 14 + widgetHeight * 0.62 + 8 + fontHeight * 5.4;

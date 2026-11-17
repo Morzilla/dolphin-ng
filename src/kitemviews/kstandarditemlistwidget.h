@@ -214,6 +214,7 @@ private Q_SLOTS:
 private:
     void triggerCacheRefreshing();
     void updateExpansionArea();
+    qreal ngExpansionIndent() const; // dolphin-ng: room for the expansion arrow before a drawn row
     void updatePixmapCache();
 
     void updateTextsCache();

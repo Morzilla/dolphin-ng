@@ -21,6 +21,7 @@
 
 #include <KConfig>
 #include <KConfigGroup>
+#include <KWindowEffects>
 #include <KIO/Global>
 #include <KLocalizedString>
 #include <KWindowInfo>
@@ -696,13 +697,20 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
         } else {
             painter.drawRoundedRect(card, radius, radius);
         }
-    } else {
+    } else if (KWindowEffects::isEffectAvailable(KWindowEffects::BlurBehind)) {
         // live blur: thin out the window tint under the card, so the compositor's blur shows through
         opaque = false;
         painter.setCompositionMode(QPainter::CompositionMode_DestinationOut);
         painter.setBrush(QColor(0, 0, 0, qRound(m_glass * 255 / 100)));
         painter.drawRoundedRect(card, radius, radius);
         painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    } else {
+        // live blur without a blur effect in the compositor: a hole would show the windows behind sharp, text over
+        // text. The card stays a tinted panel of the window's colour until a blur is there
+        QColor tint = palette().color(QPalette::Window);
+        tint = ngIsDark(palette()) ? tint.lighter(118) : tint.darker(104);
+        painter.setBrush(tint);
+        painter.drawRoundedRect(card, radius, radius);
     }
 
     if (!ngAurora()) {
