@@ -3,6 +3,7 @@
  */
 
 #include "ngactionspage.h"
+#include "kitemviews/kitemlistwidget.h"
 
 #include <KConfigGroup>
 #include <KDesktopFile>
@@ -116,15 +117,24 @@ protected:
         }
         width += 2;
         const QRectF pill(1, (this->height() - height) / 2.0, qMin<qreal>(width, this->width() - 2), height);
-        painter.setPen(QPen(QColor(255, 255, 255, 36), 1));
-        painter.setBrush(QColor(10, 11, 13, 240));
+        // as the pill over a card's picture (KStandardItemListWidget::paintNgActionPill): dark on a dark scheme, near
+        // white on a light one. Always dark, it held the light scheme's dark icons: black on black
+        const bool dark = ngIsDark(palette());
+        const QColor text = palette().color(QPalette::WindowText);
+        auto ink = [&text](qreal alpha) {
+            QColor c = text;
+            c.setAlphaF(alpha);
+            return c;
+        };
+        painter.setPen(QPen(ink(0.22), 1));
+        painter.setBrush(dark ? QColor(10, 11, 13, 240) : QColor(252, 252, 252, 240));
         painter.drawRoundedRect(pill, height / 2.0, height / 2.0);
         painter.setClipRect(pill.adjusted(2, 0, -2, 0));
         qreal x = pill.left() + 4;
         const qreal y = pill.top() + 4;
         for (const Item &item : std::as_const(items)) {
             if (item.separator) {
-                painter.setPen(QPen(QColor(255, 255, 255, 46), 1));
+                painter.setPen(QPen(ink(0.18), 1));
                 painter.drawLine(QPointF(x + 3, y + side * 0.2), QPointF(x + 3, y + side * 0.8));
                 x += 7;
                 continue;
@@ -132,13 +142,13 @@ protected:
             const qreal itemWidth = item.label.isEmpty() ? side : side + fontMetrics().horizontalAdvance(item.label) + 14;
             if (!item.label.isEmpty()) {
                 painter.setPen(Qt::NoPen);
-                painter.setBrush(QColor(255, 255, 255, 26));
+                painter.setBrush(ink(0.10));
                 painter.drawRoundedRect(QRectF(x, y, itemWidth, side), side / 2.0, side / 2.0);
             }
             const int iconSide = 16;
             item.icon.paint(&painter, QRect(qRound(x + (side - iconSide) / 2.0), qRound(y + (side - iconSide) / 2.0), iconSide, iconSide));
             if (!item.label.isEmpty()) {
-                painter.setPen(QColor(230, 232, 236));
+                painter.setPen(text);
                 painter.drawText(QRectF(x + side - 2, y, itemWidth - side, side), Qt::AlignVCenter | Qt::AlignLeft, item.label);
             }
             x += itemWidth + 2;
