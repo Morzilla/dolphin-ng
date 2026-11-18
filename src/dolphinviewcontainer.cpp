@@ -488,6 +488,7 @@ public:
         m_ownView->setChecked(true); // in the accent: it stands out from the other buttons
         m_ownView->setToolButtonStyle(Qt::ToolButtonIconOnly);
         m_ownView->setProperty("ngPill", true); // (as tall as the buttons beside it, on the same row)
+        m_ownView->setIconSize(QSize(20, 20)); // (the icon size of the buttons beside it: smaller, it stood shorter and higher)
         m_ownView->setIcon(QIcon::fromTheme(QStringLiteral("folder-favorites"), QIcon::fromTheme(QStringLiteral("bookmarks"))));
         m_ownView->setToolTip(ngTr("This folder has a view of its own (look of the cards, sorting, groups). Click to go back to the default view.",
                                    "Questa cartella ha una vista sua (aspetto delle card, ordinamento, gruppi). Clic per tornare alla vista predefinita."));
@@ -680,6 +681,7 @@ private:
                                      // the bar's buttons with a name (groups, cards, filters, rows, columns, split) stand on the veil of
                                      // the sort pill, round like it: every control of the bar the same kind of thing
                                      "QToolButton[ngPill=\"true\"] { background: rgba(%1, 0.05); border-color: rgba(%1, 0.09); border-radius: 13px; padding-left: 10px; }"
+                                     "QToolButton[ngPill=\"true\"][toolButtonStyle=\"0\"] { padding-left: 7px; padding-right: 7px; }" // (an icon alone: centred)
                                      "QToolButton[ngPill=\"true\"]:hover { background: rgba(%1, 0.10); }"
                                      "QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }"
                                      "QWidget#ngTrailing QToolButton::menu-indicator { image: none; width: 0px; }"
