@@ -363,7 +363,7 @@ void PlacesPanel::ngPaintPills()
     // or grey veil vanished on the light sidebar card
     // (the window's own accent: the panel's palette has a clear highlight, see ngApplyPalette)
     const QColor accent = m_ngPalette.color(QPalette::Active, QPalette::Highlight);
-    const QColor onAccent = ngAurora() ? ngAuroraSelectionText(palette()) : m_ngPalette.color(QPalette::Active, QPalette::HighlightedText);
+    const QColor onAccent = ngAurora() ? ngAuroraSelectionText(palette()) : ngOnAccent(accent);
     auto drawPill = [&](QPainter &painter, const QRectF &rect, qreal strength) {
         painter.setRenderHint(QPainter::Antialiasing);
         const QRectF pill = rect.adjusted(0.5, 2.5, -0.5, -2.5);

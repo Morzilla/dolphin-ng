@@ -86,7 +86,9 @@
 #include <QMediaPlayer>
 #include <QSlider>
 #include <QMovie>
+#include <QIconEngine>
 #include <QPainter>
+#include <QSignalBlocker>
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QRegularExpression>
@@ -469,6 +471,87 @@ static void ngOpenLightbox(DolphinView *view, const KFileItem &item); // see NgL
 // Breeze NG Aurora: the button of an open menu, painted the way the style paints a button joined to its menu. What
 // is under it (the window's own glass) is cleared and the menu's sheet laid straight on the blur, as the menu itself
 // lies: a sheet of colour over the window's glass came out a tone apart from the menu (more so the thinner the glass)
+// A button that is on stands on a solid fill (the accent): its icon takes the colour of the text there, white or
+// black, instead of the theme's own colour (dark glyphs on a dark blue, the accent's own blue on the accent). The
+// icon is wrapped once; the colour is asked again at every paint (the accent may change)
+class NgOnIconEngine : public QIconEngine
+{
+public:
+    NgOnIconEngine(const QIcon &base, std::function<QColor()> colour)
+        : m_base(base)
+        , m_colour(std::move(colour))
+    {
+    }
+    void paint(QPainter *painter, const QRect &rect, QIcon::Mode mode, QIcon::State state) override
+    {
+        const qreal dpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
+        painter->drawPixmap(rect, scaledPixmap(rect.size(), mode, state, dpr));
+    }
+    QPixmap pixmap(const QSize &size, QIcon::Mode mode, QIcon::State state) override
+    {
+        return scaledPixmap(size, mode, state, 1.0);
+    }
+    QPixmap scaledPixmap(const QSize &size, QIcon::Mode mode, QIcon::State state, qreal scale) override
+    {
+        QPixmap pixmap = m_base.pixmap(size, scale, mode, QIcon::Off);
+        const QColor colour = m_colour ? m_colour() : QColor();
+        if (state != QIcon::On || !colour.isValid() || mode == QIcon::Disabled || pixmap.isNull()) {
+            return state == QIcon::On ? m_base.pixmap(size, scale, mode, state) : pixmap;
+        }
+        QPainter painter(&pixmap);
+        painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        painter.fillRect(QRect(QPoint(0, 0), pixmap.size()), colour);
+        return pixmap;
+    }
+    QSize actualSize(const QSize &size, QIcon::Mode mode, QIcon::State state) override
+    {
+        return m_base.actualSize(size, mode, state);
+    }
+    QIconEngine *clone() const override
+    {
+        return new NgOnIconEngine(m_base, m_colour);
+    }
+    QString key() const override
+    {
+        return QStringLiteral("NgOnIconEngine");
+    }
+
+private:
+    QIcon m_base;
+    std::function<QColor()> m_colour;
+};
+
+// keeps the icon of a checkable button wrapped in NgOnIconEngine, whatever icon it is given later (the sort segment's
+// arrow changes with the order): looked at before every paint
+class NgOnIcon : public QObject
+{
+public:
+    NgOnIcon(QToolButton *button, std::function<QColor()> colour)
+        : QObject(button)
+        , m_colour(std::move(colour))
+    {
+        button->installEventFilter(this);
+    }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() == QEvent::Paint) {
+            auto *button = static_cast<QToolButton *>(watched);
+            const QIcon icon = button->icon();
+            if (!icon.isNull() && icon.cacheKey() != m_wrapped) {
+                const QIcon wrapped(new NgOnIconEngine(icon, m_colour));
+                m_wrapped = wrapped.cacheKey();
+                const QSignalBlocker blocker(button);
+                button->setIcon(wrapped);
+            }
+        }
+        return false;
+    }
+
+private:
+    std::function<QColor()> m_colour;
+    qint64 m_wrapped = 0;
+};
+
 class NgOpenSheet : public QObject
 {
 public:
@@ -740,7 +823,7 @@ private:
             // what is on wears the accent, with the accent's own text colour (as a selection): not a grey of ink
             const QColor accent = palette.color(QPalette::Highlight);
             const QColor accentHover = accent.lighter(110);
-            const QString on = QStringLiteral("background: %1; border-color: %1; color: %2;").arg(accent.name(), palette.color(QPalette::HighlightedText).name());
+            const QString on = QStringLiteral("background: %1; border-color: %1; color: %2;").arg(accent.name(), ngOnAccent(accent).name());
             sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked { %1 }").arg(on));
             sheet.replace(QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked:hover { background: %1; border-color: %1; }").arg(accentHover.name()));
             sheet.replace(QStringLiteral("QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton[ngPill=\"true\"]:checked { %1 }").arg(on));
@@ -799,6 +882,22 @@ private:
             setStyleSheet(sheet);
         }
         m_sheetApplying = false;
+        watchOnIcons();
+    }
+
+    // the icons of the bar's buttons that can be on take the colour of the text on the fill they get then
+    void watchOnIcons()
+    {
+        const auto buttons = findChildren<QToolButton *>();
+        for (QToolButton *button : buttons) {
+            if (button->isCheckable() && !button->property("_ng_on_icon").toBool()) {
+                button->setProperty("_ng_on_icon", true);
+                new NgOnIcon(button, [] {
+                    const QPalette palette = QApplication::palette();
+                    return ngAurora() ? ngAuroraSelectionText(palette) : ngOnAccent(palette.color(QPalette::Active, QPalette::Highlight));
+                });
+            }
+        }
     }
 
     QToolButton *chip(const QString &text, bool checked)
@@ -1633,6 +1732,7 @@ public:
 private:
     void applyRowHeight()
     {
+        watchOnIcons(); // (buttons made by the last rebuild)
         if (m_rowHeight <= 20 && window()) {
             m_rowHeight = window()->property("_ng_row_height").toInt(); // (the window says it, made before this bar)
         }

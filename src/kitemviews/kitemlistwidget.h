@@ -253,6 +253,9 @@ DOLPHIN_EXPORT QColor ngAuroraAccent(const QPalette &palette, qreal alpha);
 DOLPHIN_EXPORT bool ngAuroraFull();
 DOLPHIN_EXPORT QColor ngAuroraSelection(const QPalette &palette, qreal more = 0.0);
 DOLPHIN_EXPORT QColor ngAuroraSelectionText(const QPalette &palette);
+// dolphin-ng: the colour of text and icons on a solid fill of \a fill (an accent): white on a dark one, black on a
+// light one
+DOLPHIN_EXPORT QColor ngOnAccent(const QColor &fill);
 
 /**
  * dolphin-ng: the look of the cards view (DOLPHIN_NG_CARDS = a | b | c):

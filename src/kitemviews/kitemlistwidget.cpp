@@ -1684,6 +1684,13 @@ QColor ngAuroraSelection(const QPalette &palette, qreal more)
     return ngAuroraAccent(palette, qMin(1.0, (dark ? 0.34 : 0.22) + more));
 }
 
+QColor ngOnAccent(const QColor &fill)
+{
+    // relative luminance (sRGB weights, without the gamma: close enough to tell light from dark)
+    const qreal luminance = 0.2126 * fill.redF() + 0.7152 * fill.greenF() + 0.0722 * fill.blueF();
+    return luminance > 0.58 ? QColor(20, 22, 26) : QColor(255, 255, 255);
+}
+
 QColor ngAuroraSelectionText(const QPalette &palette)
 {
     if (s_ngAuroraFull) {
