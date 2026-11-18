@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      c28128bfc90ed7e433ed70e667080a27d336cd1e
+%global commit      2b1d3bcf5cc225a2daa2222445812cb3423027d3
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611181131
+%global snapdate    202611181138
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -131,7 +131,8 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
-* Wed Nov 18 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611181131gitc28128b-1
+* Wed Nov 18 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611181138git2b1d3bc-1
+- The quick actions page: its preview pill follows the scheme
 - What is selected or on wears the accent in every look (sidebar, cards, the bar), text and icons white or black on it
 - "Sort by" under the back arrow; an open menu's button the colour of its menu
 
