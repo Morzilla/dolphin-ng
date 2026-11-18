@@ -1125,6 +1125,7 @@ private:
             }
             const bool ascending = m_view->sortOrder() == Qt::AscendingOrder;
             auto *compact = new QToolButton(this);
+            compact->setProperty("ngPill", true); // (on the veil, as the other buttons of the bar)
             compact->setAutoRaise(true);
             compact->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
             compact->setIcon(QIcon::fromTheme(ascending ? QStringLiteral("view-sort-ascending") : QStringLiteral("view-sort-descending")));
