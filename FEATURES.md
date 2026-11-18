@@ -37,7 +37,7 @@ the files sorts and filters instead.
 
 ![Drawn rows](ng/screenshots/features/home-rows.png)
 
-A **Content** column (View → Show in Details View, or the column header's menu) tells what is inside each file in
+A **Content** column (the Columns button in the bar, or the column header's menu) tells what is inside each file in
 one place, with its unit: "24 pages", "123 words", "2:47", "1600×900", and for a folder what it holds ("2 audio ·
 1 image"). It is read from the files themselves, like the Dossier, so it is filled in folders the search index
 does not cover. Sorting by it keeps pages with pages and durations with durations, and grouped it gives a section
