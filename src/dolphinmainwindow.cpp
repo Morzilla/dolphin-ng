@@ -401,6 +401,48 @@ public:
     }
 };
 
+// dolphin-ng: the track of the title row's tabs when the widget style is not Breeze NG: one pill behind them all, as
+// the sort pill of the bar holds its buttons (the tabs themselves are drawn by a style sheet, see ngStyleTitleRow)
+class NgTabTrack : public QObject
+{
+public:
+    explicit NgTabTrack(QTabBar *bar)
+        : QObject(bar)
+        , m_bar(bar)
+    {
+        bar->installEventFilter(this);
+    }
+    void setColours(const QColor &fill, const QColor &edge)
+    {
+        m_fill = fill;
+        m_edge = edge;
+        m_bar->update();
+    }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == m_bar && event->type() == QEvent::Paint && m_fill.isValid() && m_bar->count() > 0) {
+            QRect all;
+            for (int i = 0; i < m_bar->count(); ++i) {
+                all = all.united(m_bar->tabRect(i));
+            }
+            all = all.intersected(m_bar->rect());
+            if (!all.isEmpty()) {
+                QPainter painter(m_bar);
+                painter.setRenderHint(QPainter::Antialiasing);
+                const QRectF track = QRectF(all).adjusted(0.5, 0.5, -0.5, -0.5);
+                painter.setPen(QPen(m_edge, 1));
+                painter.setBrush(m_fill);
+                painter.drawRoundedRect(track, track.height() / 2.0, track.height() / 2.0);
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QTabBar *m_bar;
+    QColor m_fill, m_edge;
+};
+
 // dolphin-ng: runs a function, once per turn of the event loop, whenever one of some widgets moves, is resized or shown
 class NgGeometryWatch : public QObject
 {
@@ -1378,30 +1420,57 @@ void DolphinMainWindow::ngStyleTitleRow()
         return;
     }
     QTabBar *top = m_tabWidget->ngCreateTopBar(m_ngTabsToolBar); // (the bar made already)
+    // The tabs take the sort pill's form in every look and with any widget style: one track holding them, the current
+    // one in the accent with the accent's own text colour (a style's own tabs did not match the bar below, which
+    // Dolphin NG draws itself: stock Breeze drew a line over the current tab). The row is the window's own ground.
     const QPalette app = QApplication::palette();
-    const QColor body = app.color(QPalette::Window);
-    const bool dark = body.lightnessF() < 0.5;
-    QPalette rowPalette = app, tabPalette = app;
-    if (ngAurora()) {
-        // Aurora: the current tab is the accent's pill already; the row is the window's glass
-        m_ngTabsToolBar->setAutoFillBackground(false);
-    } else if (property("_breeze_ng_glass").toBool()
-               || KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2")).readEntry("theme", QString()).contains(QLatin1String("Glass"))) {
-        // (the decoration says it too, before the style has marked the window)
-        // Glass: the row stays glass, the current tab a veil on it (the colour of lists made an opaque block)
-        m_ngTabsToolBar->setAutoFillBackground(false);
-        tabPalette.setColor(QPalette::Base, dark ? QColor(255, 255, 255, 26) : QColor(255, 255, 255, 150));
-    } else {
-        // opaque looks: the row has the window's own colour (a deeper tone showed as a band across the top of the
-        // window); the current tab is a pill in the colour of the sidebar's card: white on a light scheme, a tone
-        // lighter than the window on a dark one (it took the colour of lists: a dark block on a dark scheme)
-        m_ngTabsToolBar->setAutoFillBackground(false);
-        const QColor base = app.color(QPalette::Base);
-        tabPalette.setColor(QPalette::Base, dark ? body.lighter(118) : base.lightnessF() > body.lightnessF() + 0.03 ? base : QColor(253, 253, 254));
+    const bool dark = ngIsDark(app);
+    NgTabTrack *track = nullptr;
+    for (QObject *child : top->children()) {
+        if (auto *found = dynamic_cast<NgTabTrack *>(child)) {
+            track = found;
+        }
     }
-    m_ngTabsToolBar->setPalette(rowPalette);
-    top->setPalette(tabPalette);
-    top->setProperty("_breeze_ng_pill_tabs", true); // whole pills: there is no page right under them for a tongue
+    if (!track) {
+        track = new NgTabTrack(top);
+    }
+    const QString inkRgb = dark ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
+    QColor fill, edge, on, onText;
+    QString hover;
+    if (ngAurora()) {
+        // Aurora: the veil of every surface at rest, no edge; what is on in Aurora's selection colour
+        fill = ngAuroraVeil(dark, true);
+        edge = Qt::transparent;
+        on = ngAuroraSelection(app);
+        onText = ngAuroraSelectionText(app);
+        hover = QStringLiteral("rgba(255, 255, 255, %1)").arg(QString::number(qMin(1.0, fill.alphaF() + (dark ? 0.06 : 0.20)), 'f', 3));
+    } else {
+        fill = dark ? QColor(255, 255, 255) : QColor(0, 0, 0);
+        edge = fill;
+        fill.setAlphaF(0.05);
+        edge.setAlphaF(0.09);
+        on = app.color(QPalette::Active, QPalette::Highlight);
+        onText = ngOnAccent(on);
+        hover = QStringLiteral("rgba(%1, 0.08)").arg(inkRgb);
+    }
+    track->setColours(fill, edge);
+    const QString onRgba = QStringLiteral("rgba(%1, %2, %3, %4)").arg(on.red()).arg(on.green()).arg(on.blue()).arg(QString::number(on.alphaF(), 'f', 3));
+    const QString sheet = QStringLiteral("QTabBar { background: transparent; }"
+                                         "QTabBar::tab { background: transparent; border: none; border-radius: 11px; margin: 2px 1px;"
+                                         " padding: 2px 2px 2px 10px; min-height: 18px; color: %1; }"
+                                         "QTabBar::tab:first { margin-left: 2px; } QTabBar::tab:last { margin-right: 2px; }"
+                                         "QTabBar::tab:hover:!selected { background: %2; }"
+                                         "QTabBar::tab:selected { background: %3; color: %4; }")
+                              .arg(app.color(QPalette::WindowText).name(), hover, onRgba, onText.name());
+    m_ngTabsToolBar->setAutoFillBackground(false);
+    m_ngTabsToolBar->setPalette(app);
+    if (top->styleSheet() != sheet) {
+        top->setStyleSheet(sheet);
+    }
+    // the current tab's icon and close button in the same colour as its text (see DolphinTabWidget::ngSyncTopBar)
+    top->setProperty("_ng_on_text", onText);
+    top->setProperty("_ng_text", app.color(QPalette::WindowText));
+    m_tabWidget->ngRefreshTopBar();
     top->update();
     m_ngTabsToolBar->update();
 }
@@ -4103,7 +4172,8 @@ void DolphinMainWindow::ngPlaceSidebarToggle()
                 }
                 // the holder as tall as the row, centred as the tab bar is: the same middle. The button inside it
                 // centred on the pill (the button is taller than the tab bar, which its tabs overflow)
-                const int buttonHeight = button->sizeHint().height();
+                // (no taller than the tab bar: as tall as the row, it had no room to move and stayed below the pills)
+                const int buttonHeight = qMin(button->sizeHint().height(), qMax(24, tabs->height()));
                 const int rowHeight = qMax(buttonHeight, 2 * tabs->y() + tabs->height());
                 // (where the row put the holder, once it has its height; before, where centring would put it)
                 const qreal holderTop = holder->height() == rowHeight ? holder->y() : tabs->y() + tabs->height() / 2.0 - rowHeight / 2.0;

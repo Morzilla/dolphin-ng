@@ -20,7 +20,9 @@
 #include <kio/global.h>
 
 #include <QTimer>
+#include <QAbstractButton>
 #include <QApplication>
+#include <QPainter>
 #include <QDropEvent>
 #include <QStackedWidget>
 
@@ -190,6 +192,80 @@ void DolphinTabWidget::ngScheduleSync()
     });
 }
 
+namespace
+{
+// dolphin-ng: the close button of a tab above: an x drawn in the colour of the tab's text (on the current tab, the
+// text colour of the accent it stands on: white or black), a faint round under the pointer. The style's own button
+// kept its grey on the accent.
+class NgTabClose : public QAbstractButton
+{
+public:
+    explicit NgTabClose(QWidget *parent)
+        : QAbstractButton(parent)
+    {
+        setFocusPolicy(Qt::NoFocus);
+        setCursor(Qt::ArrowCursor);
+        setFixedSize(22, 16); // (the x in the left 16 px: the rest keeps it off the pill's round end)
+        setToolTip(i18nc("@info:tooltip", "Close Tab"));
+    }
+    void setInk(const QColor &ink)
+    {
+        if (m_ink != ink) {
+            m_ink = ink;
+            update();
+        }
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        QColor ink = m_ink.isValid() ? m_ink : palette().color(QPalette::WindowText);
+        if (underMouse()) {
+            QColor round = ink;
+            round.setAlphaF(isDown() ? 0.30 : 0.18);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(round);
+            painter.drawEllipse(QRectF(0, 0, 16, 16).adjusted(0.5, 0.5, -0.5, -0.5));
+        } else {
+            ink.setAlphaF(ink.alphaF() * 0.75);
+        }
+        painter.setPen(QPen(ink, 1.4, Qt::SolidLine, Qt::RoundCap));
+        const QRectF x = QRectF(0, 0, 16, 16).adjusted(5, 5, -5, -5);
+        painter.drawLine(x.topLeft(), x.bottomRight());
+        painter.drawLine(x.topRight(), x.bottomLeft());
+    }
+    void enterEvent(QEnterEvent *event) override
+    {
+        update();
+        QAbstractButton::enterEvent(event);
+    }
+    void leaveEvent(QEvent *event) override
+    {
+        update();
+        QAbstractButton::leaveEvent(event);
+    }
+
+private:
+    QColor m_ink;
+};
+
+// the icon in one colour (the current tab's: the text colour of the accent under it)
+QIcon ngTintedIcon(const QIcon &icon, const QSize &size, qreal dpr, const QColor &colour)
+{
+    QPixmap pixmap = icon.pixmap(size, dpr);
+    if (pixmap.isNull()) {
+        return icon;
+    }
+    QPainter painter(&pixmap);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    painter.fillRect(QRect(QPoint(0, 0), pixmap.size()), colour);
+    painter.end();
+    return QIcon(pixmap);
+}
+} // namespace
+
 void DolphinTabWidget::ngSyncTopBar()
 {
     if (!m_ngTopBar) {
@@ -207,7 +283,31 @@ void DolphinTabWidget::ngSyncTopBar()
         if (m_ngTopBar->tabText(i) != own->tabText(i)) {
             m_ngTopBar->setTabText(i, own->tabText(i));
         }
-        m_ngTopBar->setTabIcon(i, own->tabIcon(i));
+        // the current tab stands on the accent: its icon and its x in the accent's own text colour (set by the title row)
+        const QColor onText = m_ngTopBar->property("_ng_on_text").value<QColor>();
+        const QColor text = m_ngTopBar->property("_ng_text").value<QColor>();
+        const bool current = i == own->currentIndex();
+        if (current && onText.isValid()) {
+            m_ngTopBar->setTabIcon(i, ngTintedIcon(own->tabIcon(i), m_ngTopBar->iconSize(), m_ngTopBar->devicePixelRatioF(), onText));
+        } else {
+            m_ngTopBar->setTabIcon(i, own->tabIcon(i));
+        }
+        if (m_ngTopBar->tabsClosable()) {
+            auto *close = dynamic_cast<NgTabClose *>(m_ngTopBar->tabButton(i, QTabBar::RightSide));
+            if (!close) {
+                close = new NgTabClose(m_ngTopBar);
+                connect(close, &QAbstractButton::clicked, this, [this, close] {
+                    for (int index = 0; index < m_ngTopBar->count(); ++index) {
+                        if (m_ngTopBar->tabButton(index, QTabBar::RightSide) == close) {
+                            Q_EMIT m_ngTopBar->tabCloseRequested(index);
+                            return;
+                        }
+                    }
+                });
+                m_ngTopBar->setTabButton(i, QTabBar::RightSide, close); // (the style's own button is deleted)
+            }
+            close->setInk(current && onText.isValid() ? onText : text);
+        }
         if (m_ngTopBar->tabToolTip(i) != own->tabToolTip(i)) {
             m_ngTopBar->setTabToolTip(i, own->tabToolTip(i));
         }

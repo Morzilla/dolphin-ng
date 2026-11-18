@@ -245,6 +245,11 @@ public:
      * (above the location bar: tabs first, then the address, then the rest). The widget's own bar is hidden from then on.
      */
     QTabBar *ngCreateTopBar(QWidget *parent);
+    /** dolphin-ng: the tabs above again (after the title row changed its colours: the current tab's icon and close button) */
+    void ngRefreshTopBar()
+    {
+        ngScheduleSync();
+    }
     bool ngHasTopBar() const
     {
         return m_ngTopBar != nullptr;
