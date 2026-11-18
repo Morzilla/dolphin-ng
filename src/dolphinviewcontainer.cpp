@@ -736,6 +736,15 @@ private:
                                      "QWidget#ngTrailing QToolButton::menu-indicator { image: none; width: 0px; }"
                                      "QWidget#ngTrailing QToolButton[popupMode=\"2\"] { padding-right: 7px; }")
                           .arg(ink, menuSheet.name(), menuEdge, palette.color(QPalette::WindowText).name());
+        if (!aurora) {
+            // what is on wears the accent, with the accent's own text colour (as a selection): not a grey of ink
+            const QColor accent = palette.color(QPalette::Highlight);
+            const QColor accentHover = accent.lighter(110);
+            const QString on = QStringLiteral("background: %1; border-color: %1; color: %2;").arg(accent.name(), palette.color(QPalette::HighlightedText).name());
+            sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked { %1 }").arg(on));
+            sheet.replace(QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked:hover { background: %1; border-color: %1; }").arg(accentHover.name()));
+            sheet.replace(QStringLiteral("QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton[ngPill=\"true\"]:checked { %1 }").arg(on));
+        }
         if (aurora) {
             sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); }").arg(ink));
             sheet.replace(QStringLiteral("QLineEdit { border: 1px solid rgba(%1, 0.14);").arg(ink), QStringLiteral("QLineEdit { border: 1px solid transparent;"));

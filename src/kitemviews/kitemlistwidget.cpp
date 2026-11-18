@@ -2685,7 +2685,7 @@ void KItemListWidget::drawItemStyleOption(QPainter *painter, QWidget *widget, QS
                 const QPainterPath block = ngSelectionBlock(gap, &reach, &alpha);
                 painter->setClipRect(reach, Qt::IntersectClip);
                 QColor veil = accent;
-                veil.setAlphaF((aurora ? 0.16 : 0.07) * alpha);
+                veil.setAlphaF((aurora ? 0.16 : 0.12) * alpha); // (between the cards of a block: the tint of their sheets)
                 ring.setAlphaF(ring.alphaF() * alpha);
                 painter->setPen(QPen(ring, width));
                 painter->setBrush(veil);

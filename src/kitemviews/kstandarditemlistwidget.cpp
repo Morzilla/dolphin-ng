@@ -5117,7 +5117,17 @@ void KStandardItemListWidget::paintNgCardSheet(QPainter *painter)
         painter->setBrush(ngAuroraVeil(dark));
         painter->drawRoundedRect(card, 12, 12);
     } else {
-        painter->setBrush(dark ? QColor(0, 0, 0, 62) : QColor(0, 0, 0, 14));
+        QColor sheet = dark ? QColor(0, 0, 0, 62) : QColor(0, 0, 0, 14);
+        if (isSelected()) {
+            // a selected card is tinted with the accent (lifted on a dark scheme, as the ring around it), not grey
+            QColor accent = styleOption().palette.color(QPalette::Highlight);
+            if (dark && accent.lightness() < 150) {
+                accent = QColor::fromHsl(accent.hslHue() < 0 ? 210 : accent.hslHue(), qMax(accent.hslSaturation(), 150), 150);
+            }
+            accent.setAlphaF(dark ? 0.26 : 0.20);
+            sheet = accent;
+        }
+        painter->setBrush(sheet);
         painter->drawRoundedRect(card, 12, 12);
         painter->setPen(QPen(dark ? QColor(255, 255, 255, 11) : QColor(255, 255, 255, 170), 1));
         painter->drawLine(QPointF(card.left() + 12, card.top() + 0.5), QPointF(card.right() - 12, card.top() + 0.5));

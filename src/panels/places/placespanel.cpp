@@ -358,8 +358,12 @@ void PlacesPanel::ngPaintPills()
         return;
     }
     const bool dark = ngIsDark(palette());
-    // the pill: a faint veil with a hairline edge, round ends; Aurora: the accent for the selected entry, the veil of
-    // every other surface for the hovered one, no edge
+    // the pill, round ends, no edge: the accent for the selected entry (Aurora: its own selection colour), a tint of
+    // it for the hovered one (Aurora: the veil of every other surface). Every look takes it from the accent: a white
+    // or grey veil vanished on the light sidebar card
+    // (the window's own accent: the panel's palette has a clear highlight, see ngApplyPalette)
+    const QColor accent = m_ngPalette.color(QPalette::Active, QPalette::Highlight);
+    const QColor onAccent = ngAurora() ? ngAuroraSelectionText(palette()) : m_ngPalette.color(QPalette::Active, QPalette::HighlightedText);
     auto drawPill = [&](QPainter &painter, const QRectF &rect, qreal strength) {
         painter.setRenderHint(QPainter::Antialiasing);
         const QRectF pill = rect.adjusted(0.5, 2.5, -0.5, -2.5);
@@ -368,8 +372,10 @@ void PlacesPanel::ngPaintPills()
             painter.setPen(Qt::NoPen);
             painter.setBrush(strength >= 1.0 ? ngAuroraSelection(palette()) : ngAuroraVeil(dark, true));
         } else {
-            painter.setPen(QPen(dark ? QColor(255, 255, 255, qRound(46 * strength)) : QColor(0, 0, 0, qRound(30 * strength)), 1));
-            painter.setBrush(dark ? QColor(255, 255, 255, qRound(30 * strength)) : QColor(255, 255, 255, qRound(150 * strength)));
+            painter.setPen(Qt::NoPen);
+            QColor tint = accent;
+            tint.setAlphaF(strength >= 1.0 ? 1.0 : (dark ? 0.22 : 0.16));
+            painter.setBrush(tint);
         }
         painter.drawRoundedRect(pill, radius, radius);
     };
@@ -377,19 +383,19 @@ void PlacesPanel::ngPaintPills()
         QStyleOptionViewItem option;
         initViewItemOption(&option);
         option.rect = visualRect(index); // the delegate lays the row out in its full rect (with the title space)
-        if (ngAurora() && index == m_ngPillIndex) {
+        if (index == m_ngPillIndex) {
             // on the pill of the selection: the colour of text on a selection (white on the full accent, the deep
-            // accent on its light sheet)
-            const QColor onSelection = ngAuroraSelectionText(palette());
+            // accent on Aurora's light sheet)
+            const QColor onSelection = onAccent;
             for (QPalette::ColorRole role : {QPalette::Text, QPalette::WindowText, QPalette::HighlightedText}) {
                 option.palette.setColor(role, onSelection);
             }
         }
-        const bool onPill = ngAurora() && index == m_ngPillIndex;
+        const bool onPill = index == m_ngPillIndex;
         option.state &= ~(QStyle::State_Selected | QStyle::State_MouseOver | QStyle::State_HasFocus);
         option.showDecorationSelected = false;
         if (QAbstractItemDelegate *delegate = itemDelegateForIndex(index)) {
-            const QColor onSelection = ngAuroraSelectionText(palette());
+            const QColor onSelection = onAccent;
             if (onPill && onSelection != palette().color(QPalette::WindowText) && option.rect.isValid()) {
                 // the icon too takes the colour of text on a selection (an icon theme colours its glyphs from the
                 // application's palette, not from the row's): the row is painted aside and laid in that one colour
