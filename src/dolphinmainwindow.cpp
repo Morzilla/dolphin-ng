@@ -4057,8 +4057,70 @@ void DolphinMainWindow::ngPlaceSidebarToggle()
             button->setToolButtonStyle(Qt::ToolButtonIconOnly);
             button->setIconSize(QSize(20, 20));
             button->setFocusPolicy(Qt::NoFocus);
+            // in a holder of its own: the row centres each of its widgets, and the button came out 2 px above the
+            // tabs' pills. The holder is as tall as the tab bar and puts the button on the tab's centre (measured
+            // again when the row changes)
+            auto *holder = new QWidget(m_ngTabsToolBar);
+            auto *holderLayout = new QVBoxLayout(holder);
+            holderLayout->setContentsMargins(0, 0, 0, 0);
+            holderLayout->setSpacing(0);
+            holderLayout->addWidget(button);
             m_ngTitleToggle = button;
-            m_ngTabsToolBar->insertWidget(m_ngTabsToolBar->actions().value(0), button);
+            m_ngTabsToolBar->insertWidget(m_ngTabsToolBar->actions().value(0), holder);
+            auto align = [this, holder, holderLayout, button] {
+                auto *tabs = m_ngTabsToolBar ? m_ngTabsToolBar->findChild<QTabBar *>() : nullptr;
+                if (!tabs || tabs->count() == 0 || tabs->height() <= 0) {
+                    return;
+                }
+                // the holder as tall as the tab bar (the row puts both at the same height), the button inside it
+                // centred on the tab
+                const QRect tab = tabs->tabRect(qMax(0, tabs->currentIndex()));
+                // the pill as drawn (the style draws it in a frame of its own, a little lower than the tab's rect):
+                // the current tab painted aside, its rows with colour in the middle column
+                qreal centre = tab.top() + tab.height() / 2.0;
+                const QImage shot = tabs->grab(tab).toImage();
+                if (!shot.isNull()) {
+                    const qreal dpr = shot.devicePixelRatio();
+                    const int x = qMin(shot.width() - 1, qRound(12 * dpr)); // (inside the pill, before its text)
+                    // the run of rows in the pill's own colour around a row well inside it (the current tab also
+                    // runs on into the window below, in another colour: not part of the pill)
+                    const int middle = qBound(0, int(shot.height() * 0.4), shot.height() - 1);
+                    const QRgb inside = shot.pixel(x, middle);
+                    auto same = [inside](QRgb p) {
+                        return qAbs(qAlpha(p) - qAlpha(inside)) + qAbs(qRed(p) - qRed(inside)) + qAbs(qGreen(p) - qGreen(inside)) + qAbs(qBlue(p) - qBlue(inside)) <= 24;
+                    };
+                    int first = middle, last = middle;
+                    while (first > 0 && same(shot.pixel(x, first - 1))) {
+                        --first;
+                    }
+                    while (last < shot.height() - 1 && same(shot.pixel(x, last + 1))) {
+                        ++last;
+                    }
+                    if (first >= 0 && last > first) {
+                        centre = tab.top() + (first + last + 1) / 2.0 / dpr;
+                    }
+                }
+                // the holder as tall as the row, centred as the tab bar is: the same middle. The button inside it
+                // centred on the pill (the button is taller than the tab bar, which its tabs overflow)
+                const int buttonHeight = button->sizeHint().height();
+                const int rowHeight = qMax(buttonHeight, 2 * tabs->y() + tabs->height());
+                // (where the row put the holder, once it has its height; before, where centring would put it)
+                const qreal holderTop = holder->height() == rowHeight ? holder->y() : tabs->y() + tabs->height() / 2.0 - rowHeight / 2.0;
+                const int top = qBound(0, qRound(tabs->y() + centre - holderTop - buttonHeight / 2.0), rowHeight - buttonHeight);
+                const QMargins wanted(0, top, 0, rowHeight - buttonHeight - top);
+                if (holder->height() != rowHeight || holderLayout->contentsMargins() != wanted) {
+                    holder->setFixedHeight(rowHeight);
+                    button->setFixedHeight(buttonHeight);
+                    holderLayout->setContentsMargins(wanted);
+                }
+            };
+            QTimer::singleShot(0, holder, align);
+            auto *watch = new NgGeometryWatch(holder);
+            QList<QWidget *> watched{m_ngTabsToolBar, holder};
+            if (auto *tabs = m_ngTabsToolBar->findChild<QTabBar *>()) {
+                watched.append(tabs);
+            }
+            watch->watch(watched, align);
         }
         return;
     }
