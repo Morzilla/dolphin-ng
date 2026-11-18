@@ -3348,13 +3348,13 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
         QPolygonF slope;
         slope << QPointF(body.left() + body.width() * 0.30, body.top()) << QPointF(body.left() + body.width() * 0.34, body.top())
               << QPointF(body.left() + body.width() * 0.43, body.top() + tabDepth * 0.95) << QPointF(body.left() + body.width() * 0.30, body.top() + tabDepth * 0.95);
-        QPainterPath slopePath;
-        slopePath.addPolygon(slope);
-        slopePath.closeSubpath();
-        backShape = backShape.united(tab).united(slopePath);
+        // the three parts filled one by one (the same opaque colour, so where they overlap does not show): their union
+        // as one path lost the tab on some Qt versions, and the folder showed only the slope, a fin on a bare edge
         painter->setPen(Qt::NoPen);
         painter->setBrush(back);
         painter->drawPath(backShape);
+        painter->drawPath(tab);
+        painter->drawPolygon(slope);
         const QRectF cover(body.left(), body.top() + tabDepth, body.width(), body.height() - tabDepth);
         QLinearGradient shine(cover.topLeft(), cover.bottomLeft());
         shine.setColorAt(0.0, frontTop);
