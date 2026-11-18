@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      e4a84c309d1dd4dcbbd3914936c813a181027c21
+%global commit      fca4bba91ca6b57030af63fee66b41ec1d0338a1
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611181715
+%global snapdate    202611181841
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -131,6 +131,12 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Wed Nov 18 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611181841gitfca4bba-1
+- Tabs in the title bar as pills, with any widget style
+- Pills and section titles in the plain sidebar too; back, forward and up with round ends
+- Sort pill: the selected segment inside the pill
+- Closing the last tab closes the window
+
 * Wed Nov 18 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611181715gite4a84c3-1
 - Flat folders: the tab is drawn on every system (it was lost on some, leaving a fin)
 
