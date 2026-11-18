@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      61885af2d7e8cc137441f3ce8a5110e0d4c973b0
+%global commit      e4a84c309d1dd4dcbbd3914936c813a181027c21
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611181546
+%global snapdate    202611181715
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -131,6 +131,9 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Wed Nov 18 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611181715gite4a84c3-1
+- Flat folders: the tab is drawn on every system (it was lost on some, leaving a fin)
+
 * Wed Nov 18 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611181546git61885af-1
 - A Content column: pages, words, duration or pixels with their unit, read from the file (no Baloo needed)
 - A folder with its own cover (folder.jpg, cover.jpg...) shows it on its card
