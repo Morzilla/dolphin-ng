@@ -197,7 +197,7 @@ private:
                     ++last; // a hidden widget: no room, no spacing
                     continue;
                 }
-                const QSize hint = m_items.at(last)->sizeHint();
+                const QSize hint = hintOf(m_items.at(last));
                 if (last > i && x + hint.width() > area.right() + 1) {
                     break;
                 }
@@ -211,7 +211,7 @@ private:
                     if (m_items.at(k)->isEmpty()) {
                         continue;
                     }
-                    const QSize hint = m_items.at(k)->sizeHint();
+                    const QSize hint = hintOf(m_items.at(k));
                     m_items.at(k)->setGeometry(QRect(x, y + (lineHeight - hint.height()) / 2, hint.width(), hint.height()));
                     x += hint.width() + m_hSpacing;
                 }
@@ -220,6 +220,15 @@ private:
             i = last;
         }
         return y - m_vSpacing - rect.y() + margins.bottom();
+    }
+
+    // a widget's own fixed size counts (the item's cached hint missed a height fixed later: the sort pill)
+    static QSize hintOf(QLayoutItem *item)
+    {
+        if (QWidget *widget = item->widget()) {
+            return widget->sizeHint().expandedTo(widget->minimumSize()).boundedTo(widget->maximumSize());
+        }
+        return item->sizeHint();
     }
 
     QList<QLayoutItem *> m_items;
@@ -705,7 +714,15 @@ private:
             }
             sheet.replace(QStringLiteral("padding: 3px 8px; background: rgba(%1, 0.06);").arg(ink), QStringLiteral("padding: 3px 8px; background: rgba(%1, %2);").arg(veilInk, veil));
             sheet.replace(QStringLiteral("QWidget#navPill { background: rgba(%1, 0.05); border: 1px solid rgba(%1, 0.09);").arg(ink), QStringLiteral("QWidget#navPill { background: rgba(%1, %2); border: 0;").arg(veilInk, veil));
+            // the bar's buttons with a name: the veil of every other surface (frost, white, on a light scheme), no edge
+            sheet.replace(QStringLiteral("QToolButton[ngPill=\"true\"] { background: rgba(%1, 0.05); border-color: rgba(%1, 0.09);").arg(ink),
+                          QStringLiteral("QToolButton[ngPill=\"true\"] { background: rgba(%1, %2); border-color: transparent;").arg(veilInk, veil));
+            sheet.replace(QStringLiteral("QToolButton[ngPill=\"true\"]:hover { background: rgba(%1, 0.10); }").arg(ink),
+                          QStringLiteral("QToolButton[ngPill=\"true\"]:hover { background: rgba(%1, %2); }").arg(veilInk, QString::number(qMin(1.0, ngAuroraVeil(dark, true).alphaF() + (dark ? 0.06 : 0.20)), 'f', 3)));
             sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); }").arg(ink), QStringLiteral("QToolButton:checked { background: rgba(%1, %2); color: %3; }").arg(accentRgb, QString::number(accent.alphaF(), 'f', 2), ngAuroraSelectionText(palette).name()));
+            // (and a button with a name that is on: the accent too, not the grey of the pill's rule)
+            sheet.replace(QStringLiteral("QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink),
+                          QStringLiteral("QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, %2); border-color: transparent; color: %3; }").arg(accentRgb, QString::number(accent.alphaF(), 'f', 2), ngAuroraSelectionText(palette).name()));
             sheet.replace(QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked:hover { background: rgba(%1, %2, %3, %4); }").arg(accentHover.red()).arg(accentHover.green()).arg(accentHover.blue()).arg(QString::number(accentHover.alphaF(), 'f', 2)));
             // the open button wears the menu's sheet: see-through in Aurora, at the menu's own opacity (Breeze NG's
             // setting; solid there means the 74 % of a joined menu in Aurora), over the window's glass
@@ -851,6 +868,7 @@ public:
             layout->addWidget(button);
         }
         m_trailing->setVisible(layout->count() > 0);
+        applyRowHeight();
         m_trailingIconsOnly = false; // new buttons, with their names
         QTimer::singleShot(0, this, [this] {
             fitSorting(); // the room left for the sorting changed
@@ -1058,6 +1076,7 @@ private:
         m_sortCompact = nullptr;
         m_gaps.clear();
         QTimer::singleShot(0, this, [this] {
+            applyRowHeight(); // (here: the build below returns early in some views)
             alignLeading();
             updateOwnView(); // (the view saves its properties after it changes: looked at a moment later)
             fitSorting();
@@ -1173,12 +1192,13 @@ private:
         {
             // fully rounded ends: the radius is half the height (a larger one would switch the rounding off)
             const QString ink = ngIsDark(QApplication::palette()) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
-            const int inner = pill->findChild<QToolButton *>() ? pill->findChild<QToolButton *>()->sizeHint().height() : 24;
+            const int row = m_rowHeight > 20 ? m_rowHeight : window() ? window()->property("_ng_row_height").toInt() : 0;
+            const int inner = row > 20 ? row - 2 : pill->findChild<QToolButton *>() ? pill->findChild<QToolButton *>()->sizeHint().height() : 24;
             pill->setStyleSheet(QStringLiteral("QWidget#sortPill { background: rgba(%1, %4); border: %5; border-radius: %2px; }"
                                                "QToolButton { border-radius: %3px; padding: 3px 11px; }")
                                     .arg(ngAurora() ? QStringLiteral("255, 255, 255") : ink)
-                                    .arg(inner / 2) // (the curve of the selected segment and the border around it: one shape. Below half the height: a radius over it switches the rounding off)
-                                    .arg(inner / 2 - 1)
+                                    .arg(inner / 2 - 1) // (one curve for the pill and its selected segment, which fill the same height;
+                                    .arg(inner / 2 - 1) // below half the height inside the border: a larger radius switches the rounding off)
                                     .arg(ngAurora() ? QString::number(ngAuroraVeil(ngIsDark(palette()), true).alphaF(), 'f', 3) : QStringLiteral("0.05"),
                                          ngAurora() ? QStringLiteral("1px solid transparent") : QStringLiteral("1px solid rgba(%1, 0.09)").arg(ink)));
         }
@@ -1543,6 +1563,41 @@ private:
         m_flow->invalidate();
     }
 
+public:
+    // the height of the row of fields above (the location bar): the bar's buttons and the sort pill take it, so that
+    // the two rows are made of the same kind of thing
+    void setRowHeight(int height)
+    {
+        if (height != m_rowHeight) {
+            m_rowHeight = height;
+            rebuild();
+        }
+    }
+
+private:
+    void applyRowHeight()
+    {
+        if (m_rowHeight <= 20 && window()) {
+            m_rowHeight = window()->property("_ng_row_height").toInt(); // (the window says it, made before this bar)
+        }
+        if (m_rowHeight <= 20) {
+            return;
+        }
+        const auto buttons = findChildren<QToolButton *>();
+        for (QToolButton *button : buttons) {
+            if (button->property("ngPill").toBool()) {
+                button->setFixedHeight(m_rowHeight);
+            }
+        }
+        if (m_sortPill) {
+            m_sortPill->setFixedHeight(m_rowHeight);
+            const auto segments = m_sortPill->findChildren<QToolButton *>();
+            for (QToolButton *segment : segments) {
+                segment->setFixedHeight(m_rowHeight - 2);
+            }
+        }
+    }
+
     // Count the items of each kind. Only while no filter is active: a filtered view no longer lists the rest.
     void count()
     {
@@ -1592,6 +1647,7 @@ private:
     QHBoxLayout *m_leadingLayout = nullptr;
     NgFlowLayout *m_flow;
     QPointer<QWidget> m_sortPill, m_sortCaption, m_sortCompact; // the sorting as a pill, or as one button when narrow
+    int m_rowHeight = 0; // the height of the row of fields above, which the buttons take (0: their own)
     bool m_fitting = false; // fitSorting() is running
     bool m_fitPending = false; // fitSorting() is scheduled
     bool m_trailingIconsOnly = false; // the named buttons on the right show only their icon (see fitSorting)
@@ -4475,6 +4531,13 @@ void ngSortBarSetTrailingActions(QWidget *bar, const QList<QAction *> &actions)
 {
     if (auto *sortBar = dynamic_cast<NgSortBar *>(bar)) {
         sortBar->setTrailingActions(actions);
+    }
+}
+
+void ngSortBarSetRowHeight(QWidget *bar, int height)
+{
+    if (auto *sortBar = dynamic_cast<NgSortBar *>(bar)) {
+        sortBar->setRowHeight(height);
     }
 }
 

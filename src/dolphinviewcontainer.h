@@ -539,6 +539,7 @@ void ngSortBarSetLeadingActions(QWidget *bar, const QList<QAction *> &actions);
 // which the window places next to the location bar
 void ngSortBarSetTrailingActions(QWidget *bar, const QList<QAction *> &actions);
 QWidget *ngSortBarFilterField(QWidget *bar);
+void ngSortBarSetRowHeight(QWidget *bar, int height);
 /** dolphin-ng: the filters of that bar as a section for the sidebar (rows with counts; a click filters). */
 QWidget *ngCreateFilterPanel(QWidget *sortBar, QWidget *parent, std::function<void(const QUrl &)> open, int part = 0);
 

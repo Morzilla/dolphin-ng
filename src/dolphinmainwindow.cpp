@@ -4121,20 +4121,70 @@ void DolphinMainWindow::ngMoveToolbarButtons()
         // the pill and the filter field are as tall as the location bar and rounded like it: one row, one style
         QWidget *location = bar->widgetForAction(navigator);
         const int height = location && location->sizeHint().height() > 20 ? location->sizeHint().height() : 34;
+        if (location) {
+            location->setFixedHeight(height);
+        }
+        setProperty("_ng_row_height", height);
+        // the sort bar's first item ("Sort by") starts where the pill of back and forward starts, right above it:
+        // measured once both are laid out (a fixed margin missed it by the tool bar's own margins)
+        if (!pill.isEmpty() && m_ngSortBar && m_ngSortBar->layout()) {
+            QTimer::singleShot(0, this, [this, first = QPointer<QWidget>(pill.first())] {
+                if (!first || !m_ngSortBar || !m_ngSortBar->layout() || !first->isVisible()) {
+                    return;
+                }
+                QMargins margins = m_ngSortBar->layout()->contentsMargins();
+                const int navLeft = first->mapTo(this, QPoint(0, 0)).x();
+                const int barLeft = m_ngSortBar->mapTo(this, QPoint(0, 0)).x();
+                const int left = qMax(0, navLeft - barLeft);
+                if (margins.left() != left) {
+                    margins.setLeft(left);
+                    m_ngSortBar->layout()->setContentsMargins(margins);
+                }
+            });
+        }
+        ngSortBarSetRowHeight(m_ngSortBar, height); // (the bar's buttons below, the same height)
         if (m_ngFilterAction) {
             if (QWidget *field = bar->widgetForAction(m_ngFilterAction)) {
                 // as tall as the row of the tool bar, like the location bar beside it (a fixed height taken from the
                 // location bar's size hint stood taller than it where the tool bar lays it out lower)
                 // (and never taller than the location bar itself: where something else made the row taller, the
                 // field grew with the row and stood above and below the location bar)
-                field->setMinimumHeight(0);
-                field->setMaximumHeight(location && location->height() > 20 ? location->height() : QWIDGETSIZE_MAX);
-                field->setSizePolicy(field->sizePolicy().horizontalPolicy(), QSizePolicy::Expanding);
+                // (one height for the whole row: the location bar, this field and the pill of back and forward, from
+                // the location bar's own size hint; the field grew a pixel or two past the location bar otherwise)
+                field->setFixedHeight(height);
             }
         }
+        // Glass (not Aurora): the pill is a field like the location bar and the search field beside it, the window's
+        // field colour at the glass' strength with the same faint rim (it was a grey veil of ink, a third kind of thing)
+        const bool glassField = glassLook && !ngAurora();
+        const QColor base = palette().color(QPalette::Base);
+        // (the fields' colour in Glass: the field colour on a dark scheme, a grey veil of ink on a light one)
+        const QString fieldRgb = dark ? QStringLiteral("%1, %2, %3").arg(base.red()).arg(base.green()).arg(base.blue()) : QStringLiteral("0, 0, 0");
+        const QString fieldA = dark ? QStringLiteral("0.62") : QStringLiteral("0.07"), fieldHover = dark ? QStringLiteral("0.80") : QStringLiteral("0.12"),
+                      fieldDown = dark ? QStringLiteral("0.92") : QStringLiteral("0.17");
+        const QString rim = dark ? QStringLiteral("rgba(255, 255, 255, 0.13)") : QStringLiteral("rgba(0, 0, 0, 0.13)");
         for (int i = 0; i < pill.size(); ++i) {
             const QString left = i == 0 ? QStringLiteral("9px") : QStringLiteral("0");
             const QString right = i == pill.size() - 1 ? QStringLiteral("9px") : QStringLiteral("0");
+            if (glassField) {
+                // one outline around the whole pill: each button draws the sides that are the pill's
+                const QString sheet = QStringLiteral("QToolButton { background: rgba(%1, %9); border: 1px solid %2; border-left-width: %3; border-right-width: %4;"
+                                                     " padding: 0 8px; min-height: 0; max-height: %5px; margin: 0 %6px 0 0;"
+                                                     " border-top-left-radius: %7; border-bottom-left-radius: %7; border-top-right-radius: %8; border-bottom-right-radius: %8; }"
+                                                     "QToolButton:hover { background: rgba(%1, %10); }"
+                                                     "QToolButton:pressed { background: rgba(%1, %11); }"
+                                                     "QToolButton::menu-indicator { image: none; }")
+                                          .arg(fieldRgb, rim, i == 0 ? QStringLiteral("1px") : QStringLiteral("0"), i == pill.size() - 1 ? QStringLiteral("1px") : QStringLiteral("0"))
+                                          .arg(height)
+                                          .arg(i == pill.size() - 1 ? 8 : 0)
+                                          .arg(left, right)
+                                          .arg(fieldA, fieldHover, fieldDown);
+                if (pill.at(i)->styleSheet() != sheet) {
+                    pill.at(i)->setStyleSheet(sheet);
+                }
+                pill.at(i)->setFixedHeight(height);
+                continue;
+            }
             const QString sheet = QStringLiteral("QToolButton { background: rgba(%1, %2); border: 0; padding: 0 8px; min-height: 0; max-height: %7px; margin: 0 %8px 0 0;"
                                                  " border-top-left-radius: %4; border-bottom-left-radius: %4; border-top-right-radius: %5; border-bottom-right-radius: %5; }"
                                                  "QToolButton:hover { background: rgba(%1, %3); }"
