@@ -487,6 +487,7 @@ public:
         m_ownView->setCheckable(true);
         m_ownView->setChecked(true); // in the accent: it stands out from the other buttons
         m_ownView->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        m_ownView->setProperty("ngPill", true); // (as tall as the buttons beside it, on the same row)
         m_ownView->setIcon(QIcon::fromTheme(QStringLiteral("folder-favorites"), QIcon::fromTheme(QStringLiteral("bookmarks"))));
         m_ownView->setToolTip(ngTr("This folder has a view of its own (look of the cards, sorting, groups). Click to go back to the default view.",
                                    "Questa cartella ha una vista sua (aspetto delle card, ordinamento, gruppi). Clic per tornare alla vista predefinita."));
@@ -1174,7 +1175,7 @@ private:
             pill->setStyleSheet(QStringLiteral("QWidget#sortPill { background: rgba(%1, %4); border: %5; border-radius: %2px; }"
                                                "QToolButton { border-radius: %3px; padding: 3px 11px; }")
                                     .arg(ngAurora() ? QStringLiteral("255, 255, 255") : ink)
-                                    .arg(inner / 2 + 1) // the pill is the button and the border on each side
+                                    .arg(inner / 2) // (the curve of the selected segment and the border around it: one shape. Below half the height: a radius over it switches the rounding off)
                                     .arg(inner / 2 - 1)
                                     .arg(ngAurora() ? QString::number(ngAuroraVeil(ngIsDark(palette()), true).alphaF(), 'f', 3) : QStringLiteral("0.05"),
                                          ngAurora() ? QStringLiteral("1px solid transparent") : QStringLiteral("1px solid rgba(%1, 0.09)").arg(ink)));
