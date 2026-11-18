@@ -792,6 +792,7 @@ private:
     KNewFileMenu *m_newFileMenu;
     DolphinTabWidget *m_tabWidget;
     QWidget *m_ngSortBar = nullptr; // dolphin-ng: the sort/filter bar above the tabs
+    class NgGeometryWatch *m_ngAlignWatch = nullptr; // dolphin-ng: "Sort by" kept under the back arrow
     QToolBar *m_ngTabsToolBar = nullptr; // dolphin-ng: the row of tabs above the location bar
     void ngUpdateTabsRow();
     void ngStyleTitleRow(); // dolphin-ng: the row of tabs as a title bar: its tone, the current tab in the body's colour

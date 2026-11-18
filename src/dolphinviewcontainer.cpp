@@ -466,6 +466,45 @@ private:
 
 static void ngOpenLightbox(DolphinView *view, const KFileItem &item); // see NgLightbox
 
+// Breeze NG Aurora: the button of an open menu, painted the way the style paints a button joined to its menu. What
+// is under it (the window's own glass) is cleared and the menu's sheet laid straight on the blur, as the menu itself
+// lies: a sheet of colour over the window's glass came out a tone apart from the menu (more so the thinner the glass)
+class NgOpenSheet : public QObject
+{
+public:
+    NgOpenSheet(QToolButton *button, const QColor *sheet)
+        : QObject(button)
+        , m_sheet(sheet)
+    {
+        button->installEventFilter(this);
+    }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() == QEvent::Paint && m_sheet->isValid()) {
+            auto *button = static_cast<QWidget *>(watched);
+            if (button->property("menuOpen").toBool()) {
+                const QRectF rect(button->rect());
+                const qreal radius = button->property("ngPill").toBool() ? 13 : 6; // (as the sheet's rules)
+                QPainterPath path;
+                path.addRoundedRect(rect, radius, radius);
+                QPainterPath bottom;
+                bottom.addRect(rect.adjusted(0, radius, 0, 0)); // (square at the bottom, where the menu goes on)
+                path = path.united(bottom);
+                QPainter painter(button);
+                painter.setRenderHint(QPainter::Antialiasing, true);
+                painter.setCompositionMode(QPainter::CompositionMode_Clear);
+                painter.fillPath(path, Qt::black);
+                painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+                painter.fillPath(path, *m_sheet);
+            }
+        }
+        return false;
+    }
+
+private:
+    const QColor *m_sheet;
+};
+
 class NgSortBar : public QWidget
 {
 public:
@@ -645,6 +684,7 @@ protected:
 private:
     bool m_sheetSettling = false;
     bool m_sheetApplying = false;
+    QColor m_openSheet; // Aurora: the sheet of an open menu's button, see NgOpenSheet (invalid: the style sheet paints it)
     // what the filter shows: everything, files only (no folders), or one NgKind::Category
     enum { All = -1, FilesOnly = NgKind::CategoryCount };
 
@@ -725,16 +765,22 @@ private:
                           QStringLiteral("QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, %2); border-color: transparent; color: %3; }").arg(accentRgb, QString::number(accent.alphaF(), 'f', 2), ngAuroraSelectionText(palette).name()));
             sheet.replace(QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked:hover { background: rgba(%1, %2, %3, %4); }").arg(accentHover.red()).arg(accentHover.green()).arg(accentHover.blue()).arg(QString::number(accentHover.alphaF(), 'f', 2)));
             // the open button wears the menu's sheet: see-through in Aurora, at the menu's own opacity (Breeze NG's
-            // setting; solid there means the 74 % of a joined menu in Aurora), over the window's glass
+            // setting; solid there means the 90 % (92 % light) of a joined menu in Aurora), over the window's glass
             const int menuOpacity = KSharedConfig::openConfig(QStringLiteral("breezengrc"))->group(QStringLiteral("Style")).readEntry("MenuOpacity", 100);
-            // (Aurora's menu: a tone lifted 10 % from the window's colour, at 74 % when joined: as Helper::menuSheet in Breeze NG)
+            // (Aurora's menu: a tone lifted 10 % from the window's colour, at 90 % when joined: as Helper::menuSheet in Breeze NG)
             const QColor inkColor = dark ? QColor(255, 255, 255) : QColor(0, 0, 0);
             // (light schemes: frost, towards white and denser, as there)
             const qreal lift = dark ? 0.1 : 0.7;
             const QColor liftTo = dark ? inkColor : QColor(255, 255, 255);
             const QColor lifted(qRound(window.red() * (1 - lift) + liftTo.red() * lift), qRound(window.green() * (1 - lift) + liftTo.green() * lift), qRound(window.blue() * (1 - lift) + liftTo.blue() * lift));
-            const QString menuGlass = QStringLiteral("rgba(%1, %2, %3, %4)").arg(lifted.red()).arg(lifted.green()).arg(lifted.blue()).arg(QString::number((menuOpacity >= 100 ? (dark ? 74 : 84) : qMax(menuOpacity, 30)) / 100.0, 'f', 2));
-            sheet.replace(menuSheet.name(), menuGlass);
+            const QString menuGlass = QStringLiteral("rgba(%1, %2, %3, %4)").arg(lifted.red()).arg(lifted.green()).arg(lifted.blue()).arg(QString::number((menuOpacity >= 100 ? (dark ? 90 : 92) : qMax(menuOpacity, 30)) / 100.0, 'f', 2));
+            Q_UNUSED(menuGlass)
+            // (painted by NgOpenSheet, on the blur: the sheet's own rule only keeps the edge)
+            m_openSheet = QColor(lifted.red(), lifted.green(), lifted.blue(), qRound(255 * (menuOpacity >= 100 ? (dark ? 90 : 92) : qMax(menuOpacity, 30)) / 100.0));
+            sheet.replace(QStringLiteral("background: %1; border-color").arg(menuSheet.name()), QStringLiteral("background: transparent; border-color"));
+            sheet.replace(QStringLiteral("border-bottom-color: %1;").arg(menuSheet.name()), QStringLiteral("border-bottom-color: transparent;"));
+        } else {
+            m_openSheet = QColor();
         }
         m_sheetApplying = true; // setting a sheet sends style changes of its own: changeEvent() ignores them
         if (force) {
@@ -810,6 +856,7 @@ private:
         if (!menu) {
             return;
         }
+        new NgOpenSheet(button, &m_openSheet);
         auto repolish = [button](bool open) {
             button->setProperty("menuOpen", open);
             button->style()->unpolish(button);

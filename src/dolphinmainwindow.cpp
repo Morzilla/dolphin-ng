@@ -42,6 +42,7 @@
 #include "views/draganddrophelper.h"
 #include "views/viewproperties.h"
 
+#include <functional>
 #include <KActionCollection>
 #include <KActionMenu>
 #include <KAuthorized>
@@ -398,6 +399,47 @@ public:
         }
         QProxyStyle::drawPrimitive(element, option, painter, widget);
     }
+};
+
+// dolphin-ng: runs a function, once per turn of the event loop, whenever one of some widgets moves, is resized or shown
+class NgGeometryWatch : public QObject
+{
+public:
+    using QObject::QObject;
+    void watch(const QList<QWidget *> &widgets, std::function<void()> function)
+    {
+        for (const QPointer<QWidget> &old : std::as_const(m_widgets)) {
+            if (old) {
+                old->removeEventFilter(this);
+            }
+        }
+        m_widgets.clear();
+        for (QWidget *widget : widgets) {
+            if (widget) {
+                widget->installEventFilter(this);
+                m_widgets.append(widget);
+            }
+        }
+        m_function = std::move(function);
+    }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if ((event->type() == QEvent::Move || event->type() == QEvent::Resize || event->type() == QEvent::Show) && !m_queued && m_function) {
+            m_queued = true;
+            QTimer::singleShot(0, this, [this] {
+                m_queued = false;
+                if (m_function) {
+                    m_function();
+                }
+            });
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QList<QPointer<QWidget>> m_widgets;
+    std::function<void()> m_function;
+    bool m_queued = false;
 };
 
 DolphinMainWindow::DolphinMainWindow()
@@ -1233,6 +1275,11 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
                                     .arg(around.x()).arg(around.y()).arg(around.width()).arg(around.height()).toUtf8());
                     }
                     QAction *chosen = trigger ? menu->activeAction() : nullptr;
+                    // DOLPHIN_NG_DEMO_MENU_HOLD=ms: the menu stays open that long first (a screen capture of the real thing)
+                    if (const int hold = qEnvironmentVariableIntValue("DOLPHIN_NG_DEMO_MENU_HOLD"); hold > 0 && !chosen) {
+                        QTimer::singleShot(hold, menu, &QMenu::close);
+                        return;
+                    }
                     menu->close();
                     if (chosen) { // "|trigger": then choose the lit item, as a click would
                         QTimer::singleShot(0, chosen, &QAction::trigger);
@@ -4125,22 +4172,33 @@ void DolphinMainWindow::ngMoveToolbarButtons()
             location->setFixedHeight(height);
         }
         setProperty("_ng_row_height", height);
-        // the sort bar's first item ("Sort by") starts where the pill of back and forward starts, right above it:
-        // measured once both are laid out (a fixed margin missed it by the tool bar's own margins)
+        // the sort bar's first item ("Sort by") starts under the back arrow, the first thing in the pill above it (at
+        // the pill's own edge it looked out of line: the pill's round end and faint veil sit further in than its box).
+        // Measured once both are laid out, and again whenever either moves (the sidebar, a resize)
         if (!pill.isEmpty() && m_ngSortBar && m_ngSortBar->layout()) {
-            QTimer::singleShot(0, this, [this, first = QPointer<QWidget>(pill.first())] {
+            QPointer<QWidget> first = pill.first();
+            auto align = [this, first] {
                 if (!first || !m_ngSortBar || !m_ngSortBar->layout() || !first->isVisible()) {
                     return;
                 }
+                int inset = 0;
+                if (auto *button = qobject_cast<QToolButton *>(first.data()); button && !button->icon().isNull()) {
+                    inset = qMax(0, (button->width() - button->iconSize().width()) / 2);
+                }
                 QMargins margins = m_ngSortBar->layout()->contentsMargins();
-                const int navLeft = first->mapTo(this, QPoint(0, 0)).x();
+                const int navLeft = first->mapTo(this, QPoint(0, 0)).x() + inset;
                 const int barLeft = m_ngSortBar->mapTo(this, QPoint(0, 0)).x();
                 const int left = qMax(0, navLeft - barLeft);
                 if (margins.left() != left) {
                     margins.setLeft(left);
                     m_ngSortBar->layout()->setContentsMargins(margins);
                 }
-            });
+            };
+            QTimer::singleShot(0, this, align);
+            if (!m_ngAlignWatch) {
+                m_ngAlignWatch = new NgGeometryWatch(this);
+            }
+            m_ngAlignWatch->watch({first.data(), m_ngSortBar}, align);
         }
         ngSortBarSetRowHeight(m_ngSortBar, height); // (the bar's buttons below, the same height)
         if (m_ngFilterAction) {
