@@ -1353,12 +1353,15 @@ private:
             // fully rounded ends: the radius is half the height (a larger one would switch the rounding off)
             const QString ink = ngIsDark(QApplication::palette()) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
             const int row = m_rowHeight > 20 ? m_rowHeight : window() ? window()->property("_ng_row_height").toInt() : 0;
-            const int inner = row > 20 ? row - 2 : pill->findChild<QToolButton *>() ? pill->findChild<QToolButton *>()->sizeHint().height() : 24;
+            // the selected segment stands inside the pill with 2 px of the pill all round it, as the current tab in the
+            // title row does (filling the pill's whole height it met its edge, and on the first segment stood over it)
+            const int outer = row > 20 ? row : (pill->findChild<QToolButton *>() ? pill->findChild<QToolButton *>()->sizeHint().height() : 24) + 6;
+            const int inner = outer - 6;
             pill->setStyleSheet(QStringLiteral("QWidget#sortPill { background: rgba(%1, %4); border: %5; border-radius: %2px; }"
-                                               "QToolButton { border-radius: %3px; padding: 3px 11px; }")
+                                               "QToolButton { border-radius: %3px; padding: 2px 11px; }")
                                     .arg(ngAurora() ? QStringLiteral("255, 255, 255") : ink)
-                                    .arg(inner / 2 - 1) // (one curve for the pill and its selected segment, which fill the same height;
-                                    .arg(inner / 2 - 1) // below half the height inside the border: a larger radius switches the rounding off)
+                                    .arg(outer / 2 - 1) // (below half the height: a larger radius switches the rounding off)
+                                    .arg(inner / 2 - 1)
                                     .arg(ngAurora() ? QString::number(ngAuroraVeil(ngIsDark(palette()), true).alphaF(), 'f', 3) : QStringLiteral("0.05"),
                                          ngAurora() ? QStringLiteral("1px solid transparent") : QStringLiteral("1px solid rgba(%1, 0.09)").arg(ink)));
         }
@@ -1754,7 +1757,7 @@ private:
             m_sortPill->setFixedHeight(m_rowHeight);
             const auto segments = m_sortPill->findChildren<QToolButton *>();
             for (QToolButton *segment : segments) {
-                segment->setFixedHeight(m_rowHeight - 2);
+                segment->setFixedHeight(m_rowHeight - 6); // (2 px of the pill above and below it, inside its border)
             }
         }
     }
