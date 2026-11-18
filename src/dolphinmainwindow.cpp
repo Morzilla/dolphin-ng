@@ -424,7 +424,8 @@ public:
     }
     bool eventFilter(QObject *watched, QEvent *event) override
     {
-        if ((event->type() == QEvent::Move || event->type() == QEvent::Resize || event->type() == QEvent::Show) && !m_queued && m_function) {
+        if ((event->type() == QEvent::Move || event->type() == QEvent::Resize || event->type() == QEvent::Show || event->type() == QEvent::DynamicPropertyChange)
+            && !m_queued && m_function) {
             m_queued = true;
             QTimer::singleShot(0, this, [this] {
                 m_queued = false;
@@ -4244,11 +4245,14 @@ void DolphinMainWindow::ngMoveToolbarButtons()
                     return;
                 }
                 int inset = 0;
-                if (auto *button = qobject_cast<QToolButton *>(first.data()); button && !button->icon().isNull()) {
+                const bool leadPill = m_ngSortBar->property("_ng_lead_pill").toBool(); // (a pill under a pill: edge to edge)
+                if (auto *button = qobject_cast<QToolButton *>(first.data()); button && !button->icon().isNull() && !leadPill) {
                     inset = qMax(0, (button->width() - button->iconSize().width()) / 2);
                 }
                 QMargins margins = m_ngSortBar->layout()->contentsMargins();
-                const int navLeft = first->mapTo(this, QPoint(0, 0)).x() + inset;
+                // (a pill: the edge of the navigation's own pill, which holds the back button)
+                const QWidget *edge = leadPill && first->parentWidget() && first->parentWidget()->objectName() == QLatin1String("navPill") ? first->parentWidget() : first.data();
+                const int navLeft = edge->mapTo(this, QPoint(0, 0)).x() + inset;
                 const int barLeft = m_ngSortBar->mapTo(this, QPoint(0, 0)).x();
                 const int left = qMax(0, navLeft - barLeft);
                 if (margins.left() != left) {

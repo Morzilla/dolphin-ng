@@ -1154,6 +1154,11 @@ public:
             m_sortCaption->setVisible(!compact);
         }
         m_sortCompact->setVisible(compact);
+        // the window lines the bar's first item up with the navigation above: a pill (the compact sort button) with
+        // the navigation's pill, the "Sort by" text with the arrow in it (see DolphinMainWindow)
+        if (property("_ng_lead_pill").toBool() != compact) {
+            setProperty("_ng_lead_pill", compact);
+        }
         // and if the one line is still too wide: the groups, the filters, the cards and the sorting keep only their
         // icon, one after the other, until it fits (their names are in the tooltips)
         const QList<QToolButton *> named = {m_groups.data(), m_filters.data(), m_cards.data(), qobject_cast<QToolButton *>(m_sortCompact.data())};
