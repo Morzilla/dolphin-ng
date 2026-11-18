@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      2b1d3bcf5cc225a2daa2222445812cb3423027d3
+%global commit      61885af2d7e8cc137441f3ce8a5110e0d4c973b0
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611181138
+%global snapdate    202611181546
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -131,6 +131,12 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Wed Nov 18 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611181546git61885af-1
+- A Content column: pages, words, duration or pixels with their unit, read from the file (no Baloo needed)
+- A folder with its own cover (folder.jpg, cover.jpg...) shows it on its card
+- The sidebar button level with the tabs; the compact sort button lined up with the navigation
+- Dossier: the facts whole, in a smaller type when long
+
 * Wed Nov 18 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611181138git2b1d3bc-1
 - The quick actions page: its preview pill follows the scheme
 - What is selected or on wears the accent in every look (sidebar, cards, the bar), text and icons white or black on it
