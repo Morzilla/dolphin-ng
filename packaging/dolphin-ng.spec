@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      3fc537a927ebce719ed45d1dd837c987ac956f94
+%global commit      c28128bfc90ed7e433ed70e667080a27d336cd1e
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611172030
+%global snapdate    202611181131
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -131,6 +131,10 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Wed Nov 18 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611181131gitc28128b-1
+- What is selected or on wears the accent in every look (sidebar, cards, the bar), text and icons white or black on it
+- "Sort by" under the back arrow; an open menu's button the colour of its menu
+
 * Tue Nov 17 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611172030git3fc537a-1
 - Folders in the accent colour; archives drawn as pages; groups beside the sorting
 - Round corners and a lower title row; the search field's gap; an opaque sidebar card in the opaque looks
