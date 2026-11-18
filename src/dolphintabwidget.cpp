@@ -393,8 +393,9 @@ void DolphinTabWidget::closeTab(const int index)
     Q_ASSERT(index < count());
 
     if (count() < 2) {
-        // Close Dolphin when closing the last tab.
-        parentWidget()->close();
+        // Close Dolphin when closing the last tab. dolphin-ng: the window, not the parent: the tabs sit in a box next to
+        // the sidebar, and closing that left the sidebar alone across the whole window
+        window()->close();
         return;
     }
 
