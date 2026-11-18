@@ -37,12 +37,20 @@ the files sorts and filters instead.
 
 ![Drawn rows](ng/screenshots/features/home-rows.png)
 
+A **Content** column (View → Show in Details View, or the column header's menu) tells what is inside each file in
+one place, with its unit: "24 pages", "123 words", "2:47", "1600×900", and for a folder what it holds ("2 audio ·
+1 image"). It is read from the files themselves, like the Dossier, so it is filled in folders the search index
+does not cover. Sorting by it keeps pages with pages and durations with durations, and grouped it gives a section
+per unit (Folders, Pages, Words, Duration, Pixels, Other). In the two-line rows it joins the second line.
+
 ## Files drawn, not iconised
 
 - **Type and size are written into a drawing of the file** instead of a badge: as the title of a page (an archive
   is a page with a zip down its side), on the front of a folder.
 - **Real previews become objects:** a picture is a print with its white margin (type and size on it), a PDF a
   page with a footer, a video a frame on a strip of film.
+- **A folder with its own cover** (folder.jpg, cover.jpg, front.jpg, albumart.jpg, also .png or .webp) shows that
+  picture whole inside the folder on its Tessera card: an album looks like its record.
 - **Folders** wear the accent colour, so they stand out from files; they are flat folders with their item count, and their size when Dolphin measures folders
   (NG settings → Rows; it keeps the disk busy for a while, and the option says so).
 - **The well-known folders of the home** (Desktop, Downloads, Documents, Pictures, Music, Videos, Templates,

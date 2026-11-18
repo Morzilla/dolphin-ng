@@ -10,6 +10,7 @@
 #include "kfileitemmodel.h"
 #include "private/kdirectorycontentscounter.h"
 #include "private/kpixmapmodifier.h"
+#include "private/ngfacts.h"
 
 #include <KConfig>
 #include <KConfigGroup>
@@ -114,6 +115,19 @@ KFileItemModelRolesUpdater::KFileItemModelRolesUpdater(KFileItemModel *model, QO
     m_resolvableRoles.insert("size");
     m_resolvableRoles.insert("type");
     m_resolvableRoles.insert("isExpandable");
+    m_resolvableRoles.insert("ngContent");
+    // dolphin-ng: the "Content" column, filled in when the file has been read (in the background, by NgFacts)
+    connect(NgFacts::instance(), &NgFacts::ready, this, [this](const QString &path) {
+        if (!m_roles.contains("ngContent")) {
+            return;
+        }
+        const int index = m_model->index(QUrl::fromLocalFile(path));
+        if (index >= 0) {
+            QHash<QByteArray, QVariant> data;
+            ngContentData(m_model->fileItem(index), &data);
+            setModelData(index, data);
+        }
+    });
 #if HAVE_BALOO
     m_resolvableRoles += KBalooRolesProvider::instance().roles();
 #endif
@@ -1380,6 +1394,10 @@ QHash<QByteArray, QVariant> KFileItemModelRolesUpdater::rolesData(const KFileIte
         data.insert("type", item.mimeComment());
     }
 
+    if (m_roles.contains("ngContent")) {
+        ngContentData(item, &data);
+    }
+
     QStringList overlays = item.overlays();
     for (KOverlayIconPlugin *it : std::as_const(m_overlayIconsPlugin)) {
         overlays.append(it->getOverlays(item.url()));
@@ -1395,6 +1413,26 @@ QHash<QByteArray, QVariant> KFileItemModelRolesUpdater::rolesData(const KFileIte
     }
 #endif
     return data;
+}
+
+void KFileItemModelRolesUpdater::ngContentData(const KFileItem &item, QHash<QByteArray, QVariant> *data)
+{
+    if (item.isNull() || !item.isLocalFile()) {
+        return;
+    }
+    if (!item.isMimeTypeKnown()) {
+        item.determineMimeType();
+    }
+    const NgFileFacts *facts = NgFacts::instance()->facts(item.localPath(), item.mimetype(), item.isDir(), item.time(KFileItem::ModificationTime).toSecsSinceEpoch(),
+                                                          item.isDir() ? 0 : qint64(item.size()));
+    if (!facts) {
+        return; // being read: NgFacts::ready brings it here again
+    }
+    QString key, group;
+    const QString text = ngContentText(*facts, &key, &group);
+    data->insert("ngContent", text);
+    data->insert("ngContentSort", key);
+    data->insert("ngContentGroup", group);
 }
 
 void KFileItemModelRolesUpdater::slotOverlaysChanged(const QUrl &url, const QStringList &)

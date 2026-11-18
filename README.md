@@ -18,6 +18,7 @@
 >   *Dossier*, the file's identity card (pages and words, size in pixels, duration, where it was downloaded from).
 >   A file without a preview gets a drawing of what it holds: a page, a sheet, lines of code, a waveform.
 > - **Drawn rows**: the details view where every row carries that drawing, its type, size and how long ago it changed.
+> - **A Content column**: pages, words, duration or pixels with their unit, read from the file, no search index needed.
 > - **One bar** for sorting, filtering by kind of file and grouping, one click each; it stays on one line in a narrow window.
 > - **Groups that follow the sorting**: by date (today, yesterday, this week…), by size (folders, MB, KB), by name, by type.
 > - **Pinned items**: files and folders that stay first whatever the sorting, with their own section in the sidebar.

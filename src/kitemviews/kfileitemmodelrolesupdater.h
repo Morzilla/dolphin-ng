@@ -259,6 +259,12 @@ private Q_SLOTS:
 
 private:
     /**
+     * dolphin-ng: the "Content" column of @p item (ngContent, and its sort key and group) into @p data, when
+     * NgFacts has read the file; nothing while it is being read.
+     */
+    void ngContentData(const KFileItem &item, QHash<QByteArray, QVariant> *data);
+
+    /**
      * Starts the updating of all roles. The visible items are handled first.
      */
     void startUpdating();

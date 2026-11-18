@@ -3153,6 +3153,7 @@ struct NgFolderPeek {
     QStringList names; // a trailing "/" marks a folder
     QStringList pictures; // the first files that have a picture to show (images, PDFs, videos)
     int more = 0; // entries beyond `names`; -1: many, not counted
+    bool cover = false; // `pictures` is the folder's own cover
 };
 NgFolderPeek ngFolderPeek(const QString &path)
 {
@@ -3184,6 +3185,21 @@ NgFolderPeek ngFolderPeek(const QString &path)
     std::sort(folders.begin(), folders.end(), collator);
     std::sort(files.begin(), files.end(), collator);
     NgFolderPeek peek;
+    // an album or a collection with its own cover (folder.jpg, cover.png, front.jpg...): the cover alone stands for it
+    static const QSet<QString> coverNames{QStringLiteral("folder"), QStringLiteral("cover"), QStringLiteral("front"), QStringLiteral("albumart")};
+    static const QSet<QString> coverSuffixes{QStringLiteral("jpg"), QStringLiteral("jpeg"), QStringLiteral("png"), QStringLiteral("webp")};
+    QString cover;
+    for (const QString &name : std::as_const(files)) {
+        const int dot = name.lastIndexOf(QLatin1Char('.'));
+        if (dot > 0 && coverNames.contains(name.left(dot).toLower()) && coverSuffixes.contains(name.mid(dot + 1).toLower())) {
+            cover = name;
+            break;
+        }
+    }
+    if (!cover.isEmpty()) {
+        peek.pictures.append(cover);
+        peek.cover = true;
+    }
     for (const QString &name : std::as_const(folders)) {
         if (peek.names.count() < 5) {
             peek.names.append(name + QLatin1Char('/'));
@@ -3195,7 +3211,7 @@ NgFolderPeek ngFolderPeek(const QString &path)
         }
         static const QSet<QString> moving{QStringLiteral("PDF"), QStringLiteral("MP4"), QStringLiteral("MKV"), QStringLiteral("WEBM"), QStringLiteral("MOV"), QStringLiteral("AVI")};
         const NgKind kind = ngKindFor(name, false);
-        if (peek.pictures.count() < 4 && (kind.category == NgKind::Image || moving.contains(kind.sigla))) {
+        if (cover.isEmpty() && peek.pictures.count() < 4 && (kind.category == NgKind::Image || moving.contains(kind.sigla))) {
             peek.pictures.append(name);
         }
     }
@@ -3978,12 +3994,14 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                 m_ngCardPeekMore = 0;
                 m_ngCardFolderPath.clear();
                 m_ngCardFolderPictures.clear();
+                m_ngCardFolderCover = false;
                 if (fileItem.isDir() && fileItem.isLocalFile() && ngCardStyle(this) == NgCardStyle::Tessera) {
                     const NgFolderPeek peek = ngFolderPeek(fileItem.localPath());
                     m_ngCardPeek = peek.names;
                     m_ngCardPeekMore = peek.more;
                     m_ngCardFolderPath = fileItem.localPath();
                     m_ngCardFolderPictures = peek.pictures;
+                    m_ngCardFolderCover = peek.cover;
                 }
             }
         }
@@ -5276,7 +5294,13 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
             const qreal gap = 4, tileWidth = (inside.width() - (count - 1) * gap) / count;
             for (int i = 0; i < count; ++i) {
                 const QPixmap &picture = folderPictures.at(i);
-                const QRectF tile(inside.left() + i * (tileWidth + gap), inside.top(), tileWidth, inside.height());
+                QRectF tile(inside.left() + i * (tileWidth + gap), inside.top(), tileWidth, inside.height());
+                if (m_ngCardFolderCover && picture.height() > 0) {
+                    // a cover is shown whole across, in the middle of the folder, as a record in its sleeve
+                    const qreal height = b.bottom() - inside.top();
+                    const qreal width = qMin(inside.width(), height * picture.width() / picture.height());
+                    tile = QRectF(inside.center().x() - width / 2, inside.top(), width, height);
+                }
                 // cover the tile: the middle of a wide picture, the top of a tall one
                 const qreal scale = qMax(tile.width() / picture.width(), tile.height() / picture.height());
                 const QSizeF part(tile.width() / scale, tile.height() / scale);

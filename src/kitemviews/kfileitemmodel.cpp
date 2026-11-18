@@ -681,6 +681,7 @@ QString KFileItemModel::roleDescription(const QByteArray &role) const
             }
             description.insert(map[i].role, map[i].roleTranslation.toString());
         }
+        description.insert("ngContent", ngTr("Content", "Contenuto"));
     }
 
     return description.value(role);
@@ -727,6 +728,9 @@ QList<QPair<int, QVariant>> KFileItemModel::groups() const
             break;
         case RatingRole:
             m_groups = ratingRoleGroups();
+            break;
+        case NgContentRole:
+            m_groups = genericStringRoleGroups("ngContentGroup"); // by unit: pages, duration, pixels...
             break;
         default:
             m_groups = genericStringRoleGroups(groupRole());
@@ -1289,6 +1293,9 @@ QList<KFileItemModel::RoleInfo> KFileItemModel::rolesInformation()
                 RoleInfo info;
                 info.role = map[i].role;
                 info.translation = map[i].roleTranslation.toString();
+                if (map[i].roleType == NgContentRole) {
+                    info.translation = ngTr("Content", "Contenuto");
+                }
                 if (!map[i].groupTranslation.isEmpty()) {
                     info.group = map[i].groupTranslation.toString();
                 } else {
@@ -1299,7 +1306,10 @@ QList<KFileItemModel::RoleInfo> KFileItemModel::rolesInformation()
                 }
                 info.requiresBaloo = map[i].requiresBaloo;
                 info.requiresIndexer = map[i].requiresIndexer;
-                if (!map[i].tooltipTranslation.isEmpty()) {
+                if (map[i].roleType == NgContentRole) {
+                    info.tooltip = ngTr("Pages, duration, size in pixels or what a folder holds, read from the file itself: no search index needed",
+                                        "Pagine, durata, dimensioni in pixel o cosa contiene una cartella, letti dal file stesso: senza indice di ricerca");
+                } else if (!map[i].tooltipTranslation.isEmpty()) {
                     info.tooltip = map[i].tooltipTranslation.toString();
                 } else {
                     info.tooltip = QString();
@@ -2778,6 +2788,17 @@ int KFileItemModel::sortRoleCompare(const ItemData *a, const ItemData *b, const 
         break;
     }
 
+    case NgContentRole: {
+        // by unit, then by amount; what tells nothing goes last
+        const QString keyA = a->values.value("ngContentSort").toString();
+        const QString keyB = b->values.value("ngContentSort").toString();
+        if (keyA.isEmpty() != keyB.isEmpty()) {
+            return keyA.isEmpty() ? +1 : -1;
+        }
+        result = QString::compare(keyA, keyB);
+        break;
+    }
+
     case DimensionsRole: {
         const QByteArray role = roleForType(m_sortRole);
         const QSize dimensionsA = a->values.value(role).toSize();
@@ -3349,6 +3370,7 @@ const KFileItemModel::RoleInfoMap *KFileItemModel::rolesInfoMap(int &count)
         { "creationtime",        CreationTimeRole,        kli18nc("@label", "Created"),              KLazyLocalizedString(),        kli18nc("@tooltip", "The date format can be selected in settings."),                    false,           false },
         { "accesstime",          AccessTimeRole,          kli18nc("@label", "Accessed"),             KLazyLocalizedString(),        kli18nc("@tooltip", "The date format can be selected in settings."),                    false,           false },
         { "type",                TypeRole,                kli18nc("@label", "Type"),                 KLazyLocalizedString(),        KLazyLocalizedString(),                    false,           false },
+        { "ngContent",           NgContentRole,           kli18nc("@label", "Content"),              KLazyLocalizedString(),        KLazyLocalizedString(),                    false,           false },
         { "rating",              RatingRole,              kli18nc("@label", "Rating"),               KLazyLocalizedString(),        KLazyLocalizedString(),                    true,            false },
         { "tags",                TagsRole,                kli18nc("@label", "Tags"),                 KLazyLocalizedString(),        KLazyLocalizedString(),                    true,            false },
         { "comment",             CommentRole,             kli18nc("@label", "Comment"),              KLazyLocalizedString(),        KLazyLocalizedString(),                    true,            false },

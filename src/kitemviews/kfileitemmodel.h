@@ -360,6 +360,7 @@ private:
         VideoCodecRole,
         PixelFormatRole,
         ColorSpaceRole,
+        NgContentRole, // dolphin-ng: what is inside, read from the file (see ngContentText)
         // Non-visible roles:
         IsDirRole,
         IsLinkRole,

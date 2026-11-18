@@ -388,6 +388,7 @@ private:
     qreal m_ngReveal = 0.0; // Tessera: how far the hover pill has faded in (0..1)
     QPointer<QVariantAnimation> m_ngRevealAnimation;
     QStringList m_ngCardFolderPictures;
+    bool m_ngCardFolderCover = false; // m_ngCardFolderPictures is the folder's own cover (folder.jpg, cover.png...)
     QString m_ngCardFolderPath; // Tessera, folders: the folder whose pictures are shown in the band
     QStringList m_ngCardPeek; // Tessera, folders: the first entries of the folder; a trailing "/" marks a folder
     int m_ngCardPeekMore = 0; // how many more there are (-1: many, not counted)

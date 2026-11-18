@@ -35,6 +35,7 @@ struct NgMixPart {
 
 struct NgFileFacts {
     QList<NgFact> facts; // at most three
+    int ownFacts = 0; // how many of them the file itself told (the rest: its size and format, from the file system)
     QList<NgMixPart> mix; // folders: what they hold, the most first
     QString lastName; // folders: the entry changed last
     QDateTime lastWhen;
@@ -45,6 +46,14 @@ struct NgFileFacts {
     QStringList tags;
     int rating = 0; // 0..10, as in Baloo
 };
+
+/**
+ * dolphin-ng: the "Content" column: the first thing the file itself tells, with its unit ("24 pages", "2:47",
+ * "4032×3024"), or what a folder holds ("8 PDF · 3 images"); empty when the file tells nothing. @p sortKey: for
+ * sorting, the unit first and then the amount, so pages go with pages and seconds with seconds. @p group: the
+ * heading of the unit when the view is grouped ("Pages", "Duration", "Pixels").
+ */
+DOLPHIN_EXPORT QString ngContentText(const NgFileFacts &facts, QString *sortKey = nullptr, QString *group = nullptr);
 
 class DOLPHIN_EXPORT NgFacts : public QObject
 {

@@ -472,11 +472,108 @@ NgFileFacts readFacts(const QString &path, const QString &mime, bool isDir, qint
         }
     }
     // room left: what the file system knows
+    out.ownFacts = out.facts.count();
     add(KIO::convertSize(KIO::filesize_t(qMax<qint64>(0, size))), ngTr("size", "dimensione"));
     add(kind.sigla, ngTr("format", "formato"));
     return out;
 }
 } // namespace
+
+QString ngContentText(const NgFileFacts &facts, QString *sortKey, QString *group)
+{
+    auto heading = [group](const QString &text) {
+        if (group) {
+            *group = text.isEmpty() ? text : text.left(1).toUpper() + text.mid(1);
+        }
+    };
+    auto pad = [](double amount) {
+        return QStringLiteral("%1").arg(qint64(std::llround(qMax(0.0, amount))), 15, 10, QLatin1Char('0'));
+    };
+    if (!facts.mix.isEmpty()) {
+        int total = 0;
+        QStringList parts;
+        for (const NgMixPart &part : facts.mix) {
+            total += part.count;
+            if (parts.count() < 2) {
+                parts << part.label;
+            }
+        }
+        if (sortKey) {
+            *sortKey = QStringLiteral("0|") + pad(total);
+        }
+        heading(ngTr("Folders", "Cartelle"));
+        return parts.join(QStringLiteral(" · "));
+    }
+    if (facts.ownFacts <= 0 || facts.facts.isEmpty()) {
+        if (sortKey) {
+            sortKey->clear();
+        }
+        heading(ngTr("Other", "Altro"));
+        return QString();
+    }
+    const NgFact &fact = facts.facts.constFirst();
+    const QString &value = fact.value;
+    QString unit;
+    double amount = 0;
+    QString text;
+    static const QRegularExpression digitsOnly(QStringLiteral("^[\\d\\s.,'\\x{00A0}\\x{202F}]+$"));
+    if (value.contains(QLatin1Char(':'))) {
+        // a duration: h:mm:ss or m:ss
+        unit = QStringLiteral("2time");
+        for (const QString &part : value.split(QLatin1Char(':'))) {
+            amount = amount * 60 + part.toDouble();
+        }
+        text = value;
+        heading(ngTr("Duration", "Durata"));
+    } else if (value.contains(QChar(0x00D7))) {
+        // pixels: width×height
+        unit = QStringLiteral("3pixels");
+        const QStringList sides = value.split(QChar(0x00D7));
+        amount = sides.value(0).toDouble() * sides.value(1).toDouble();
+        text = value;
+        heading(ngTr("Pixels", "Pixel"));
+    } else if (value == QLatin1String("4K") || value.endsWith(QLatin1Char('p'))) {
+        unit = QStringLiteral("3pixels");
+        const double height = value == QLatin1String("4K") ? 2160 : value.chopped(1).toDouble();
+        amount = height * height * 16 / 9;
+        text = value;
+        heading(ngTr("Pixels", "Pixel"));
+    } else if (digitsOnly.match(value).hasMatch()) {
+        // a count: its word says of what, in the singular or the plural ("1 page", "24 pages")
+        struct Counted {
+            const char *stems; // the first letters of the word, in English and Italian, singular and plural
+            const char *english, *italian;
+        };
+        static const Counted counted[] = {{"page|pagi", "pages", "pagine"},
+                                          {"word|paro", "words", "parole"},
+                                          {"shee|fogl", "sheets", "fogli"},
+                                          {"line|riga|righ", "lines", "righe"},
+                                          {"file", "files", "file"}};
+        const QString stem = fact.word.left(4).toLower();
+        unit = QStringLiteral("1") + stem;
+        QString plural = fact.word;
+        for (const Counted &c : counted) {
+            if (QString::fromLatin1(c.stems).split(QLatin1Char('|')).contains(stem)) {
+                unit = QStringLiteral("1") + QString::fromLatin1(c.english);
+                plural = ngTr(c.english, c.italian);
+                break;
+            }
+        }
+        QString digits = value;
+        digits.remove(QRegularExpression(QStringLiteral("\\D")));
+        amount = digits.toDouble();
+        text = value + QLatin1Char(' ') + fact.word;
+        heading(plural);
+    } else {
+        unit = QStringLiteral("4") + fact.word.left(4).toLower();
+        text = value + QLatin1Char(' ') + fact.word;
+        heading(fact.word);
+    }
+    if (sortKey) {
+        *sortKey = unit + QLatin1Char('|') + pad(amount);
+    }
+    return text;
+}
 
 NgFacts *NgFacts::instance()
 {
