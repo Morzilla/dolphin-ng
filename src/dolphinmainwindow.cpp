@@ -4358,8 +4358,11 @@ void DolphinMainWindow::ngMoveToolbarButtons()
                       fieldDown = dark ? QStringLiteral("0.92") : QStringLiteral("0.17");
         const QString rim = dark ? QStringLiteral("rgba(255, 255, 255, 0.13)") : QStringLiteral("rgba(0, 0, 0, 0.13)");
         for (int i = 0; i < pill.size(); ++i) {
-            const QString left = i == 0 ? QStringLiteral("9px") : QStringLiteral("0");
-            const QString right = i == pill.size() - 1 ? QStringLiteral("9px") : QStringLiteral("0");
+            // round ends, half the height: a pill like every other control of the bars (9 px corners read as a box
+            // beside the round pills below)
+            const QString round = QStringLiteral("%1px").arg(height / 2);
+            const QString left = i == 0 ? round : QStringLiteral("0");
+            const QString right = i == pill.size() - 1 ? round : QStringLiteral("0");
             if (glassField) {
                 // one outline around the whole pill: each button draws the sides that are the pill's
                 const QString sheet = QStringLiteral("QToolButton { background: rgba(%1, %9); border: 1px solid %2; border-left-width: %3; border-right-width: %4;"

@@ -481,24 +481,18 @@ void PlacesPanel::ngPaintPills()
 void PlacesPanel::ngApplyPalette()
 {
     QPalette glass = m_ngPalette;
-    if (ngSetting("SIDEBAR").toLower() != QLatin1String("plain")) {
-        // the style highlights the selected and hovered entries with the palette's highlight colour;
-        // a translucent white (black on light schemes) turns that into a glass pill over the backdrop
-        // the pill itself is painted in paintEvent(); the style must not draw a second one
-        glass.setColor(QPalette::Highlight, QColor(255, 255, 255, 0)); // white, not black: the style mixes the rgb with its own alpha
-        glass.setColor(QPalette::HighlightedText, ngAurora() ? ngAuroraSelectionText(glass) : glass.color(QPalette::WindowText));
-    }
+    // the style highlights the selected and hovered entries with the palette's highlight colour; a clear one leaves
+    // them to the panel, which paints its pills in paintEvent() (the plain sidebar too: the style's own rectangle
+    // stood above the round pills of the Filters section)
+    glass.setColor(QPalette::Highlight, QColor(255, 255, 255, 0)); // white, not black: the style mixes the rgb with its own alpha
+    glass.setColor(QPalette::HighlightedText, ngAurora() ? ngAuroraSelectionText(glass) : glass.color(QPalette::WindowText));
     setPalette(glass);
     viewport()->setPalette(glass);
 }
 
 QColor PlacesPanel::ngBarColour() const
 {
-    // the accent of the window's own palette, for the free space bars of disk rows on the glass card; invalid with
-    // the plain sidebar, where the palette is the window's and nothing needs changing
-    if (ngSetting("SIDEBAR").toLower() == QLatin1String("plain")) {
-        return QColor();
-    }
+    // the accent of the window's own palette, for the free space bars of disk rows (the panel's own highlight is clear)
     return m_ngPalette.color(QPalette::Active, QPalette::Highlight);
 }
 
@@ -620,11 +614,11 @@ void PlacesPanel::paintEvent(QPaintEvent *event)
         }
     }
     KFilePlacesView::paintEvent(event);
-    if (!plain) {
-        ngPaintPills();
-    }
+    // the pills and the section titles in every sidebar, plain or glass: the same kind of thing as the Filters below
+    Q_UNUSED(plain)
+    ngPaintPills();
     const auto *placesModel = qobject_cast<KFilePlacesModel *>(model());
-    if (plain || !placesModel) {
+    if (!placesModel) {
         return;
     }
 
