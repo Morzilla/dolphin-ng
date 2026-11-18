@@ -765,18 +765,18 @@ private:
                           QStringLiteral("QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, %2); border-color: transparent; color: %3; }").arg(accentRgb, QString::number(accent.alphaF(), 'f', 2), ngAuroraSelectionText(palette).name()));
             sheet.replace(QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked:hover { background: rgba(%1, %2, %3, %4); }").arg(accentHover.red()).arg(accentHover.green()).arg(accentHover.blue()).arg(QString::number(accentHover.alphaF(), 'f', 2)));
             // the open button wears the menu's sheet: see-through in Aurora, at the menu's own opacity (Breeze NG's
-            // setting; solid there means the 90 % (92 % light) of a joined menu in Aurora), over the window's glass
+            // setting; solid there means the opaque sheet of a joined menu in Aurora), over the window's glass
             const int menuOpacity = KSharedConfig::openConfig(QStringLiteral("breezengrc"))->group(QStringLiteral("Style")).readEntry("MenuOpacity", 100);
-            // (Aurora's menu: a tone lifted 10 % from the window's colour, at 90 % when joined: as Helper::menuSheet in Breeze NG)
+            // (Aurora's menu: a tone lifted 10 % from the window's colour, opaque when joined: as Helper::menuSheet in Breeze NG)
             const QColor inkColor = dark ? QColor(255, 255, 255) : QColor(0, 0, 0);
             // (light schemes: frost, towards white and denser, as there)
             const qreal lift = dark ? 0.1 : 0.7;
             const QColor liftTo = dark ? inkColor : QColor(255, 255, 255);
             const QColor lifted(qRound(window.red() * (1 - lift) + liftTo.red() * lift), qRound(window.green() * (1 - lift) + liftTo.green() * lift), qRound(window.blue() * (1 - lift) + liftTo.blue() * lift));
-            const QString menuGlass = QStringLiteral("rgba(%1, %2, %3, %4)").arg(lifted.red()).arg(lifted.green()).arg(lifted.blue()).arg(QString::number((menuOpacity >= 100 ? (dark ? 90 : 92) : qMax(menuOpacity, 30)) / 100.0, 'f', 2));
+            const QString menuGlass = QStringLiteral("rgba(%1, %2, %3, %4)").arg(lifted.red()).arg(lifted.green()).arg(lifted.blue()).arg(QString::number((menuOpacity >= 100 ? 100 : qMax(menuOpacity, 30)) / 100.0, 'f', 2));
             Q_UNUSED(menuGlass)
             // (painted by NgOpenSheet, on the blur: the sheet's own rule only keeps the edge)
-            m_openSheet = QColor(lifted.red(), lifted.green(), lifted.blue(), qRound(255 * (menuOpacity >= 100 ? (dark ? 90 : 92) : qMax(menuOpacity, 30)) / 100.0));
+            m_openSheet = QColor(lifted.red(), lifted.green(), lifted.blue(), qRound(255 * (menuOpacity >= 100 ? 100 : qMax(menuOpacity, 30)) / 100.0));
             sheet.replace(QStringLiteral("background: %1; border-color").arg(menuSheet.name()), QStringLiteral("background: transparent; border-color"));
             sheet.replace(QStringLiteral("border-bottom-color: %1;").arg(menuSheet.name()), QStringLiteral("border-bottom-color: transparent;"));
         } else {
