@@ -1083,7 +1083,8 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     };
     note(ngTr("A look fills in the other tabs; you can adjust anything before applying.", "Un aspetto compila le altre schede; puoi ritoccare tutto prima di applicare."));
     heading(ngTr("Icons view", "Vista a icone"));
-    m_tiles = toggle(ngTr("Dark tiles with rounded previews", "Tessere scure con anteprime arrotondate"));
+    // (it acts on the Icons view only: named so, it read as a setting that did nothing in the others)
+    m_tiles = toggle(ngTr("Icons view: dark tiles with rounded previews", "Vista Icone: tessere scure con anteprime arrotondate"));
     page->addStretch();
     note(ngTr("Changes take effect as soon as they are applied. A DOLPHIN_NG_… variable set at start-up wins: the matching choice is disabled.",
               "Le modifiche valgono appena applicate. Una variabile DOLPHIN_NG_… impostata all'avvio ha la precedenza: la scelta corrispondente è disattivata."));

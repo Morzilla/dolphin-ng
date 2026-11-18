@@ -532,7 +532,18 @@ DolphinMainWindow::DolphinMainWindow()
         setProperty("_KDE_NET_WM_FORCE_SHADOW", true);
     }
 
-    setStateConfigGroup("State");
+    // dolphin-ng: a state group of its own. Stock Dolphin keeps its window state (the size of the window and of the
+    // sidebar among it) under "State" in the same dolphinstaterc: whoever closed last won, and with both in use the
+    // sidebar came back at stock Dolphin's width every time. Started from what is there the first time
+    {
+        KConfigGroup own(KSharedConfig::openStateConfig(), QStringLiteral("NG State"));
+        const KConfigGroup shared(KSharedConfig::openStateConfig(), QStringLiteral("State"));
+        if (!own.exists() && shared.exists()) {
+            shared.copyTo(&own);
+            own.sync();
+        }
+    }
+    setStateConfigGroup(QStringLiteral("NG State"));
 
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
     new KColorSchemeManager(this); // Sets a sensible color scheme which fixes unreadable icons and text on Windows.
