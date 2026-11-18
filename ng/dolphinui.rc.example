@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!DOCTYPE gui SYSTEM "kpartgui.dtd">
-<gui name="dolphin" version="49">
+<gui name="dolphin" version="51">
     <MenuBar>
         <Menu name="file">
             <Action name="new_menu" />
@@ -116,7 +116,6 @@
         <Action name="url_navigators" />
         <Action name="create_dir" />
         <Action name="split_view" />
-        <Action name="split_stash" />
         <Action name="toggle_search" />
         <Action name="hamburger_menu" />
     </ToolBar>

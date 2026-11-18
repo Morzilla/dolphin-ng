@@ -676,6 +676,11 @@ private:
                                      "QWidget#navPill QToolButton { padding: 2px 11px; border-radius: 13px; }"
                                      // the buttons moved in from the tool bar (the menu, stash...) are icons: no arrow. The menu
                                      // button gets its menu only when clicked, and showed an arrow stuck to its icon while open
+                                     // the bar's buttons with a name (groups, cards, filters, rows, columns, split) stand on the veil of
+                                     // the sort pill, round like it: every control of the bar the same kind of thing
+                                     "QToolButton[ngPill=\"true\"] { background: rgba(%1, 0.05); border-color: rgba(%1, 0.09); border-radius: 13px; padding-left: 10px; }"
+                                     "QToolButton[ngPill=\"true\"]:hover { background: rgba(%1, 0.10); }"
+                                     "QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }"
                                      "QWidget#ngTrailing QToolButton::menu-indicator { image: none; width: 0px; }"
                                      "QWidget#ngTrailing QToolButton[popupMode=\"2\"] { padding-right: 7px; }")
                           .arg(ink, menuSheet.name(), menuEdge, palette.color(QPalette::WindowText).name());
@@ -835,6 +840,7 @@ public:
             button->setAutoRaise(true);
             // the names that the tool bar showed beside the icon stay (Split), the others are icons
             button->setToolButtonStyle(action->priority() == QAction::LowPriority || action->iconText().isEmpty() ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextBesideIcon);
+            button->setProperty("ngPill", button->toolButtonStyle() == Qt::ToolButtonTextBesideIcon); // (Split: a pill; the icons stay flat)
             button->setIconSize(QSize(20, 20));
             if (action->menu()) {
                 button->setPopupMode(QToolButton::InstantPopup);
@@ -929,7 +935,7 @@ public:
         // when narrow, the groups also sit closer and the search box is shorter
         for (const QPointer<QWidget> &gap : std::as_const(m_gaps)) {
             if (gap) {
-                gap->setFixedWidth(compact ? 6 : 22);
+                gap->setFixedWidth(compact ? 4 : 8);
             }
         }
         if (ownFilter) {
@@ -1078,7 +1084,7 @@ private:
         pill->setObjectName(QStringLiteral("sortPill"));
         pill->setAttribute(Qt::WA_StyledBackground);
         auto *segments = new QHBoxLayout(pill);
-        segments->setContentsMargins(3, 3, 3, 3);
+        segments->setContentsMargins(3, 0, 3, 0); // (as tall as the bar's other buttons)
         segments->setSpacing(1);
         m_flow->addWidget(pill);
         for (const QByteArray &role : std::as_const(roles)) {
@@ -1167,7 +1173,7 @@ private:
             pill->setStyleSheet(QStringLiteral("QWidget#sortPill { background: rgba(%1, %4); border: %5; border-radius: %2px; }"
                                                "QToolButton { border-radius: %3px; padding: 3px 11px; }")
                                     .arg(ngAurora() ? QStringLiteral("255, 255, 255") : ink)
-                                    .arg(inner / 2 + 2) // the pill is the button plus 3 px of margin and the border on each side
+                                    .arg(inner / 2 + 1) // the pill is the button and the border on each side
                                     .arg(inner / 2 - 1)
                                     .arg(ngAurora() ? QString::number(ngAuroraVeil(ngIsDark(palette()), true).alphaF(), 'f', 3) : QStringLiteral("0.05"),
                                          ngAurora() ? QStringLiteral("1px solid transparent") : QStringLiteral("1px solid rgba(%1, 0.09)").arg(ink)));
@@ -1177,9 +1183,10 @@ private:
         // the sorting, which the groups follow
         {
             auto *groupsGap = new QWidget(this);
-            groupsGap->setFixedWidth(8);
+            groupsGap->setFixedWidth(8); // (the same air as between Groups, Cards and Filters)
             m_flow->addWidget(groupsGap); // (close to the sorting: not one of the wide gaps between the parts of the bar)
             auto *groups = new QToolButton(this);
+            groups->setProperty("ngPill", true);
             groups->setAutoRaise(true);
             groups->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
             groups->setIcon(QIcon::fromTheme(QStringLiteral("view-group")));
@@ -1262,17 +1269,18 @@ private:
         // ---- the cards view: the button switches it on and off, its menu picks the look
         {
             auto *spacer = new QWidget(this);
-            spacer->setFixedWidth(22);
+            spacer->setFixedWidth(8);
             m_flow->addWidget(spacer);
             m_gaps.append(spacer);
             const bool cardsOn = m_view->viewMode() == DolphinView::CardsView;
             static const char *const looks[] = {"Tessera", "Scheda", "Dossier"};
             auto *cards = new QToolButton(this);
+            cards->setProperty("ngPill", true);
             cards->setAutoRaise(true);
             cards->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
             cards->setIcon(QIcon::fromTheme(QStringLiteral("view-grid"), QIcon::fromTheme(QStringLiteral("view-list-icons"))));
-            cards->setCheckable(true);
-            cards->setChecked(cardsOn);
+            // (not a lit toggle: the cards are the view nearly always, so it stood grey all the time; its label says
+            // the look, and it lights only under the pointer and while pressed, as Filters does)
             cards->setPopupMode(QToolButton::MenuButtonPopup);
             cards->setText(cardsOn ? ngTr("Cards: %1", "Card: %1").arg(QLatin1String(looks[m_view->ngCardLook()])) : ngTr("Cards", "Card"));
             m_cards = cards;
@@ -1362,8 +1370,7 @@ private:
             cards->setMenu(menu);
             menuButton(cards);
             // a click: the cards view in the look used last; already there, the next look
-            connect(cards, &QToolButton::clicked, this, [this, cards, cardsOn] {
-                cards->setChecked(true);
+            connect(cards, &QToolButton::clicked, this, [this, cardsOn] {
                 if (!cardsOn) {
                     m_modeBeforeCards = m_view->viewMode();
                     m_view->setViewMode(DolphinView::CardsView);
@@ -1381,7 +1388,7 @@ private:
             return;
         }
         auto *gap = new QWidget(this);
-        gap->setFixedWidth(22);
+        gap->setFixedWidth(8);
         m_flow->addWidget(gap);
         m_gaps.append(gap);
 
@@ -1418,6 +1425,7 @@ private:
         button->setMenu(menu);
         menuButton(button);
         button->setText(ngTr("Filters: %1", "Filtri: %1").arg(current));
+        button->setProperty("ngPill", true);
         m_filters = button;
         m_flow->addWidget(button);
 
@@ -1430,6 +1438,7 @@ private:
         // row style: cards or open rows; the choice is remembered
         const bool open = ngRowStyle() == NgRowStyle::Open;
         auto *rows = new QToolButton(this);
+        rows->setProperty("ngPill", true);
         rows->setAutoRaise(true);
         rows->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         rows->setIcon(QIcon::fromTheme(open ? QStringLiteral("view-list-text") : QStringLiteral("view-list-details")));
@@ -1449,6 +1458,7 @@ private:
         if (ngNoIcons() && (ngSetting("MARK").isEmpty() || ngSetting("MARK").toLower() == QLatin1String("object"))) {
             const bool on = ngRowColumns();
             auto *columns = new QToolButton(this);
+            columns->setProperty("ngPill", true);
             columns->setAutoRaise(true);
             columns->setCheckable(true);
             columns->setChecked(on);
@@ -4228,8 +4238,8 @@ protected:
     QRectF titleRect(qreal y, const QString &label, int count, bool folded) const
     {
         QFont titleFont = font();
-        titleFont.setPointSizeF(titleFont.pointSizeF() * 0.86);
-        titleFont.setBold(true);
+        titleFont.setPointSizeF(titleFont.pointSizeF() * 0.84);
+        titleFont.setWeight(QFont::DemiBold);
         const QFontMetrics titleMetrics(titleFont);
         const int extra = folded ? titleMetrics.horizontalAdvance(QStringLiteral(" %1").arg(count)) + 4 : 0;
         return QRectF(0, y, titleMetrics.horizontalAdvance(label) + 20 + 14 + extra, titleHeight());
@@ -4281,9 +4291,10 @@ protected:
 
         // a section title: a small pill like the section titles of the places
         auto title = [&](qreal y, const QString &label, int count, bool folded, bool hovered) {
+            // (the font of the places' section titles above, so that every title of the sidebar is the same)
             QFont titleFont = font();
-            titleFont.setPointSizeF(titleFont.pointSizeF() * 0.86);
-            titleFont.setBold(true);
+            titleFont.setPointSizeF(titleFont.pointSizeF() * 0.84);
+            titleFont.setWeight(QFont::DemiBold);
             const QRectF pill = titleRect(y, label, count, folded);
             painter.setPen(QPen(hovered ? QColor(95, 168, 216, 150) : edge, 1));
             QColor ground = veil;

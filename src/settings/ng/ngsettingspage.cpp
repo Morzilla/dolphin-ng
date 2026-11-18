@@ -1231,7 +1231,7 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     page->addWidget(m_deviceList);
     heading(ngTr("Window", "Finestra"));
     m_tabsPlace = new QComboBox(this);
-    m_tabsPlace->addItem(ngTr("In the title bar, after the sidebar button", "Nella barra del titolo, dopo il pulsante della barra laterale"), QString());
+    m_tabsPlace->addItem(ngTr("In the title bar, after the sidebar button", "Nella barra del titolo, dopo il pulsante della barra laterale"), QStringLiteral("titlebar"));
     m_tabsPlace->addItem(ngTr("Above the location bar, under the system's title bar", "Sopra la barra degli indirizzi, sotto la barra del titolo di sistema"), QStringLiteral("top"));
     m_tabsPlace->addItem(ngTr("Above the files, as in Dolphin", "Sopra i file, come in Dolphin"), QStringLiteral("classic"));
     {
@@ -1636,7 +1636,7 @@ void NgSettingsPage::loadSettings()
         const QString devices = ngSetting("DEVICES").toLower();
         m_devices->setCurrentIndex(devices == QLatin1String("hide") ? 2 : devices.isEmpty() ? 0 : 1); // "show" was the old "list"
         m_disksPos->setCurrentIndex(ngSetting("DISKS_POS").toLower() == QLatin1String("above") ? 1 : 0);
-        m_tabsPlace->setCurrentIndex(qMax(0, m_tabsPlace->findData(ngSetting("TABS").toLower() == QLatin1String("titlebar") ? QString() : ngSetting("TABS").toLower())));
+        m_tabsPlace->setCurrentIndex(qMax(0, m_tabsPlace->findData(ngSetting("TABS").toLower())));
     }
     fillSectionOrder(ngSidebarOrder(), ngSetting("SIDEBAR_PINNED").toLower() != QLatin1String("hide"),
                      ngSetting("SIDEBAR_FILTERS").toLower() != QLatin1String("hide"), ngSetting("SIDEBAR_DISKS").toLower() != QLatin1String("hide"));

@@ -4251,7 +4251,12 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
             putText(line.first, QPointF(x1, y + smallFm.ascent()), small, 2);
             const QDateTime &when = (lineIndex == 0 && created.isValid()) ? created : modified;
             if (shortDates) {
-                putText(smallFm.elidedText(ngAgoText(when), Qt::ElideRight, right - x1 - labelWidth), QPointF(x1 + labelWidth, y + smallFm.ascent()), small, 0);
+                // the value in the column of the longest label when it fits there; else right after its own label (a
+                // short "Created" left room that the column of "Modified" took, and the date was cut)
+                const QString ago = ngAgoText(when);
+                const qreal ownLabel = smallFm.horizontalAdvance(line.first) + 7;
+                const qreal at = smallFm.horizontalAdvance(ago) <= right - x1 - labelWidth ? labelWidth : qMin(labelWidth, ownLabel);
+                putText(smallFm.elidedText(ago, Qt::ElideRight, right - x1 - at), QPointF(x1 + at, y + smallFm.ascent()), small, 0);
             } else {
                 putRich(line.second, x1 + labelWidth, y + smallFm.ascent(), right - x1 - labelWidth, small, 0);
             }

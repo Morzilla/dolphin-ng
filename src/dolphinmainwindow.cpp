@@ -440,7 +440,7 @@ DolphinMainWindow::DolphinMainWindow()
     // opaque (it stopped repainting behind them: trails, flicker, a grey or stale sidebar). Changing the look now
     // changes only what is painted and where the blur is asked for.
     setAttribute(Qt::WA_TranslucentBackground);
-    if (ngSetting("TABS").toLower() == QLatin1String("titlebar")) {
+    if (ngSetting("TABS").isEmpty() || ngSetting("TABS").toLower() == QLatin1String("titlebar")) {
         // dolphin-ng: the tabs in the title bar: no frame from the window manager (see the row of tabs below); set
         // before the widget style first looks at the window, which then gives it a shadow
         setWindowFlag(Qt::FramelessWindowHint, true);
@@ -550,7 +550,9 @@ DolphinMainWindow::DolphinMainWindow()
     const bool usePhoneUi{KRuntimePlatform::runtimePlatform().contains(QLatin1String("phone"))};
     setupGUI(Save | Create | ToolBar, usePhoneUi ? QStringLiteral("dolphinuiforphones.rc") : QString() /* load the default dolphinui.rc file */);
     QTimer::singleShot(0, this, &DolphinMainWindow::ngMoveToolbarButtons); // dolphin-ng
-    const QString tabsPlace = ngSetting("TABS").toLower();
+    // (an empty value is the default, the title bar: the settings page wrote "TABS=" for it, which showed the tabs
+    // above the location bar under the window manager's title bar)
+    const QString tabsPlace = ngSetting("TABS").isEmpty() ? QStringLiteral("titlebar") : ngSetting("TABS").toLower();
     m_ngTitleTabs = tabsPlace == QLatin1String("titlebar");
     if (tabsPlace != QLatin1String("classic")) {
         // dolphin-ng: tabs first, then the address, then the rest, as in a browser: a row of its own above the tool
@@ -1342,18 +1344,16 @@ void DolphinMainWindow::ngStyleTitleRow()
         m_ngTabsToolBar->setAutoFillBackground(false);
         tabPalette.setColor(QPalette::Base, dark ? QColor(255, 255, 255, 26) : QColor(255, 255, 255, 150));
     } else {
-        // opaque looks: the row a tone deeper than the window, the current tab in the window's own colour, down to
-        // the row's edge, so that it runs into the body below as a browser's does (it took the colour of lists: a
-        // dark block on a dark scheme, white on white or grey on grey on the light ones)
-        const QColor row = KColorUtils::mix(body, QColor(0, 0, 0), dark ? 0.28 : 0.06);
-        rowPalette.setColor(QPalette::Window, row);
-        rowPalette.setColor(QPalette::Button, row);
-        m_ngTabsToolBar->setAutoFillBackground(true);
-        tabPalette.setColor(QPalette::Window, row);
-        tabPalette.setColor(QPalette::Base, body);
+        // opaque looks: the row has the window's own colour (a deeper tone showed as a band across the top of the
+        // window); the current tab is a pill in the colour of the sidebar's card: white on a light scheme, a tone
+        // lighter than the window on a dark one (it took the colour of lists: a dark block on a dark scheme)
+        m_ngTabsToolBar->setAutoFillBackground(false);
+        const QColor base = app.color(QPalette::Base);
+        tabPalette.setColor(QPalette::Base, dark ? body.lighter(118) : base.lightnessF() > body.lightnessF() + 0.03 ? base : QColor(253, 253, 254));
     }
     m_ngTabsToolBar->setPalette(rowPalette);
     top->setPalette(tabPalette);
+    top->setProperty("_breeze_ng_pill_tabs", true); // whole pills: there is no page right under them for a tongue
     top->update();
     m_ngTabsToolBar->update();
 }
@@ -4103,9 +4103,11 @@ void DolphinMainWindow::ngMoveToolbarButtons()
     {
         const bool dark = ngIsDark(palette());
         // (Aurora on a light scheme: frost, white and denser, not black ink)
-        // (an opaque light look with a toned window, Soft Light: the pill is white like the fields beside it, not a
-        // grey veil of ink)
-        const bool tonedLight = !dark && !ngAurora() && palette().color(QPalette::Window).lightnessF() < 0.95;
+        // (an opaque light look: the pill is white like the fields beside it, not a grey veil of ink)
+        // (opaque light looks: Soft Light and Grey, whose fields are white too; not Glass, where it is a veil)
+        const bool glassLook = property("_breeze_ng_glass").toBool()
+            || KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2")).readEntry("theme", QString()).contains(QLatin1String("Glass"));
+        const bool tonedLight = !dark && !ngAurora() && !glassLook;
         const QString ink = (dark || ngAurora() || tonedLight) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
         const qreal veil = ngAurora() ? ngAuroraVeil(dark, true).alphaF() : tonedLight ? 0.78 : 0.06;
         QList<QWidget *> pill;

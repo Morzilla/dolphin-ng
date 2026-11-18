@@ -735,7 +735,9 @@ void PlacesPanel::paintEvent(QPaintEvent *event)
         const bool hovered = pill.key == m_ngTitleHover;
         const QRectF rect = QRectF(pill.rect).adjusted(0.5, 0.5, -0.5, -0.5);
         painter.setPen(QPen(hovered ? QColor(95, 168, 216, 150) : dark ? QColor(255, 255, 255, 46) : QColor(0, 0, 0, 30), 1));
-        painter.setBrush(hovered ? QColor(95, 168, 216, 50) : dark ? QColor(255, 255, 255, 30) : QColor(255, 255, 255, 150));
+        // (the same veil as the titles of the Pinned and Filters sections below: a white pill on a light scheme
+        // differed from them, and vanished on a white card)
+        painter.setBrush(hovered ? QColor(95, 168, 216, 50) : dark ? QColor(255, 255, 255, 30) : QColor(0, 0, 0, 22));
         if (ngAurora()) { // no edges; the veil of every other surface, a little more under the pointer
             painter.setPen(Qt::NoPen);
             QColor veil = ngAuroraVeil(dark, true);
