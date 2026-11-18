@@ -3822,6 +3822,18 @@ void KStandardItemListWidget::paintNgActionPill(QPainter *painter, const QColor 
     painter->restore();
 }
 
+// dolphin-ng: a text whole in \a width, its type made smaller down to \a least of its size; cut short only past that
+static std::pair<QString, QFont> ngFitText(const QString &text, const QFont &font, qreal width, qreal least)
+{
+    QFont fitted = font;
+    QFontMetricsF fm(fitted);
+    for (qreal k = 0.95; fm.horizontalAdvance(text) > width && k >= least - 0.001; k -= 0.05) {
+        fitted.setPointSizeF(font.pointSizeF() * k);
+        fm = QFontMetricsF(fitted);
+    }
+    return {fm.horizontalAdvance(text) > width ? fm.elidedText(text, Qt::ElideRight, width) : text, fitted};
+}
+
 void KStandardItemListWidget::updateCardsLayoutTextCache()
 {
     const KItemListStyleOption &option = styleOption();
@@ -4314,14 +4326,27 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                 }
                 return text;
             };
-            const QString createdText = created.isValid() ? ngTr("created %1", "creato %1").arg(ngAgoText(created)) : QString();
-            const qreal createdWidth = smallFm.horizontalAdvance(createdText);
+            QString createdText = created.isValid() ? ngTr("created %1", "creato %1").arg(ngAgoText(created)) : QString();
+            const QString modifiedText = modified.isValid() ? ngTr("Modified", "Modificato") + QLatin1Char(' ') + when(modified) : QString();
+            // both whole: in a smaller type when the card is narrow, and without the creation when even that is not enough
+            QFont datesFont = small;
+            auto needed = [&](const QFont &font) {
+                const QFontMetricsF fm(font);
+                return fm.horizontalAdvance(modifiedText) + (createdText.isEmpty() ? 0 : 12 + fm.horizontalAdvance(createdText));
+            };
+            for (qreal k = 0.95; needed(datesFont) > right - x0 && k >= 0.8; k -= 0.05) {
+                datesFont.setPointSizeF(small.pointSizeF() * k);
+            }
+            if (needed(datesFont) > right - x0 && !modifiedText.isEmpty()) {
+                createdText.clear();
+            }
+            const qreal createdWidth = QFontMetricsF(datesFont).horizontalAdvance(createdText);
             if (!createdText.isEmpty()) {
-                putText(createdText, QPointF(right - createdWidth, datesTop + smallFm.ascent()), small, 2);
+                putText(createdText, QPointF(right - createdWidth, datesTop + smallFm.ascent()), datesFont, 2);
             }
             if (modified.isValid()) {
                 putRich(ngTr("Modified", "Modificato") + QStringLiteral(" \x01") + when(modified) + QStringLiteral("\x02"), x0, datesTop + smallFm.ascent(),
-                        right - x0 - createdWidth - 12, small, 2);
+                        right - x0 - createdWidth - (createdText.isEmpty() ? 0 : 12), datesFont, 2);
             }
         }
 
@@ -4387,8 +4412,11 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                     m_ngDossierRules.append(QLineF(x0 + i * columnWidth, y + 3, x0 + i * columnWidth, y + valueFm.height() + wordFm.height() - 2));
                 }
                 const NgFact &fact = facts->facts.at(i);
-                putText(valueFm.elidedText(fact.value, Qt::ElideRight, width), QPointF(cx, y + valueFm.ascent()), valueFont, 1);
-                putText(wordFm.elidedText(fact.word, Qt::ElideRight, width), QPointF(cx, y + valueFm.height() + wordFm.ascent()), wordFont, 2);
+                // whole, in a smaller type when it is long (a resolution, a size): cut short, a fact says nothing
+                const auto [value, valueFit] = ngFitText(fact.value, valueFont, width, 0.6);
+                const auto [word, wordFit] = ngFitText(fact.word, wordFont, width, 0.7);
+                putText(value, QPointF(cx, y + valueFm.ascent()), valueFit, 1);
+                putText(word, QPointF(cx, y + valueFm.height() + wordFm.ascent()), wordFit, 2);
             }
             factsBottom = y + valueFm.height() + wordFm.height();
         }
