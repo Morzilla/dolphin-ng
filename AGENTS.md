@@ -5,9 +5,10 @@ Guidance for coding agents (and people) working on Dolphin NG.
 ## What this is
 
 Dolphin NG is a fork of KDE's Dolphin (Qt 6, KDE Frameworks 6) that changes how files are shown and clicked:
-cards in three looks (Tessera, Scheda, Dossier), drawn rows, one bar for sorting, filters and groups, groups that
-follow the sorting, pinned items, quick actions, work in progress shown on the files, a glass sidebar, a folder's own
-view. File operations stay Dolphin's own. It is part of the NG desktop, with
+cards in three looks (Tessera, Scheda, Dossier), drawn rows, a Content column (pages, duration, pixels, read from the
+files), one bar for sorting, filters and groups, groups that follow the sorting, pinned items, quick actions, work in
+progress shown on the files, a glass sidebar, tabs in the title bar, a folder's own view. File operations stay
+Dolphin's own. It is part of the NG desktop, with
 [Breeze NG](https://github.com/Morzilla/breeze-ng) (style, decoration, Aurora Glass), Dialog NG (the Open/Save
 window) and the NeoLine icons. What the user sees is described in `NG.md` and `FEATURES.md`.
 
@@ -19,11 +20,15 @@ The development branch is `ng`. Upstream is Dolphin from invent.kde.org; this tr
 src/                        Dolphin's sources, with the NG code inside them
 ├── kitemviews/             the file views: cards and rows are painted in kstandarditemlistwidget.cpp,
 │                           the NG helpers (ngSetting, ngTr, accents, card looks) live in kitemlistwidget.cpp/.h,
-│                           groups and pinned items in kfileitemmodel.cpp
+│                           groups, pinned items and the Content column's sorting in kfileitemmodel.cpp
+│   └── private/ngfacts.cpp what a file holds (Dossier facts, the Content column), read with KFileMetaData, no Baloo
 ├── views/                  DolphinView, view properties (per folder), the item list view
 ├── dolphinviewcontainer.cpp  the bar above the files (NgSortBar), the quick view, the lightbox
-├── dolphinmainwindow.cpp   the window: tabs in the title bar, client-side window buttons, the moved tool bar buttons
-├── panels/places/          the glass sidebar (places, pinned, filters, disks)
+├── dolphintabwidget.cpp    the tabs; the title row's tab bar (ngCreateTopBar), its close buttons and icons
+├── dolphinmainwindow.cpp   the window: tabs in the title bar as pills (ngStyleTitleRow), client-side window buttons,
+│                           the moved tool bar buttons, the window's own state group, the check for the compositor's blur
+├── panels/places/          the sidebar (places, pinned, filters, disks): its pills and section titles are painted
+│                           by the panel, glass or plain, never left to the widget style
 ├── settings/ng/            the NG settings pages (Configure › NG, NG quick actions)
 ng/                         build.sh, install.sh, the dolphin-ng launcher, ng-job, ng-transcribe, screenshots
 packaging/dolphin-ng.spec   the Fedora package (COPR morzilla/desktop-ng)
@@ -41,8 +46,14 @@ ng/dolphin-ng               # start the installed build
 ```
 
 Build dependencies are Dolphin's own (Fedora: `sudo dnf builddep dolphin`). `ng/install.sh` does everything for a
-user, dependencies included. Building installs over the previous build: say so before building experimental code on
-a machine someone is using.
+user, dependencies included; it resets its copy of the sources to the last commit of `ng` and prints which commit it
+builds. Building installs over the previous build: say so before building experimental code on a machine someone is
+using.
+
+Dolphin NG keeps Dolphin's component name (`dolphin`), so it shares `dolphinrc` and `dolphinstaterc` with a stock
+Dolphin installed next to it. NG settings live in their own group (`[DolphinNG]`) and the window state in
+`[NG State]` of `dolphinstaterc` (stock Dolphin's `[State]` is copied there once): never write NG data into groups
+or keys stock Dolphin uses, or whichever closes last wins.
 
 ## Conventions
 
@@ -55,8 +66,19 @@ a machine someone is using.
   overridden for one run with the environment variable `DOLPHIN_NG_KEY`. A new setting gets a default in
   `ngDefault()` (if it differs from "not set"), a control on the NG settings page and a line in `NG.md`.
 - **Colours come from the palette.** The accent is the palette's Highlight; never hard-code a blue. A nearly
-  colourless accent (saturation under 0.15) must stay neutral: do not lift its saturation.
-- **Check every look**: dark and light colour schemes, and Breeze NG's Soft, Glass and Aurora Glass looks.
+  colourless accent (saturation under 0.15) must stay neutral: do not lift its saturation. What is selected or on
+  wears the accent, with text and icons white or black by its lightness (`ngOnAccent`); Aurora has its own selection
+  colours (`ngAuroraSelection`, `ngAuroraSelectionText`).
+- **The same look with any widget style.** The bar, the tabs of the title row and the sidebar's pills are drawn by
+  Dolphin NG (style sheets and painting of its own), so that they match with stock Breeze too. Do not hand them back
+  to the style.
+- **Glass needs the compositor's blur.** KWin announces its blur only once the application's event loop has turned
+  (asked at start, `KWindowEffects` says no): check it a moment later, never while the first window is built. Without
+  blur the application property `_breeze_ng_bare_glass` is set (by Dolphin NG or by Breeze NG) and the live sidebar
+  shows the blurred wallpaper picture instead of a hole.
+- **Check every look**: dark and light colour schemes; Breeze NG's Soft, Glass and Aurora Glass; stock Breeze; and
+  for glass, with KWin's blur effect on and off (`qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect
+  blur`, then wait a couple of seconds).
 - **Narrow changes.** Fix what was asked, where the cause is. Do not bundle unrelated clean-ups.
 
 ## Checking a change
@@ -74,11 +96,16 @@ input, Dolphin NG reads these environment variables:
 | `DOLPHIN_NG_DEMO_MENU`     | `Button\|Item\|/path.png[\|trigger]`: opens a bar menu, saves a picture of it |
 | `DOLPHIN_NG_ACTIVITY_DEMO` | work in progress drawn on the given files                                     |
 | `DOLPHIN_NG_DEMO_DISKS`    | fake disks in the sidebar (`Name\|fs\|free GiB\|total GiB;…`)                 |
+| `DOLPHIN_NG_DEMO_MENU_HOLD`| ms the demo menu stays open                                                   |
+| `DOLPHIN_NG_TEST_DOCK_WIDTH`| the sidebar widened to (or narrowed step by step down to) that width          |
+| `DOLPHIN_NG_TEST_HIDE_PLACES`| the sidebar button pressed once the window is up                             |
 | `DOLPHIN_NG_<KEY>`         | any NG setting, for one run                                                   |
 
 Window actions can be triggered over D-Bus:
 `dbus-send --session --dest=org.kde.dolphin-PID /dolphin/Dolphin_1/actions/NAME org.qtproject.Qt.QAction.trigger`
-(for example `cards`, `sort_by_size`, `group_by_same_as_sort`, `view_zoom_out`, `options_configure`).
+(for example `cards`, `details`, `sort_by_size`, `group_by_same_as_sort`, `show_ngContent`, `new_tab`,
+`view_zoom_out`, `options_configure`, `file_quit`; quitting through `file_quit` saves the window state as a user's
+close does).
 
 Report what you built and looked at, and what you could not check.
 
