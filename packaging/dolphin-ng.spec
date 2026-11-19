@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      b6e5cec272738e939301c7ab8426f2b191b1b43b
+%global commit      65f730dc8ef162c7255dcb01e40ba29120dbc2fc
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611190929
+%global snapdate    202611191157
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -131,6 +131,12 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Thu Nov 19 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611191157git65f730d-1
+- Text shadow on glass: sidebar, cards, rows, location bar, search field
+- Hold the star: use this folder's view for all folders
+- The hamburger menu joins its button; no stuck highlight in the location bar
+- No dark line in the sidebar's fade
+
 * Thu Nov 19 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611190929gitb6e5cec-1
 - Its own window state: the sidebar keeps its width next to stock Dolphin
 - Without blur the live sidebar shows the blurred wallpaper
