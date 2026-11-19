@@ -284,6 +284,7 @@ protected:
     bool m_ngAurora = false; // Breeze NG Aurora: the widget style paints the window's sheet (see paintEvent)
     void ngUpdateAurora();
     void ngApplyAuroraViews();
+    void ngApplyTextHalo();
     /** dolphin-ng: with the "live blur" sidebar the window is translucent and paints its own opaque background. */
     void paintEvent(QPaintEvent *event) override;
 

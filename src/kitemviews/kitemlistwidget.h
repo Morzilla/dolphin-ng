@@ -253,6 +253,15 @@ DOLPHIN_EXPORT QColor ngAuroraAccent(const QPalette &palette, qreal alpha);
 DOLPHIN_EXPORT bool ngAuroraFull();
 DOLPHIN_EXPORT QColor ngAuroraSelection(const QPalette &palette, qreal more = 0.0);
 DOLPHIN_EXPORT QColor ngAuroraSelectionText(const QPalette &palette);
+// Breeze NG's "Shadow around text on glass" (breezengrc), and whether the text Dolphin NG draws in its views gets it
+// now (Aurora: the views stand on the window's glass; not where the window is solid for want of blur)
+DOLPHIN_EXPORT int ngTextShadowMode(); // 0 never, 1 where the contrast may be low, 2 always
+DOLPHIN_EXPORT bool ngTextShadowSetting(); // not "never"
+// on glass of this opacity (0..1), could a white (or black) window behind leave the window's text below 4.5:1?
+DOLPHIN_EXPORT bool ngLowContrastOnGlass(qreal opacity);
+DOLPHIN_EXPORT bool ngTextHalo();
+// the shadow around a text in @p textColour: @p draw paints the text at the offset it is given, in the pen set here
+DOLPHIN_EXPORT void ngPaintTextHalo(QPainter *painter, const QColor &textColour, const std::function<void(const QPointF &)> &draw, qreal strength = 1.0);
 // dolphin-ng: the colour of text and icons on a solid fill of \a fill (an accent): white on a dark one, black on a
 // light one
 DOLPHIN_EXPORT QColor ngOnAccent(const QColor &fill);

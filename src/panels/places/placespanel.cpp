@@ -432,12 +432,16 @@ void PlacesPanel::ngPaintPills()
         }
         painter.save();
         painter.setClipRect(area);
-        DolphinDockWidget::ngPaintWindowGround(painter, viewport(), area);
-        const QPoint dockOffset = viewport()->mapTo(dock, QPoint(0, 0));
-        painter.save();
-        painter.translate(-dockOffset);
-        dock->paintNgGlass(painter);
-        painter.restore();
+        if (graphicsEffect()) {
+            ngClearForHalo(painter, area); // (see ngClearForHalo)
+        } else {
+            DolphinDockWidget::ngPaintWindowGround(painter, viewport(), area);
+            const QPoint dockOffset = viewport()->mapTo(dock, QPoint(0, 0));
+            painter.save();
+            painter.translate(-dockOffset);
+            dock->paintNgGlass(painter);
+            painter.restore();
+        }
         drawPill(painter, m_ngPillRect, 1.0);
         for (const QModelIndex &index : std::as_const(crossed)) {
             if (!ngHeaderOnly(index)) {
@@ -465,17 +469,32 @@ void PlacesPanel::ngPaintPills()
         // (with the live blur the glass is translucent: start again from the window colour, which is what the main
         // window paints under the panel before the glass thins it out. Starting from nothing left these rows fully
         // see-through, a bright band over a light desktop)
-        DolphinDockWidget::ngPaintWindowGround(painter, viewport(), rect);
-        painter.save();
-        painter.translate(-offset);
-        dock->paintNgGlass(painter);
-        painter.restore();
+        if (graphicsEffect()) {
+            ngClearForHalo(painter, rect);
+        } else {
+            DolphinDockWidget::ngPaintWindowGround(painter, viewport(), rect);
+            painter.save();
+            painter.translate(-offset);
+            dock->paintNgGlass(painter);
+            painter.restore();
+        }
         // 2. the pill, the same as the section titles
         drawPill(painter, QRectF(rect), strength);
         // 3. icon and text, by the delegate, as a plain row
         drawContents(painter, index);
         painter.restore();
     }
+}
+
+void PlacesPanel::ngClearForHalo(QPainter &painter, const QRect &rect)
+{
+    // With the text halo on (a shadow effect over the panel, see DolphinMainWindow::ngApplyTextHalo) the panel is
+    // painted aside, over nothing, and the glass card lies outside it, under the effect: what was there is wiped by
+    // clearing it, not by laying the backdrop again (which the shadow then outlined as a dark band)
+    painter.save();
+    painter.setCompositionMode(QPainter::CompositionMode_Clear);
+    painter.fillRect(rect, Qt::transparent);
+    painter.restore();
 }
 
 void PlacesPanel::ngApplyPalette()
@@ -713,11 +732,15 @@ void PlacesPanel::paintEvent(QPaintEvent *event)
         const QPoint offset = viewport()->mapTo(dock, QPoint(0, 0));
         painter.save();
         painter.setClipRegion(headers);
-        // with the live blur the glass is translucent: put the window colour back under the title areas first (the
-        // old text would show through otherwise), then the glass thins it out as everywhere else
-        DolphinDockWidget::ngPaintWindowGround(painter, viewport(), headers.boundingRect());
-        painter.translate(-offset);
-        dock->paintNgGlass(painter);
+        if (graphicsEffect()) {
+            ngClearForHalo(painter, headers.boundingRect());
+        } else {
+            // with the live blur the glass is translucent: put the window colour back under the title areas first (the
+            // old text would show through otherwise), then the glass thins it out as everywhere else
+            DolphinDockWidget::ngPaintWindowGround(painter, viewport(), headers.boundingRect());
+            painter.translate(-offset);
+            dock->paintNgGlass(painter);
+        }
         painter.restore();
     }
 

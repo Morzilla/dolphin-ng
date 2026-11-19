@@ -1151,6 +1151,13 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
         return;
     }
 
+    // dolphin-ng: on glass a soft shadow around the text (Breeze NG's "Shadow around text on glass")
+    const bool ngHalo = ngTextHalo();
+    if (ngHalo) {
+        ngPaintTextHalo(painter, painter->pen().color(), [&](const QPointF &offset) {
+            painter->drawStaticText(textInfo->pos + offset, textInfo->staticText);
+        });
+    }
     painter->drawStaticText(textInfo->pos, textInfo->staticText);
 
     bool clipAdditionalInfoBounds = false;
@@ -1186,6 +1193,15 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
             continue; // dolphin-ng: the hover actions take the place of the date
         }
         const TextInfo *textInfo = m_textInfo.value(m_sortedVisibleRoles[i]);
+        if (ngHalo) {
+            ngPaintTextHalo(
+                painter,
+                m_additionalInfoTextColor,
+                [&](const QPointF &offset) {
+                    painter->drawStaticText(textInfo->pos + offset, textInfo->staticText);
+                },
+                0.5);
+        }
         painter->drawStaticText(textInfo->pos, textInfo->staticText);
     }
     if (ngRow && (!m_ngAgo.isEmpty() || !m_ngCount.isEmpty())) {
@@ -5445,6 +5461,11 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
         nameFont.setWeight(QFont::DemiBold);
         painter->setFont(nameFont);
         painter->setPen(text);
+        if (ngTextHalo()) {
+            ngPaintTextHalo(painter, text, [&](const QPointF &offset) {
+                painter->drawStaticText(nameInfo->pos + offset, nameInfo->staticText);
+            });
+        }
         painter->drawStaticText(nameInfo->pos, nameInfo->staticText);
     }
 
@@ -5616,9 +5637,21 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
         const qreal tone = highlight.hslSaturationF() < 0.15 ? 0.0 : 1.0; // (a grey accent: a grey ink)
         strong = dark ? QColor::fromHslF(hue, 0.40 * tone, 0.84) : QColor::fromHslF(hue, 0.28 * tone, 0.44);
     }
+    const bool ngHaloCards = ngTextHalo();
     for (const NgCardText &entry : std::as_const(m_ngCardTexts)) {
         painter->setFont(entry.font);
-        painter->setPen(entry.tone == 1 ? strong : entry.tone == 2 ? dim : entry.tone == 3 ? QColor(232, 192, 72) : m_additionalInfoTextColor);
+        const QColor ink = entry.tone == 1 ? strong : entry.tone == 2 ? dim : entry.tone == 3 ? QColor(232, 192, 72) : m_additionalInfoTextColor;
+        if (ngHaloCards) {
+            // the details (kind, dates, facts) a lighter shadow than the strong words among them
+            ngPaintTextHalo(
+                painter,
+                ink,
+                [&](const QPointF &offset) {
+                    painter->drawText(entry.pos + offset, entry.text);
+                },
+                entry.tone == 1 ? 1.0 : 0.5);
+        }
+        painter->setPen(ink);
         painter->drawText(entry.pos, entry.text);
     }
 

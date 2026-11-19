@@ -92,6 +92,7 @@
 #include <KConfigGroup>
 #include <KSharedConfig>
 #include <QProxyStyle>
+#include <QGraphicsDropShadowEffect>
 #include <QPainter>
 #include <QClipboard>
 #include <QCloseEvent>
@@ -443,6 +444,34 @@ private:
     QColor m_fill, m_edge;
 };
 
+// dolphin-ng: runs a function, once per turn of the event loop, when a widget gains or loses children or lays itself
+// out again (the location bar makes its buttons anew at every folder)
+class NgChildrenWatch : public QObject
+{
+public:
+    NgChildrenWatch(QWidget *target, std::function<void()> function)
+        : QObject(target)
+        , m_function(std::move(function))
+    {
+        target->installEventFilter(this);
+    }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if ((event->type() == QEvent::ChildAdded || event->type() == QEvent::LayoutRequest || event->type() == QEvent::Show) && !m_queued) {
+            m_queued = true;
+            QTimer::singleShot(0, this, [this] {
+                m_queued = false;
+                m_function();
+            });
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    std::function<void()> m_function;
+    bool m_queued = false;
+};
+
 // dolphin-ng: runs a function, once per turn of the event loop, whenever one of some widgets moves, is resized or shown
 class NgGeometryWatch : public QObject
 {
@@ -556,6 +585,7 @@ DolphinMainWindow::DolphinMainWindow()
         for (QWidget *window : windows) {
             if (auto *main = qobject_cast<DolphinMainWindow *>(window)) {
                 main->ngUpdateBlurRegion();
+                main->ngApplyTextHalo();
             }
             window->update();
             const auto children = window->findChildren<QWidget *>();
@@ -1544,8 +1574,91 @@ void DolphinMainWindow::ngUpdateAurora()
     ngApplyAuroraViews();
 }
 
+void DolphinMainWindow::ngApplyTextHalo()
+{
+    // On glass the text of the sidebar stood on whatever lay behind the window: light text over a white page behind
+    // could not be read (and dark text over a dark one), and an application cannot see what is behind its window. As
+    // macOS does, the text gets a soft shadow of the opposite tone, a halo with a little drop: it reads over light and
+    // dark alike while the glass stays clear. On the sidebar's contents, above its glass card (the dock paints the card
+    // itself); not where there is no glass (the plain sidebar, a window made solid for want of blur), nor with Breeze
+    // NG's "Shadow around text on glass" off
+    // (the sidebar's glass: Aurora's sidebar opacity, else the card's own; "where the contrast may be low" reckons the
+    // worst case on it, see ngLowContrastOnGlass)
+    const KConfigGroup breeze = KSharedConfig::openConfig(QStringLiteral("breezengrc"))->group(QStringLiteral("Common"));
+    const int sidebarOpacity = m_ngAurora ? (breeze.readEntry("AuroraSidebarOpacity", -1) >= 0 ? breeze.readEntry("AuroraSidebarOpacity", -1)
+                                                                                                 : breeze.readEntry("AuroraBodyOpacity", 60))
+                                          : 100 - qBound(0, ngSettingInt("GLASS", 55), 100); // (GLASS: how much shows through)
+    const bool glass = (m_ngAurora || !DolphinDockWidget::ngGlassPlain()) && !DolphinDockWidget::ngBareGlass()
+        && (ngTextShadowMode() == 2 || (ngTextShadowMode() == 1 && ngLowContrastOnGlass(sidebarOpacity / 100.0)));
+    const bool dark = ngIsDark(QApplication::palette());
+    const auto docks = findChildren<DolphinDockWidget *>();
+    for (DolphinDockWidget *dock : docks) {
+        QWidget *content = dock->widget();
+        if (!content) {
+            continue;
+        }
+        auto *halo = qobject_cast<QGraphicsDropShadowEffect *>(content->graphicsEffect());
+        if (!glass) {
+            if (halo) {
+                content->setGraphicsEffect(nullptr);
+            }
+            continue;
+        }
+        if (!halo) {
+            halo = new QGraphicsDropShadowEffect(content);
+            content->setGraphicsEffect(halo);
+        }
+        halo->setBlurRadius(6); // (tight: a halo around the strokes, not a cloud under the row)
+        halo->setOffset(0, 1);
+        halo->setColor(dark ? QColor(0, 0, 0, 255) : QColor(255, 255, 255, 255));
+    }
+
+    // the location bar's buttons and the search field write their text themselves, not through the widget style:
+    // the same shadow on each of them, where the whole window is glass (Aurora). The location bar makes its buttons
+    // anew at every folder: watched, and given the shadow again
+    const bool bar = ngTextHalo(); // (Aurora, with the window's opacity)
+    auto shade = [bar, dark](QWidget *widget, int blur) {
+        auto *effect = qobject_cast<QGraphicsDropShadowEffect *>(widget->graphicsEffect());
+        if (!bar) {
+            if (effect) {
+                widget->setGraphicsEffect(nullptr);
+            }
+            return;
+        }
+        if (!effect) {
+            effect = new QGraphicsDropShadowEffect(widget);
+            widget->setGraphicsEffect(effect);
+        }
+        effect->setBlurRadius(blur);
+        effect->setOffset(0, 1);
+        effect->setColor(dark ? QColor(0, 0, 0, 255) : QColor(255, 255, 255, 255));
+    };
+    const auto navigators = findChildren<KUrlNavigator *>();
+    for (KUrlNavigator *navigator : navigators) {
+        if (!navigator->property("_ng_halo_watch").toBool()) {
+            navigator->setProperty("_ng_halo_watch", true);
+            new NgChildrenWatch(navigator, [this] {
+                ngApplyTextHalo();
+            });
+        }
+        const auto buttons = navigator->findChildren<QAbstractButton *>();
+        for (QAbstractButton *button : buttons) {
+            // (KIO's private classes: "KDEPrivate::KUrlNavigatorButton" and its kin)
+            if (QString::fromLatin1(button->metaObject()->className()).contains(QLatin1String("KUrlNavigator"))) {
+                shade(button, 5);
+            }
+        }
+    }
+    if (m_ngFilterAction) {
+        if (QWidget *field = toolBar(QStringLiteral("mainToolBar"))->widgetForAction(m_ngFilterAction)) {
+            shade(field, 4);
+        }
+    }
+}
+
 void DolphinMainWindow::ngApplyAuroraViews()
 {
+    ngApplyTextHalo();
     // Aurora: the file views stand on the window's glass (no background of their own), as the Folders panel's list
     // does; in the other looks they keep their own sheet
     if (!m_tabWidget) {

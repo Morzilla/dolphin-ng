@@ -76,6 +76,10 @@ or keys stock Dolphin uses, or whichever closes last wins.
   (asked at start, `KWindowEffects` says no): check it a moment later, never while the first window is built. Without
   blur the application property `_breeze_ng_bare_glass` is set (by Dolphin NG or by Breeze NG) and the live sidebar
   shows the blurred wallpaper picture instead of a hole.
+- **Text on glass gets a shadow** (Breeze NG's `TextShadow`, read with `ngTextShadowMode()`): the sidebar and the
+  location bar's buttons carry a `QGraphicsDropShadowEffect` (`ngApplyTextHalo`), the text Dolphin NG paints itself
+  goes through `ngPaintTextHalo()` (lighter under the grey details). Inside a panel with that effect, wipe areas by
+  clearing them (`PlacesPanel::ngClearForHalo`), not by painting the backdrop again: the shadow outlines it.
 - **Check every look**: dark and light colour schemes; Breeze NG's Soft, Glass and Aurora Glass; stock Breeze; and
   for glass, with KWin's blur effect on and off (`qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect
   blur`, then wait a couple of seconds).

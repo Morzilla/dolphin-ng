@@ -136,7 +136,11 @@ disks: the home one first, then every other disk and partition as a box with its
 a click mounts and opens it). NG settings → Sidebar chooses between these boxes, the classic **Devices** section or
 none, and lists the disks to hide any one of them; phones through KDE Connect get a box too. One setting puts the
 sections right after the places instead of at the foot. With the opaque looks of Breeze NG (Soft, Grey) the card is
-opaque too.
+opaque too. Without the compositor's blur, the card shows the blurred picture of the wallpaper instead of the desktop.
+
+On glass the text of the sidebar, of the cards and rows (in Aurora), of the location bar and the search field gets a
+soft shadow of the opposite tone, as on macOS, so that it stays readable over a white or black window behind: Breeze
+NG's settings → Transparency → Text shadow (*When the contrast may be low*, *Always*, *Never*).
 
 The sidebar takes the whole left side of the window: by default the window has no title bar of its own, and the
 sidebar button, the tabs and the window's buttons make its top row (NG settings → Sidebar → Window to change it).

@@ -35,6 +35,8 @@ QStringList ngSidebarOrder();
 
 class QVariantAnimation;
 
+class QPainter;
+
 class PlacesPanel : public KFilePlacesView
 {
 public:
@@ -94,6 +96,7 @@ Q_SIGNALS:
 public:
     // dolphin-ng: folded sections (a click on their title): their first row is only the title, the others are hidden
     bool ngHeaderOnly(const QModelIndex &index) const;
+    void ngClearForHalo(QPainter &painter, const QRect &rect);
     // while a section folds or opens: how much of a row of it shows (1 all, 0 none); `first` says the row carries the title
     qreal ngRowFactor(const QModelIndex &index, bool *first) const;
     int ngPlainRowHeight() const; // the height of an entry without a title above it

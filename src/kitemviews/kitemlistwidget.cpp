@@ -1642,11 +1642,84 @@ static int s_ngAuroraPanel = 7;
 static int s_ngAuroraButton = 7;
 static bool s_ngAuroraFull = false;
 
+static int s_ngTextShadow = -1; // -1: not read yet
+static int s_ngAuroraBodyOpacity = 60;
+
+static void ngReadTextShadow(const KConfigGroup &common)
+{
+    const QString mode = common.readEntry("TextShadow", QStringLiteral("LowContrast"));
+    s_ngTextShadow = mode == QLatin1String("Never") ? 0 : mode == QLatin1String("Always") ? 2 : 1;
+    s_ngAuroraBodyOpacity = qBound(10, common.readEntry("AuroraBodyOpacity", 60), 100);
+}
+
+int ngTextShadowMode()
+{
+    if (s_ngTextShadow < 0) {
+        ngReadTextShadow(KSharedConfig::openConfig(QStringLiteral("breezengrc"))->group(QStringLiteral("Common")));
+    }
+    return s_ngTextShadow;
+}
+
+bool ngTextShadowSetting()
+{
+    return ngTextShadowMode() != 0;
+}
+
+bool ngLowContrastOnGlass(qreal opacity)
+{
+    // what lies behind the window cannot be seen: the worst case, a white window behind light text (a black one behind
+    // dark text) through the glass's colour at its opacity, against 4.5:1 (as Breeze NG reckons it)
+    const QPalette palette = QGuiApplication::palette();
+    const QColor text = palette.color(QPalette::WindowText), sheet = palette.color(QPalette::Window);
+    auto luminance = [](const QColor &c) {
+        auto linear = [](qreal v) {
+            return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * linear(c.redF()) + 0.7152 * linear(c.greenF()) + 0.0722 * linear(c.blueF());
+    };
+    const qreal alpha = qBound(0.0, opacity, 1.0);
+    const qreal behind = text.lightnessF() > 0.5 ? 1.0 : 0.0;
+    const QColor ground = QColor::fromRgbF(alpha * sheet.redF() + (1 - alpha) * behind, alpha * sheet.greenF() + (1 - alpha) * behind,
+                                           alpha * sheet.blueF() + (1 - alpha) * behind);
+    const qreal a = luminance(text), b = luminance(ground);
+    return (qMax(a, b) + 0.05) / (qMin(a, b) + 0.05) < 4.5;
+}
+
+bool ngTextHalo()
+{
+    if (!ngAurora() || qApp->property("_breeze_ng_bare_glass").toBool()) {
+        return false;
+    }
+    const int mode = ngTextShadowMode();
+    return mode == 2 || (mode == 1 && ngLowContrastOnGlass(s_ngAuroraBodyOpacity / 100.0));
+}
+
+void ngPaintTextHalo(QPainter *painter, const QColor &textColour, const std::function<void(const QPointF &)> &draw, qreal strength)
+{
+    // as Breeze NG draws it under the text of its controls: a shadow of the opposite tone, mostly below the strokes and
+    // a little at their sides (a ring all round blurred small grey text instead of setting it off; see
+    // Style::drawItemText there)
+    static const struct {
+        qreal dx, dy, alpha;
+    } spots[] = {{0, 1, 0.55}, {-1, 1, 0.22}, {1, 1, 0.22}, {0, 2, 0.22}, {-1, 0, 0.12}, {1, 0, 0.12}};
+    const QColor base = textColour.lightnessF() > 0.5 ? QColor(0, 0, 0) : QColor(255, 255, 255);
+    const qreal faint = textColour.alphaF() * strength; // (lighter under the small grey details than under a name)
+    painter->save();
+    for (const auto &spot : spots) {
+        QColor c = base;
+        c.setAlphaF(spot.alpha * faint);
+        painter->setPen(c);
+        draw(QPointF(spot.dx, spot.dy));
+    }
+    painter->restore();
+}
+
 void ngLoadAuroraSettings()
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("breezengrc"));
     config->reparseConfiguration();
     const KConfigGroup common = config->group(QStringLiteral("Common"));
+    ngReadTextShadow(common);
     s_ngAuroraPanel = qBound(0, common.readEntry("AuroraPanelVeil", 7), 40);
     s_ngAuroraButton = qBound(0, common.readEntry("AuroraButtonVeil", 7), 40);
     s_ngAuroraFull = common.readEntry("AuroraFullSelection", false);

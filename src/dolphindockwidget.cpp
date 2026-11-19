@@ -796,6 +796,17 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
             const bool compact = disks.size() > 3;
             const bool alone = disks.size() == 1;
             const bool darkGlass = ngIsDark(palette());
+            // on glass the names and the free space get the text shadow of the rest of the sidebar (Breeze NG's
+            // "Shadow around text on glass"): they are painted here, outside the panel that carries it
+            const bool halo = ngTextShadowSetting() && !ngBareGlass();
+            auto drawText = [&painter, halo](const QRectF &rect, int flags, const QString &text) {
+                if (halo) {
+                    ngPaintTextHalo(&painter, painter.pen().color(), [&](const QPointF &offset) {
+                        painter.drawText(rect.translated(offset), flags, text);
+                    });
+                }
+                painter.drawText(rect, flags, text);
+            };
             QFont small = font();
             small.setPointSizeF(small.pointSizeF() * (compact ? 0.82 : 0.86));
             painter.setFont(small);
@@ -855,15 +866,14 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
                     bold.setWeight(disk.home && alone ? QFont::Normal : QFont::DemiBold);
                     painter.setFont(bold);
                     painter.setPen(text);
-                    painter.drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter,
-                                     QFontMetrics(bold).elidedText(left, Qt::ElideRight, int(textRect.width() - rightWidth - 12)));
+                    drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(bold).elidedText(left, Qt::ElideRight, int(textRect.width() - rightWidth - 12)));
                     painter.setFont(small);
                 }
                 if (!mounted || device) {
                     text.setAlpha(150);
                 }
                 painter.setPen(text);
-                painter.drawText(textRect, (both ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter, metrics.elidedText(right, Qt::ElideRight, int(textRect.width())));
+                drawText(textRect, (both ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter, metrics.elidedText(right, Qt::ElideRight, int(textRect.width())));
 
                 if (mounted && !device && disk.total > 0) {
                     const qreal used = 1.0 - qreal(disk.free) / qreal(disk.total);
