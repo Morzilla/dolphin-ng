@@ -105,7 +105,7 @@ public:
         bool first = false;
         const qreal factor = m_panel->ngRowFactor(index, &first);
         if (factor >= 1.0) {
-            m_inner->paint(painter, option, index);
+            paintRow(painter, option, index);
             return;
         }
         // sliding: the row at its full height, moved up so that its bottom part shows, and fading
@@ -121,8 +121,27 @@ public:
         painter->save();
         painter->setClipRect(option.rect, Qt::IntersectClip);
         painter->setOpacity(painter->opacity() * factor);
-        m_inner->paint(painter, moved, index);
+        paintRow(painter, moved, index);
         painter->restore();
+    }
+    // the row by KDE's delegate, on glass with the text shadow under it: the row painted aside once more, its shape laid
+    // in the opposite tone under the real one (not on the selection's pill: it stands on the accent)
+    void paintRow(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
+    {
+        if (ngSidebarHalo() && !m_panel->ngPaintingOnPill() && option.rect.isValid() && painter->device()) {
+            const qreal dpr = painter->device()->devicePixelRatioF();
+            QImage shape((QSizeF(option.rect.size()) * dpr).toSize(), QImage::Format_ARGB32_Premultiplied);
+            shape.setDevicePixelRatio(dpr);
+            shape.fill(Qt::transparent);
+            {
+                QPainter aside(&shape);
+                aside.setFont(painter->font());
+                aside.translate(-option.rect.topLeft());
+                m_inner->paint(&aside, option, index);
+            }
+            ngPaintShapeHalo(painter, shape, option.rect.topLeft(), option.palette.color(QPalette::Text), 1.0, false);
+        }
+        m_inner->paint(painter, option, index);
     }
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override
     {
@@ -407,7 +426,9 @@ void PlacesPanel::ngPaintPills()
                     QPainter rowPainter(&row);
                     rowPainter.setFont(painter.font());
                     rowPainter.translate(-option.rect.topLeft());
+                    m_ngOnPill = true; // (no shadow: this row is laid in one colour on the accent)
                     delegate->paint(&rowPainter, option, index);
+                    m_ngOnPill = false;
                     rowPainter.resetTransform();
                     rowPainter.setCompositionMode(QPainter::CompositionMode_SourceIn);
                     rowPainter.fillRect(QRect(QPoint(0, 0), option.rect.size()), onSelection);
@@ -771,6 +792,11 @@ void PlacesPanel::paintEvent(QPaintEvent *event)
         ngDrawChevron(&painter, QRectF(pill.rect.left() + 6, pill.rect.top(), 12, pill.rect.height()), pill.folded, dim);
         const QRect textRect = pill.rect.adjusted(19, 0, -9, 0);
         painter.setPen(palette().color(QPalette::WindowText));
+        if (ngSidebarHalo()) {
+            ngPaintTextHalo(&painter, painter.pen().color(), [&](const QPointF &offset) {
+                painter.drawText(QRectF(textRect).translated(offset), Qt::AlignLeft | Qt::AlignVCenter, pill.text);
+            });
+        }
         painter.drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, pill.text);
         if (pill.folded) {
             painter.setPen(dim);

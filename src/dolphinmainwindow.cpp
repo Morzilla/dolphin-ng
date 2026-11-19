@@ -1680,26 +1680,22 @@ void DolphinMainWindow::ngApplyTextHalo()
     const bool glass = (m_ngAurora || !DolphinDockWidget::ngGlassPlain()) && !DolphinDockWidget::ngBareGlass()
         && (ngTextShadowMode() == 2 || (ngTextShadowMode() == 1 && ngLowContrastOnGlass(sidebarOpacity / 100.0)));
     const bool dark = ngIsDark(QApplication::palette());
-    const auto docks = findChildren<DolphinDockWidget *>();
-    for (DolphinDockWidget *dock : docks) {
-        QWidget *content = dock->widget();
-        if (!content) {
-            continue;
-        }
-        auto *halo = qobject_cast<QGraphicsDropShadowEffect *>(content->graphicsEffect());
-        if (!glass) {
-            if (halo) {
-                content->setGraphicsEffect(nullptr);
+    // (painted with the text itself, by the sidebar's parts: an effect over the whole sidebar redrew and blurred all of
+    // it at every step of scrolling, and at a fractional scale shifted what it redrew in part by a pixel)
+    // (this runs whenever the location bar lays itself out: the sidebar is painted again only when the choice changes)
+    if (qApp->property("_ng_sidebar_halo").toBool() != glass) {
+        qApp->setProperty("_ng_sidebar_halo", glass);
+        const auto docks = findChildren<DolphinDockWidget *>();
+        for (DolphinDockWidget *dock : docks) {
+            if (QWidget *content = dock->widget()) {
+                content->update();
+                const auto children = content->findChildren<QWidget *>();
+                for (QWidget *child : children) {
+                    child->update();
+                }
             }
-            continue;
+            dock->update();
         }
-        if (!halo) {
-            halo = new QGraphicsDropShadowEffect(content);
-            content->setGraphicsEffect(halo);
-        }
-        halo->setBlurRadius(6); // (tight: a halo around the strokes, not a cloud under the row)
-        halo->setOffset(0, 1);
-        halo->setColor(dark ? QColor(0, 0, 0, 255) : QColor(255, 255, 255, 255));
     }
 
     // the location bar's buttons and the search field write their text themselves, not through the widget style:

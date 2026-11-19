@@ -4602,6 +4602,27 @@ protected:
         const QColor edge = ngAurora() ? QColor(0, 0, 0, 0) : dark ? QColor(255, 255, 255, 40) : QColor(0, 0, 0, 30);
         QColor dim = text;
         dim.setAlphaF(0.6);
+        // on glass, the text shadow of the rest of the sidebar (see DolphinMainWindow::ngApplyTextHalo)
+        const bool halo = ngSidebarHalo();
+        auto drawText = [&painter, halo](const QRectF &rect, int flags, const QString &label, qreal strength = 1.0) {
+            if (halo) {
+                ngPaintTextHalo(
+                    &painter,
+                    painter.pen().color(),
+                    [&](const QPointF &offset) {
+                        painter.drawText(rect.translated(offset), flags, label);
+                    },
+                    strength);
+            }
+            painter.drawText(rect, flags, label);
+        };
+        auto drawIcon = [&painter, halo, this, text](const QIcon &icon, const QRect &rect) {
+            if (halo) {
+                const QImage shape = icon.pixmap(rect.size(), devicePixelRatioF()).toImage();
+                ngPaintShapeHalo(&painter, shape, rect.topLeft(), text);
+            }
+            icon.paint(&painter, rect);
+        };
 
         // a section title: a small pill like the section titles of the places
         auto title = [&](qreal y, const QString &label, int count, bool folded, bool hovered) {
@@ -4621,10 +4642,10 @@ protected:
             painter.setFont(titleFont);
             painter.setPen(text);
             const QRectF textRect = pill.adjusted(18, 0, -8, 0);
-            painter.drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, label);
+            drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, label);
             if (folded) {
                 painter.setPen(dim);
-                painter.drawText(textRect, Qt::AlignRight | Qt::AlignVCenter, QString::number(count));
+                drawText(textRect, Qt::AlignRight | Qt::AlignVCenter, QString::number(count), 0.5);
             }
             painter.setFont(font());
         };
@@ -4654,10 +4675,10 @@ protected:
                 const Pin &pin = m_pins.at(i);
                 rowGround(row, false, i == m_hover);
                 const int side = qMin(16, int(row.height()) - 6);
-                QIcon::fromTheme(pin.icon, QIcon::fromTheme(QStringLiteral("unknown"))).paint(&painter, QRect(int(row.left()) + 12, int(row.center().y() - side / 2.0) + 1, side, side));
+                drawIcon(QIcon::fromTheme(pin.icon, QIcon::fromTheme(QStringLiteral("unknown"))), QRect(int(row.left()) + 12, int(row.center().y() - side / 2.0) + 1, side, side));
                 painter.setPen(text);
                 const QRectF labelRect = row.adjusted(12 + side + 8, 0, -12, 0);
-                painter.drawText(labelRect, Qt::AlignLeft | Qt::AlignVCenter, painter.fontMetrics().elidedText(pin.name, Qt::ElideMiddle, qMax(0, int(labelRect.width()))));
+                drawText(labelRect, Qt::AlignLeft | Qt::AlignVCenter, painter.fontMetrics().elidedText(pin.name, Qt::ElideMiddle, qMax(0, int(labelRect.width()))));
             }
             painter.restore();
         }
@@ -4685,17 +4706,28 @@ protected:
                     tint.fillRect(glyph.rect(), ngAuroraSelectionText(palette()));
                     tint.end();
                     painter.drawPixmap(iconRect, glyph);
+                } else if (entry.active) {
+                    QIcon::fromTheme(entry.icon).paint(&painter, iconRect); // (on the selection: no shadow)
                 } else {
-                    QIcon::fromTheme(entry.icon).paint(&painter, iconRect);
+                    drawIcon(QIcon::fromTheme(entry.icon), iconRect);
                 }
                 painter.setPen(entry.active && ngAurora() ? ngAuroraSelectionText(palette()) : text);
                 // the count keeps its place on the right; the label gets what is left and is cut with an ellipsis
                 const QString count = QString::number(entry.count);
                 const int countWidth = painter.fontMetrics().horizontalAdvance(count);
                 const QRectF labelRect = row.adjusted(12 + side + 8, 0, -14 - countWidth - 8, 0);
-                painter.drawText(labelRect, Qt::AlignLeft | Qt::AlignVCenter, painter.fontMetrics().elidedText(entry.label, Qt::ElideRight, qMax(0, int(labelRect.width()))));
+                const QString shown = painter.fontMetrics().elidedText(entry.label, Qt::ElideRight, qMax(0, int(labelRect.width())));
+                if (entry.active) {
+                    painter.drawText(labelRect, Qt::AlignLeft | Qt::AlignVCenter, shown); // (on the selection: no shadow)
+                } else {
+                    drawText(labelRect, Qt::AlignLeft | Qt::AlignVCenter, shown);
+                }
                 painter.setPen(dim);
-                painter.drawText(row.adjusted(14, 0, -14, 0), Qt::AlignRight | Qt::AlignVCenter, count);
+                if (entry.active) {
+                    painter.drawText(row.adjusted(14, 0, -14, 0), Qt::AlignRight | Qt::AlignVCenter, count);
+                } else {
+                    drawText(row.adjusted(14, 0, -14, 0), Qt::AlignRight | Qt::AlignVCenter, count, 0.5);
+                }
             }
             painter.restore();
         }

@@ -97,6 +97,10 @@ public:
     // dolphin-ng: folded sections (a click on their title): their first row is only the title, the others are hidden
     bool ngHeaderOnly(const QModelIndex &index) const;
     void ngClearForHalo(QPainter &painter, const QRect &rect);
+    bool ngPaintingOnPill() const
+    {
+        return m_ngOnPill;
+    }
     // while a section folds or opens: how much of a row of it shows (1 all, 0 none); `first` says the row carries the title
     qreal ngRowFactor(const QModelIndex &index, bool *first) const;
     int ngPlainRowHeight() const; // the height of an entry without a title above it
@@ -141,6 +145,7 @@ private:
     QVariantAnimation *m_ngAnim = nullptr;
     // the pill of the selected entry slides from the old entry to the new one
     QPersistentModelIndex m_ngPillIndex;
+    bool m_ngOnPill = false; // painting the selection's row on its pill (no text shadow there)
     QRectF m_ngPillRect;
     QVariantAnimation *m_ngPillAnim = nullptr;
     QString m_ngTitleHover;

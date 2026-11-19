@@ -34,6 +34,7 @@
 #include <tuple>
 #include <cmath>
 #include <algorithm>
+#include <QCache>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPropertyAnimation>
@@ -1712,6 +1713,49 @@ void ngPaintTextHalo(QPainter *painter, const QColor &textColour, const std::fun
         draw(QPointF(spot.dx, spot.dy));
     }
     painter->restore();
+}
+
+bool ngSidebarHalo()
+{
+    return qApp->property("_ng_sidebar_halo").toBool();
+}
+
+void ngPaintShapeHalo(QPainter *painter, const QImage &shape, const QPointF &topLeft, const QColor &textColour, qreal strength, bool keep)
+{
+    if (shape.isNull()) {
+        return;
+    }
+    // the shape in the opposite tone, then laid as the text's shadow is (mostly below, a little at the sides); kept for
+    // the shapes drawn again and again (the same row, the same icon)
+    static QCache<qint64, QImage> tinted(300);
+    const QColor tone = textColour.lightnessF() > 0.5 ? QColor(0, 0, 0) : QColor(255, 255, 255);
+    const qint64 key = shape.cacheKey() ^ (qint64(tone.rgba()) << 1);
+    QImage fresh;
+    QImage *dark = keep ? tinted.object(key) : nullptr;
+    if (!dark) {
+        // (a shape painted for this one time, a row: not kept)
+        fresh = shape.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        QPainter tint(&fresh);
+        tint.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        tint.fillRect(fresh.rect(), tone);
+        tint.end();
+        fresh.setDevicePixelRatio(shape.devicePixelRatio());
+        if (keep) {
+            dark = new QImage(fresh);
+            tinted.insert(key, dark);
+        } else {
+            dark = &fresh;
+        }
+    }
+    static const struct {
+        qreal dx, dy, alpha;
+    } spots[] = {{0, 1, 0.55}, {-1, 1, 0.22}, {1, 1, 0.22}, {0, 2, 0.22}, {-1, 0, 0.12}, {1, 0, 0.12}};
+    const qreal opacity = painter->opacity();
+    for (const auto &spot : spots) {
+        painter->setOpacity(opacity * spot.alpha * strength * textColour.alphaF());
+        painter->drawImage(topLeft + QPointF(spot.dx, spot.dy), *dark);
+    }
+    painter->setOpacity(opacity);
 }
 
 void ngLoadAuroraSettings()

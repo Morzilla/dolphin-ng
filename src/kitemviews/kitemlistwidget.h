@@ -262,6 +262,10 @@ DOLPHIN_EXPORT bool ngLowContrastOnGlass(qreal opacity);
 DOLPHIN_EXPORT bool ngTextHalo();
 // the shadow around a text in @p textColour: @p draw paints the text at the offset it is given, in the pen set here
 DOLPHIN_EXPORT void ngPaintTextHalo(QPainter *painter, const QColor &textColour, const std::function<void(const QPointF &)> &draw, qreal strength = 1.0);
+// the sidebar's text gets the shadow now (decided by the main window, see DolphinMainWindow::ngApplyTextHalo)
+DOLPHIN_EXPORT bool ngSidebarHalo();
+// the shadow of a shape (an icon, a painted row) in the tone opposite to @p textColour, under it at @p topLeft
+DOLPHIN_EXPORT void ngPaintShapeHalo(QPainter *painter, const QImage &shape, const QPointF &topLeft, const QColor &textColour, qreal strength = 1.0, bool keep = true);
 // dolphin-ng: the colour of text and icons on a solid fill of \a fill (an accent): white on a dark one, black on a
 // light one
 DOLPHIN_EXPORT QColor ngOnAccent(const QColor &fill);

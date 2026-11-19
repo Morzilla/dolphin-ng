@@ -798,7 +798,7 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
             const bool darkGlass = ngIsDark(palette());
             // on glass the names and the free space get the text shadow of the rest of the sidebar (Breeze NG's
             // "Shadow around text on glass"): they are painted here, outside the panel that carries it
-            const bool halo = ngTextShadowSetting() && !ngBareGlass();
+            const bool halo = ngSidebarHalo();
             auto drawText = [&painter, halo](const QRectF &rect, int flags, const QString &text) {
                 if (halo) {
                     ngPaintTextHalo(&painter, painter.pen().color(), [&](const QPointF &offset) {
