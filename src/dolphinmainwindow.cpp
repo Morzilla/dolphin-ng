@@ -444,21 +444,58 @@ private:
     QColor m_fill, m_edge;
 };
 
-// dolphin-ng: the text shadow of a location bar button is switched off while the pointer is on it: the effect shades the
-// whole button, and the button's hover veil turned into a dark block (the veil already sets the text off)
-class NgHoverNoShadow : public QObject
+// dolphin-ng: the location bar's buttons, while the pointer is on them:
+// - their text shadow is off (the effect shades the whole button, and its hover veil turned into a dark block);
+// - they lose their highlight when the pointer has left them without a Leave event: a popup opened from them (the
+//   menu of subfolders) takes the pointer, on Wayland, and the button stayed highlighted after the menu closed. While
+//   one is "entered", where the pointer is is looked at; when it is gone, the button is sent the Leave it missed. (KIO
+//   is the system's: Dialog NG mends the same thing inside KIO)
+class NgCrumbWatch : public QObject
 {
 public:
-    using QObject::QObject;
+    explicit NgCrumbWatch(QObject *parent)
+        : QObject(parent)
+    {
+        m_timer.setInterval(250);
+        connect(&m_timer, &QTimer::timeout, this, &NgCrumbWatch::check);
+    }
     bool eventFilter(QObject *watched, QEvent *event) override
     {
-        if (event->type() == QEvent::Enter || event->type() == QEvent::Leave) {
-            if (auto *widget = qobject_cast<QWidget *>(watched); widget && widget->graphicsEffect()) {
-                widget->graphicsEffect()->setEnabled(event->type() == QEvent::Leave);
+        auto *widget = qobject_cast<QWidget *>(watched);
+        if (widget && (event->type() == QEvent::Enter || event->type() == QEvent::Leave)) {
+            const bool entered = event->type() == QEvent::Enter;
+            if (widget->graphicsEffect()) {
+                widget->graphicsEffect()->setEnabled(!entered);
+            }
+            if (entered) {
+                m_entered = widget;
+                m_timer.start();
+            } else if (m_entered == widget) {
+                m_entered.clear();
+                m_timer.stop();
             }
         }
         return QObject::eventFilter(watched, event);
     }
+
+private:
+    void check()
+    {
+        QWidget *widget = m_entered;
+        if (!widget) {
+            m_timer.stop();
+            return;
+        }
+        if (QApplication::activePopupWidget() || widget->rect().contains(widget->mapFromGlobal(QCursor::pos()))) {
+            return; // its menu is open, or the pointer is still on it
+        }
+        QEvent leave(QEvent::Leave);
+        QCoreApplication::sendEvent(widget, &leave); // (comes back through eventFilter: the timer stops there)
+        widget->update();
+    }
+
+    QTimer m_timer;
+    QPointer<QWidget> m_entered;
 };
 
 // dolphin-ng: runs a function, once per turn of the event loop, when a widget gains or loses children or lays itself
@@ -1680,8 +1717,8 @@ void DolphinMainWindow::ngApplyTextHalo()
                 shade(button, 5);
                 if (!button->property("_ng_hover_filter").toBool()) {
                     button->setProperty("_ng_hover_filter", true);
-                    static NgHoverNoShadow *hoverFilter = new NgHoverNoShadow(qApp);
-                    button->installEventFilter(hoverFilter);
+                    static NgCrumbWatch *crumbWatch = new NgCrumbWatch(qApp);
+                    button->installEventFilter(crumbWatch);
                 }
                 if (button->graphicsEffect() && button->underMouse()) {
                     button->graphicsEffect()->setEnabled(false);

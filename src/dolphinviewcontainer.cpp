@@ -552,6 +552,27 @@ private:
     qint64 m_wrapped = 0;
 };
 
+// dolphin-ng: runs a function when the mouse is pressed on a widget (before the widget handles the press)
+class NgPressWatch : public QObject
+{
+public:
+    NgPressWatch(QObject *parent, std::function<void()> function)
+        : QObject(parent)
+        , m_function(std::move(function))
+    {
+    }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() == QEvent::MouseButtonPress) {
+            m_function();
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    std::function<void()> m_function;
+};
+
 class NgOpenSheet : public QObject
 {
 public:
@@ -1031,6 +1052,9 @@ private:
         };
         connect(button, &QToolButton::pressed, button, watch);
         connect(button, &QToolButton::triggered, button, watch);
+        // (a real press on a button that pops its menu up at once sends no "pressed": the press itself is watched; the
+        // menu runs its own event loop inside the press, where the check queued here comes round)
+        button->installEventFilter(new NgPressWatch(button, watch));
         if (button->menu()) {
             connect(button->menu(), &QMenu::aboutToShow, button, [repolish] {
                 repolish(true);
