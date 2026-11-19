@@ -44,6 +44,20 @@ ecm_setup_version(${RELEASE_SERVICE_VERSION} VARIABLE_PREFIX DOLPHIN
                   VERSION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/dolphin_version.h"
 )
 
+# dolphin-ng: the commit this build comes from, shown in Help > About (testers report which one they run). From git
+# when building a clone; a package built from a tarball passes it: -DDOLPHIN_NG_COMMIT=abc1234
+if(NOT DOLPHIN_NG_COMMIT)
+    find_package(Git QUIET)
+    if(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+        execute_process(COMMAND "${GIT_EXECUTABLE}" log -1 "--format=%h %cd" "--date=format:%Y-%m-%d"
+                        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" OUTPUT_VARIABLE DOLPHIN_NG_COMMIT
+                        OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    endif()
+endif()
+if(DOLPHIN_NG_COMMIT)
+    add_compile_definitions(DOLPHIN_NG_COMMIT="${DOLPHIN_NG_COMMIT}")
+endif()
+
 ecm_setup_version(${RELEASE_SERVICE_VERSION} VARIABLE_PREFIX DOLPHINVCS
                   VERSION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/dolphinvcs_version.h"
                   PACKAGE_VERSION_FILE "${CMAKE_CURRENT_BINARY_DIR}/DolphinVcsConfigVersion.cmake"

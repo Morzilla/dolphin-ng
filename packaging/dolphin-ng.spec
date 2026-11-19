@@ -78,7 +78,7 @@ dolphin-ng command.
 %build
 %set_build_flags
 cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=%{ngprefix} \
-      -DBUILD_TESTING=OFF -DKDE_INSTALL_USE_QT_SYS_PATHS=OFF
+      -DBUILD_TESTING=OFF -DKDE_INSTALL_USE_QT_SYS_PATHS=OFF -DDOLPHIN_NG_COMMIT="%{shortcommit} %{snapdate}"
 cmake --build build -j%{?_smp_build_ncpus}
 
 %install

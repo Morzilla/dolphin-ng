@@ -134,9 +134,15 @@ int main(int argc, char **argv)
 
     KLocalizedString::setApplicationDomain(dolphinTranslationDomain);
 
+    // dolphin-ng: the version says it is Dolphin NG, and from which commit (testers report what they run)
+#ifdef DOLPHIN_NG_COMMIT
+    const QString ngVersion = QStringLiteral(DOLPHIN_VERSION_STRING " (Dolphin NG " DOLPHIN_NG_COMMIT ")");
+#else
+    const QString ngVersion = QStringLiteral(DOLPHIN_VERSION_STRING " (Dolphin NG)");
+#endif
     KAboutData aboutData(QStringLiteral("dolphin"),
                          i18n("Dolphin"),
-                         QStringLiteral(DOLPHIN_VERSION_STRING),
+                         ngVersion,
                          i18nc("@title", "File Manager"),
                          KAboutLicense::GPL,
                          i18nc("@info:credit", "© 2006–2025 The Dolphin Developers"));

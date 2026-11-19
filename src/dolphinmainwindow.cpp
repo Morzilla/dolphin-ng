@@ -1359,6 +1359,20 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
 {
     KXmlGuiWindow::showEvent(event);
 
+    // dolphin-ng: with "Remember open tabs" (the default) the window is restored from the last session, and that path
+    // leaves out the window's saved state: the sidebar came back at its first width whatever the user had dragged it
+    // to. The state saved with the window's settings ("NG State") is laid again once, when the window first shows
+    static bool ngStateApplied = false;
+    if (!ngStateApplied) {
+        ngStateApplied = true;
+        const QByteArray state = QByteArray::fromBase64(KConfigGroup(KSharedConfig::openStateConfig(), QStringLiteral("NG State")).readEntry("State", QByteArray()));
+        if (!state.isEmpty()) {
+            QTimer::singleShot(0, this, [this, state] {
+                restoreState(state);
+            });
+        }
+    }
+
     m_ngBlurSet = false;
     ngUpdateBlurRegion(); // dolphin-ng: ask the compositor to blur behind the glass
 
