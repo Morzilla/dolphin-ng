@@ -510,7 +510,15 @@ bool DolphinDockWidget::ngGlassPlain()
 bool DolphinDockWidget::ngGlassImageMode()
 {
     const bool live = ngSetting("GLASS_MODE").toLower() == QLatin1String("live");
-    return !live;
+    // no blur from the compositor (its effect off): the live card was a hole showing the desktop sharp behind the
+    // window; the blurred picture of the wallpaper instead. (Set by the main window, or by Breeze NG, a moment after
+    // start: KWin announces its blur only once the application runs)
+    return !live || ngBareGlass();
+}
+
+bool DolphinDockWidget::ngBareGlass()
+{
+    return qApp->property("_breeze_ng_bare_glass").toBool();
 }
 
 void DolphinDockWidget::setLocked(bool lock)

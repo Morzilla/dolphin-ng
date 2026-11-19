@@ -544,6 +544,26 @@ DolphinMainWindow::DolphinMainWindow()
         }
     }
     setStateConfigGroup(QStringLiteral("NG State"));
+    // dolphin-ng: does the compositor blur behind windows? Known only once the application runs (asked now, KWin says
+    // no). Without blur the live glass of the sidebar would show the desktop sharp: the application is told (Breeze NG
+    // does the same with its own windows), and every window paints again
+    QTimer::singleShot(1500, this, [] {
+        if (qApp->property("_breeze_ng_bare_glass").toBool() || KWindowEffects::isEffectAvailable(KWindowEffects::BlurBehind)) {
+            return;
+        }
+        qApp->setProperty("_breeze_ng_bare_glass", true);
+        const auto windows = QApplication::topLevelWidgets();
+        for (QWidget *window : windows) {
+            if (auto *main = qobject_cast<DolphinMainWindow *>(window)) {
+                main->ngUpdateBlurRegion();
+            }
+            window->update();
+            const auto children = window->findChildren<QWidget *>();
+            for (QWidget *child : children) {
+                child->update();
+            }
+        }
+    });
 
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
     new KColorSchemeManager(this); // Sets a sensible color scheme which fixes unreadable icons and text on Windows.

@@ -1144,7 +1144,8 @@ void PlacesPanel::ngUpdateFade()
     const bool above = bar->value() > bar->minimum();
     // (the effect renders the list off screen at every repaint; with the compositor's blur the window is
     // translucent and that is too slow, so there the list simply ends)
-    const bool live = ngSetting("GLASS_MODE").toLower() == QLatin1String("live") && ngSetting("SIDEBAR").toLower() != QLatin1String("plain");
+    const bool live = ngSetting("GLASS_MODE").toLower() == QLatin1String("live") && ngSetting("SIDEBAR").toLower() != QLatin1String("plain")
+        && !DolphinDockWidget::ngBareGlass();
     if (live) {
         // two strips over the ends of the list do the fading (cheap: they repaint only their own few rows)
         if (!m_ngFadeTop) {

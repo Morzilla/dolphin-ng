@@ -45,6 +45,7 @@ public:
     static void ngPaintWindowGround(QPainter &painter, QWidget *from, const QRect &rect);
     static bool ngGlassPlain();
     static bool ngGlassImageMode();
+    static bool ngBareGlass(); // no blur behind windows: see ngGlassImageMode()
     /**
      * dolphin-ng: the disks at the foot of the Places card: the file system of the home folder first, then (with the
      * NG look of the Devices, the default) every disk and partition the places know and do not hide, each with its
