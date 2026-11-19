@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      1c477ba82013a4a066937c9b8dd142632a1b4012
+%global commit      4bf84605d22d8e484b5d69378b4538bf3e51ee6d
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611191214
+%global snapdate    202611191315
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -131,6 +131,10 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Thu Nov 19 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611191315git4bf8460-1
+- The sidebar keeps its width with "Remember open tabs"
+- Help > About shows the Dolphin NG commit
+
 * Thu Nov 19 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611191214git1c477ba-1
 - The sidebar's text shadow painted with the text: smooth scrolling, no sideways jitter
 
