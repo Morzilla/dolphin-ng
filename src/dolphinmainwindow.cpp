@@ -481,6 +481,9 @@ public:
 private:
     void check()
     {
+        if (qEnvironmentVariableIsSet("DOLPHIN_NG_DEMO_CRUMB")) {
+            return; // (the demo's button is "entered" without a pointer: left as it is)
+        }
         QWidget *widget = m_entered;
         if (!widget) {
             m_timer.stop();
@@ -1359,6 +1362,23 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
     m_ngBlurSet = false;
     ngUpdateBlurRegion(); // dolphin-ng: ask the compositor to blur behind the glass
 
+    // for tests: DOLPHIN_NG_DEMO_CRUMB=name draws that button of the location bar as under the pointer (no input sent)
+    if (const QString crumb = qEnvironmentVariable("DOLPHIN_NG_DEMO_CRUMB"); !crumb.isEmpty()) {
+        QTimer::singleShot(3000, this, [this, crumb] {
+            const auto navigators = findChildren<KUrlNavigator *>();
+            for (KUrlNavigator *navigator : navigators) {
+                const auto buttons = navigator->findChildren<QAbstractButton *>();
+                for (QAbstractButton *button : buttons) {
+                    if (button->isVisible() && button->text() == crumb) {
+                        button->setAttribute(Qt::WA_UnderMouse, true);
+                        QEnterEvent enter(QPointF(4, 4), QPointF(4, 4), button->mapToGlobal(QPointF(4, 4)));
+                        QCoreApplication::sendEvent(button, &enter);
+                        button->update();
+                    }
+                }
+            }
+        });
+    }
     // for tests: DOLPHIN_NG_TEST_HIDE_PLACES presses the sidebar button once the window is up (no input sent)
     if (qEnvironmentVariableIsSet("DOLPHIN_NG_TEST_HIDE_PLACES")) {
         QTimer::singleShot(1500, this, [this] {
