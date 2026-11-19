@@ -1134,6 +1134,17 @@ protected:
         mask.setColorAt(m_top ? 0.0 : 1.0, QColor(0, 0, 0, 255));
         mask.setColorAt(m_top ? 0.35 : 0.65, QColor(0, 0, 0, 150));
         mask.setColorAt(m_top ? 1.0 : 0.0, QColor(0, 0, 0, 0));
+        // with the text shadow on, the sidebar's contents are painted aside (an effect) over nothing, and the glass card
+        // lies under them, outside the effect: the entries only fade out. Laying the card's ground again here gave the
+        // shadow an edge to outline: a dark line across the sidebar where the list scrolls
+        for (QWidget *up = parentWidget(); up && up != dock; up = up->parentWidget()) {
+            if (up->graphicsEffect()) {
+                QPainter painter(this);
+                painter.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+                painter.fillRect(rect(), mask);
+                return;
+            }
+        }
         const qreal dpr = devicePixelRatioF();
         QImage ground((QSizeF(size()) * dpr).toSize(), QImage::Format_ARGB32_Premultiplied);
         ground.setDevicePixelRatio(dpr);

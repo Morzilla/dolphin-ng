@@ -2863,6 +2863,35 @@ bool DolphinView::ngFolderHasOwnView() const
     return ngFolderHasOwnCardLook() || ViewProperties(viewPropertiesUrl()).ngHasOwn();
 }
 
+void DolphinView::ngMakeFolderViewDefault()
+{
+    // the look of the cards: the folder's own one becomes the setting of every folder
+    const QString ownLook = ngFolderCardLook(url());
+    if (!ownLook.isEmpty()) {
+        setNgSetting("CARDS", ownLook);
+        ngSetFolderCardLook(url(), QString());
+        ngSettingsInvalidate();
+    }
+    // sorting, groups, columns...: written as the default view properties, as Dolphin's "Use as default" does (the
+    // properties of folders without a .directory of their own come from there); folders with views of their own keep them
+    {
+        ViewProperties own(viewPropertiesUrl());
+        if (own.ngHasOwn() && !GeneralSettings::globalViewProps()) {
+            GeneralSettings::setGlobalViewProps(true);
+            {
+                ViewProperties defaults(url());
+                defaults.setDirProperties(own);
+                defaults.save();
+            }
+            GeneralSettings::setGlobalViewProps(false);
+            own.ngForget(); // this folder follows the default again, which is now its view
+        }
+    }
+    m_view->ngSetCardLook(-1);
+    applyViewProperties();
+    Q_EMIT viewSettingsChanged(false);
+}
+
 void DolphinView::ngResetFolderView()
 {
     ngSetFolderCardLook(url(), QString());

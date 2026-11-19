@@ -621,9 +621,31 @@ public:
         m_ownView->setProperty("ngPill", true); // (as tall as the buttons beside it, on the same row)
         m_ownView->setIconSize(QSize(20, 20)); // (the icon size of the buttons beside it: smaller, it stood shorter and higher)
         m_ownView->setIcon(QIcon::fromTheme(QStringLiteral("folder-favorites"), QIcon::fromTheme(QStringLiteral("bookmarks"))));
-        m_ownView->setToolTip(ngTr("This folder has a view of its own (look of the cards, sorting, groups). Click to go back to the default view.",
-                                   "Questa cartella ha una vista sua (aspetto delle card, ordinamento, gruppi). Clic per tornare alla vista predefinita."));
+        m_ownView->setToolTip(ngTr("This folder has a view of its own (look of the cards, sorting, groups). Click to go back to the default view; "
+                                   "hold for more.",
+                                   "Questa cartella ha una vista sua (aspetto delle card, ordinamento, gruppi). Clic per tornare alla vista predefinita; "
+                                   "tieni premuto per altro."));
         m_ownView->hide();
+        {
+            // held down (or with the right button): make this view the default of every folder, or forget it
+            auto *menu = new QMenu(m_ownView);
+            menu->addAction(QIcon::fromTheme(QStringLiteral("folder-favorites")), ngTr("Use this view for all folders", "Usa questa vista per tutte le cartelle"), this, [this] {
+                if (m_view) {
+                    m_view->ngMakeFolderViewDefault();
+                }
+                QTimer::singleShot(0, this, [this] {
+                    rebuild();
+                });
+            });
+            menu->addAction(QIcon::fromTheme(QStringLiteral("edit-undo")), ngTr("Back to the default view", "Torna alla vista predefinita"), m_ownView, &QToolButton::click);
+            m_ownView->setMenu(menu);
+            m_ownView->setPopupMode(QToolButton::DelayedPopup);
+            m_ownView->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; width: 0px; }")); // (the star alone, no arrow)
+            m_ownView->setContextMenuPolicy(Qt::CustomContextMenu);
+            connect(m_ownView, &QWidget::customContextMenuRequested, menu, [this, menu] {
+                menu->popup(m_ownView->mapToGlobal(QPoint(0, m_ownView->height())));
+            });
+        }
         connect(m_ownView, &QToolButton::clicked, this, [this] {
             m_ownView->setChecked(true);
             if (m_view) {

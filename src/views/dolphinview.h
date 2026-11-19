@@ -440,6 +440,8 @@ public Q_SLOTS:
     void ngSetCardLook(int look, bool everywhere = false);
     bool ngFolderHasOwnView() const;
     void ngResetFolderView();
+    /** dolphin-ng: the folder's own view becomes the default one (of every folder without a view of its own) */
+    void ngMakeFolderViewDefault();
 
     /**
      * Changes the directory to \a url. If the current directory is equal to
