@@ -62,8 +62,14 @@ else
         command -v git >/dev/null || { echo "git is needed to download the source; install it and run this again." >&2; exit 1; }
     fi
     if [ -d "$ROOT/.git" ]; then
+        # the installer's own copy: brought to the branch's last commit whatever happened to it (a "pull --ff-only" that
+        # failed left the old copy, and the old version was built again)
         say "updating the source in $ROOT"
-        git -C "$ROOT" pull --ff-only
+        if git -C "$ROOT" fetch --depth 1 origin ng && git -C "$ROOT" reset --hard FETCH_HEAD; then
+            say "source at $(git -C "$ROOT" log -1 --format='%h (%cd)' --date=format:'%Y-%m-%d %H:%M')"
+        else
+            say "WARNING: could not update the source; building the copy already there, $(git -C "$ROOT" log -1 --format='%h (%cd)' --date=format:'%Y-%m-%d %H:%M')"
+        fi
     else
         say "downloading the source into $ROOT"
         mkdir -p "$(dirname "$ROOT")"
