@@ -444,6 +444,23 @@ private:
     QColor m_fill, m_edge;
 };
 
+// dolphin-ng: the text shadow of a location bar button is switched off while the pointer is on it: the effect shades the
+// whole button, and the button's hover veil turned into a dark block (the veil already sets the text off)
+class NgHoverNoShadow : public QObject
+{
+public:
+    using QObject::QObject;
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() == QEvent::Enter || event->type() == QEvent::Leave) {
+            if (auto *widget = qobject_cast<QWidget *>(watched); widget && widget->graphicsEffect()) {
+                widget->graphicsEffect()->setEnabled(event->type() == QEvent::Leave);
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+};
+
 // dolphin-ng: runs a function, once per turn of the event loop, when a widget gains or loses children or lays itself
 // out again (the location bar makes its buttons anew at every folder)
 class NgChildrenWatch : public QObject
@@ -1333,6 +1350,18 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
                     break;
                 }
             }
+            // a button whose menu someone else opens on its press (the hamburger menu): pressed from inside, as a click
+            // would (click() sends pressed too)
+            bool clicked = false;
+            if (!button) {
+                for (QToolButton *b : buttons) {
+                    if (b->isVisible() && !parts[0].isEmpty() && KLocalizedString::removeAcceleratorMarker(b->text()).contains(parts[0])) {
+                        button = b;
+                        clicked = true;
+                        break;
+                    }
+                }
+            }
             if (!button) {
                 QStringList seen;
                 for (QToolButton *b : buttons) {
@@ -1346,6 +1375,9 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
             }
             const QString item = parts[1], out = parts[2];
             const bool trigger = parts.size() > 3 && parts[3] == QLatin1String("trigger");
+            if (clicked) {
+                button->click();
+            }
             QTimer::singleShot(700, this, [this, button, item, out, trigger] {
                 auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
                 if (!menu) {
@@ -1646,6 +1678,14 @@ void DolphinMainWindow::ngApplyTextHalo()
             // (KIO's private classes: "KDEPrivate::KUrlNavigatorButton" and its kin)
             if (QString::fromLatin1(button->metaObject()->className()).contains(QLatin1String("KUrlNavigator"))) {
                 shade(button, 5);
+                if (!button->property("_ng_hover_filter").toBool()) {
+                    button->setProperty("_ng_hover_filter", true);
+                    static NgHoverNoShadow *hoverFilter = new NgHoverNoShadow(qApp);
+                    button->installEventFilter(hoverFilter);
+                }
+                if (button->graphicsEffect() && button->underMouse()) {
+                    button->graphicsEffect()->setEnabled(false);
+                }
             }
         }
     }

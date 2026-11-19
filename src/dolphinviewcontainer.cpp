@@ -1001,6 +1001,46 @@ private:
         });
     }
 
+    // a button whose menu is opened by someone else (no QToolButton::menu(), or not through it): the menu showing when
+    // the button is pressed is taken as its own, and the button takes the menu's colour while it is open
+    void joinOpenedMenu(QToolButton *button)
+    {
+        if (button->property("_ng_join_watch").toBool()) {
+            return;
+        }
+        button->setProperty("_ng_join_watch", true);
+        new NgOpenSheet(button, &m_openSheet);
+        auto repolish = [button](bool open) {
+            button->setProperty("menuOpen", open);
+            button->style()->unpolish(button);
+            button->style()->polish(button);
+            button->update();
+        };
+        auto watch = [button, repolish] {
+            // (after the press has gone round: the menu is shown by then)
+            QTimer::singleShot(0, button, [button, repolish] {
+                auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+                if (!menu || button->property("menuOpen").toBool()) {
+                    return;
+                }
+                repolish(true);
+                QObject::connect(menu, &QMenu::aboutToHide, button, [repolish] {
+                    repolish(false);
+                }, Qt::SingleShotConnection);
+            });
+        };
+        connect(button, &QToolButton::pressed, button, watch);
+        connect(button, &QToolButton::triggered, button, watch);
+        if (button->menu()) {
+            connect(button->menu(), &QMenu::aboutToShow, button, [repolish] {
+                repolish(true);
+            });
+            connect(button->menu(), &QMenu::aboutToHide, button, [repolish] {
+                repolish(false);
+            });
+        }
+    }
+
 public:
     QLineEdit *filterField() const
     {
@@ -1029,6 +1069,10 @@ public:
                 if (QWidget *widget = widgetAction->requestWidget(m_trailing)) {
                     widget->setProperty("_ng_widget_action", QVariant::fromValue<QObject *>(widgetAction));
                     layout->addWidget(widget);
+                    // its menu joins it as the bar's own menus do (the hamburger menu: KHamburgerMenu opens it itself)
+                    if (auto *button = qobject_cast<QToolButton *>(widget)) {
+                        joinOpenedMenu(button);
+                    }
                     continue;
                 }
             }
