@@ -306,7 +306,9 @@ private:
     QList<std::pair<QString, QString>> m_facts;
 };
 
-// ---- what a folder (or a selection) holds: a bar of its kinds and their counts
+// ---- what a folder (or a selection) holds: the bar of its kinds, then one row per kind (its colour, its name, how
+// many), each row with a faint band of its colour as long as its share: a small chart that reads as a list. The six
+// largest; the rest in one row
 class NgInfoMix : public QWidget
 {
 public:
@@ -314,12 +316,15 @@ public:
     struct Part {
         QColor colour;
         int count;
-        QString label;
+        QString label; // "190 documents": the number first, then the word
     };
     void setParts(const QList<Part> &parts)
     {
         m_parts = parts;
-        setVisible(!parts.isEmpty());
+        std::sort(m_parts.begin(), m_parts.end(), [](const Part &a, const Part &b) {
+            return a.count > b.count;
+        });
+        setVisible(!m_parts.isEmpty());
         updateGeometry();
         update();
     }
@@ -327,9 +332,9 @@ public:
     {
         return true;
     }
-    int heightForWidth(int width) const override
+    int heightForWidth(int) const override
     {
-        return 14 + legendRows(width) * (fontMetrics().height() + 2);
+        return m_parts.isEmpty() ? 0 : 18 + rowCount() * (rowHeight() + 3);
     }
     QSize sizeHint() const override
     {
@@ -348,6 +353,7 @@ protected:
         for (const Part &part : std::as_const(m_parts)) {
             total += part.count;
         }
+        // the bar
         qreal x = 0;
         for (const Part &part : std::as_const(m_parts)) {
             const qreal w = (width() - 2.0 * (m_parts.count() - 1)) * part.count / qMax(1, total);
@@ -356,45 +362,68 @@ protected:
             painter.drawRoundedRect(QRectF(x, 0, qMax(3.0, w), 8), 3, 3);
             x += w + 2;
         }
-        QFont small = font();
-        small.setPointSizeF(small.pointSizeF() * 0.86);
-        painter.setFont(small);
-        const QFontMetricsF metrics(small);
-        QColor dim = palette().color(QPalette::WindowText);
-        dim.setAlphaF(0.7);
-        qreal lx = 0, ly = 14;
-        for (const Part &part : std::as_const(m_parts)) {
-            const qreal w = 13 + metrics.horizontalAdvance(part.label) + 12;
-            if (lx > 0 && lx + w > width()) {
-                lx = 0;
-                ly += metrics.height() + 2;
+        // the rows
+        QList<Part> rows = m_parts.mid(0, kMaxRows);
+        if (m_parts.count() > kMaxRows) {
+            // the rest together, in a neutral colour
+            rows.removeLast();
+            int rest = 0;
+            for (int i = kMaxRows - 1; i < m_parts.count(); ++i) {
+                rest += m_parts.at(i).count;
             }
+            QColor grey = palette().color(QPalette::WindowText);
+            grey.setAlphaF(0.45);
+            const int kinds = int(m_parts.count()) - kMaxRows + 1;
+            rows.append({grey, rest, QStringLiteral("%1 ").arg(rest) + ngTr("in %1 other kinds", "in altri %1 tipi").arg(kinds)});
+        }
+        const int largest = qMax(1, rows.isEmpty() ? 1 : rows.first().count);
+        QFont bold = font();
+        bold.setWeight(QFont::DemiBold);
+        bold.setFeature(QFont::Tag("tnum"), 1); // (figures of one width, lined up)
+        const QFontMetricsF boldFm(bold), fm(font());
+        const QColor ink = palette().color(QPalette::WindowText);
+        qreal y = 18;
+        for (const Part &part : std::as_const(rows)) {
+            const QRectF row(0, y, width(), rowHeight());
+            QPainterPath shape;
+            shape.addRoundedRect(row, 8, 8);
+            painter.fillPath(shape, ngVeil(palette()));
+            // the band of its share
+            QColor band = part.colour;
+            band.setAlphaF(0.16);
+            painter.save();
+            painter.setClipPath(shape);
+            painter.fillRect(QRectF(row.left(), row.top(), row.width() * part.count / largest, row.height()), band);
+            painter.restore();
+            // its colour, its name, how many
             painter.setPen(Qt::NoPen);
             painter.setBrush(part.colour);
-            painter.drawRoundedRect(QRectF(lx, ly + (metrics.height() - 8) / 2, 8, 8), 2, 2);
-            painter.setPen(dim);
-            ngInfoText(painter, QRectF(lx + 13, ly, w, metrics.height()), Qt::AlignLeft | Qt::AlignVCenter, part.label, 0.5);
-            lx += w;
+            painter.drawEllipse(QRectF(row.left() + 10, row.center().y() - 4, 8, 8));
+            const QString number = QLocale().toString(part.count);
+            QString word = part.label.section(QLatin1Char(' '), 1);
+            if (!word.isEmpty()) {
+                word[0] = word.at(0).toUpper();
+            }
+            const qreal numberWidth = boldFm.horizontalAdvance(number);
+            painter.setFont(bold);
+            painter.setPen(ink);
+            ngInfoText(painter, QRectF(row.right() - 10 - numberWidth, row.top(), numberWidth, row.height()), Qt::AlignRight | Qt::AlignVCenter, number);
+            painter.setFont(font());
+            const QRectF wordRect(row.left() + 26, row.top(), row.width() - 26 - 18 - numberWidth, row.height());
+            ngInfoText(painter, wordRect, Qt::AlignLeft | Qt::AlignVCenter, fm.elidedText(word, Qt::ElideRight, wordRect.width()));
+            y += rowHeight() + 3;
         }
     }
 
 private:
-    int legendRows(int width) const
+    static constexpr int kMaxRows = 6;
+    int rowCount() const
     {
-        QFont small = font();
-        small.setPointSizeF(small.pointSizeF() * 0.86);
-        const QFontMetricsF metrics(small);
-        int rows = m_parts.isEmpty() ? 0 : 1;
-        qreal lx = 0;
-        for (const Part &part : std::as_const(m_parts)) {
-            const qreal w = 13 + metrics.horizontalAdvance(part.label) + 12;
-            if (lx > 0 && lx + w > width) {
-                lx = 0;
-                ++rows;
-            }
-            lx += w;
-        }
-        return rows;
+        return qMin(int(m_parts.count()), kMaxRows);
+    }
+    int rowHeight() const
+    {
+        return fontMetrics().height() + 10;
     }
     QList<Part> m_parts;
 };
