@@ -30,6 +30,8 @@
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenu>
+#include <QDirIterator>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QVideoFrame>
 #include <QVideoSink>
@@ -253,6 +255,7 @@ public:
         m_sizeText.clear();
         m_pageable = false;
         m_page = 1;
+        m_listing = false;
         stopMedia();
         showButtons(false);
         update();
@@ -324,9 +327,19 @@ public:
     {
         m_bar = bar;
         m_detail = detail;
-        m_entries = entries;
+        if (!m_listing) {
+            m_entries = entries;
+        }
         m_camera = camera;
         m_sizeText = sizeText;
+        update();
+    }
+    // a folder: its first items in place of its picture (folders first, with how many items each holds, then files)
+    void setListing(const QList<NgFileFacts::Entry> &entries)
+    {
+        m_entries = entries;
+        m_listing = !entries.isEmpty();
+        showButtons(underMouse());
         update();
     }
     void setSizeText(const QString &sizeText)
@@ -489,7 +502,7 @@ protected:
     }
     bool canZoom() const
     {
-        return (!m_pixmap.isNull() || !m_frame.isNull()) && m_stack.isEmpty(); // (a video playing: its frames)
+        return (!m_pixmap.isNull() || !m_frame.isNull()) && m_stack.isEmpty() && !m_listing; // (a video playing: its frames)
     }
     void showButtons(bool hovered)
     {
@@ -728,7 +741,7 @@ protected:
                 painter.drawText(QPointF(gutter, y), metrics.elidedText(line, Qt::ElideRight, width() - gutter - 12));
                 y += metrics.height() + 1;
             }
-        } else if (m_bar == NgFileFacts::Archive && !m_entries.isEmpty() && m_pixmap.isNull()) {
+        } else if ((m_listing || (m_bar == NgFileFacts::Archive && m_pixmap.isNull())) && !m_entries.isEmpty()) {
             // an archive: what is inside, its top level (folders with how many files, then the files), each with its size
             painter.fillRect(rect(), dark ? QColor(22, 25, 34, 235) : QColor(246, 247, 250, 240));
             QFont row = font();
@@ -737,7 +750,7 @@ protected:
             const QFontMetricsF fm(row);
             const qreal rowHeight = fm.height() + 8;
             qreal y = 44;
-            const qreal bottom = height() - fm.height() - 42;
+            const qreal bottom = height() - (m_listing ? QFontMetricsF(font()).height() * 0.9 + 26 : fm.height() + 42); // (down to the band)
             for (const NgFileFacts::Entry &entry : std::as_const(m_entries)) {
                 if (y + rowHeight > bottom) {
                     break;
@@ -753,14 +766,16 @@ protected:
                                  QIcon::fromTheme(QStringLiteral("unknown")))
                     .paint(&painter, QRect(qRound(box.left() + 8), qRound(box.center().y() - side / 2.0), side, side));
                 Q_UNUSED(kind)
-                const QString right = folder ? (entry.count == 1 ? ngTr("1 file", "1 file") : ngTr("%1 files", "%1 file").arg(entry.count))
-                                             : KIO::convertSize(KIO::filesize_t(entry.size));
+                // (a folder of a folder: how many items it holds; of an archive: how many files)
+                const QString right = !folder ? KIO::convertSize(KIO::filesize_t(entry.size))
+                    : m_listing ? (entry.count == 0 ? ngTr("empty", "vuota") : entry.count == 1 ? ngTr("1 item", "1 elemento") : ngTr("%1 items", "%1 elementi").arg(entry.count))
+                                : (entry.count == 1 ? ngTr("1 file", "1 file") : ngTr("%1 files", "%1 file").arg(entry.count));
                 const qreal rightWidth = fm.horizontalAdvance(right);
                 painter.setPen(dark ? QColor(255, 255, 255, 120) : QColor(0, 0, 0, 120));
                 painter.drawText(box.adjusted(0, 0, -10, 0), Qt::AlignRight | Qt::AlignVCenter, right);
                 painter.setPen(dark ? QColor(230, 234, 242) : QColor(30, 32, 38));
                 painter.drawText(box.adjusted(side + 16, 0, -rightWidth - 18, 0), Qt::AlignLeft | Qt::AlignVCenter,
-                                 fm.elidedText(entry.name, Qt::ElideMiddle, box.width() - side - rightWidth - 34));
+                                 fm.elidedText(folder ? entry.name.chopped(1) : entry.name, Qt::ElideMiddle, box.width() - side - rightWidth - 34)); // (the icon says folder)
                 y += rowHeight;
             }
         } else if (!m_frame.isNull()) {
@@ -1348,6 +1363,7 @@ private:
     QElapsedTimer m_frameClock;
     QRectF m_playRect, m_trackRect;
     bool m_seeking = false;
+    bool m_listing = false;
     QPixmap m_pixmap;
     QList<QPixmap> m_stack;
     QStringList m_lines;
@@ -2261,7 +2277,36 @@ void NgInfoView::showOne()
     m_kind->setStyleSheet(QStringLiteral("QLabel { color: white; background: %1; border-radius: 8px; padding: 1px 8px; font-weight: bold; }").arg(kind.tint.name()));
     m_size->setText(item.isDir() ? item.mimeComment() : KIO::convertSize(item.size()));
     if (item.isDir() && item.isLocalFile()) {
-        // a folder: what it holds in all, counted in the background (a large one takes a while: "counting…" until then)
+        // a folder: its first items as the preview, read in the background (a folder's count is stopped at 9999: a large
+        // tree is not walked for a number in a list)
+        QPointer<NgInfoView> self(this);
+        const QString folderPath = item.localPath();
+        const QUrl folderUrl = item.url();
+        (void)QtConcurrent::run([self, folderPath, folderUrl] {
+            QList<NgFileFacts::Entry> entries;
+            const QFileInfoList list = QDir(folderPath).entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot, QDir::DirsFirst | QDir::Name | QDir::IgnoreCase);
+            for (const QFileInfo &info : list.mid(0, 10)) {
+                NgFileFacts::Entry entry;
+                if (info.isDir()) {
+                    entry.name = info.fileName() + QLatin1Char('/');
+                    QDirIterator it(info.filePath(), QDir::AllEntries | QDir::NoDotAndDotDot);
+                    while (it.hasNext() && entry.count < 9999) {
+                        it.next();
+                        ++entry.count;
+                    }
+                } else {
+                    entry.name = info.fileName();
+                    entry.size = info.size();
+                }
+                entries.append(entry);
+            }
+            QMetaObject::invokeMethod(qApp, [self, folderUrl, entries] {
+                if (self && !self->m_item.isNull() && self->m_item.url() == folderUrl) {
+                    self->m_hero->setListing(entries);
+                }
+            });
+        });
+        // what it holds in all, counted in the background (a large one takes a while: "counting…" until then)
         if (m_sizeJob) {
             m_sizeJob->kill();
         }
