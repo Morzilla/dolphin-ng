@@ -30,6 +30,11 @@
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenu>
+#include <QElapsedTimer>
+#include <QVideoFrame>
+#include <QVideoSink>
+#include <QAudioOutput>
+#include <QMediaPlayer>
 #include <QMimeDatabase>
 #include <QCursor>
 #include <QToolTip>
@@ -248,6 +253,7 @@ public:
         m_sizeText.clear();
         m_pageable = false;
         m_page = 1;
+        stopMedia();
         showButtons(false);
         update();
     }
@@ -350,6 +356,91 @@ public:
     {
         return m_page;
     }
+    // a video or a song: ▶ in the bar plays it here, its frames drawn in the preview (through a video sink: no native
+    // video surface, the glass stays whole); the line of time seeks
+    void setMedia(const QUrl &url, bool video)
+    {
+        stopMedia();
+        m_mediaUrl = url;
+        m_mediaVideo = video;
+        update();
+        // for tests: DOLPHIN_NG_TEST_PLAY plays it a moment after it shows (no input sent)
+        if (qEnvironmentVariableIsSet("DOLPHIN_NG_TEST_PLAY")) {
+            QTimer::singleShot(1500, this, [this] {
+                if (!playing()) {
+                    togglePlay();
+                }
+            });
+        }
+    }
+    void stopMedia()
+    {
+        if (m_player) {
+            m_player->stop();
+            m_player->deleteLater();
+            m_player = nullptr;
+        }
+        m_frame = QImage();
+        m_mediaUrl = QUrl();
+        update();
+    }
+    bool playing() const
+    {
+        return m_player && m_player->playbackState() == QMediaPlayer::PlayingState;
+    }
+    void togglePlay()
+    {
+        if (m_mediaUrl.isEmpty()) {
+            return;
+        }
+        if (!m_player) {
+            m_player = new QMediaPlayer(this);
+            auto *output = new QAudioOutput(m_player);
+            m_player->setAudioOutput(output);
+            if (m_mediaVideo) {
+                auto *sink = new QVideoSink(m_player);
+                m_player->setVideoSink(sink);
+                connect(sink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &videoFrame) {
+                    // (no more pictures than the panel can show: a 4K frame turned into an image every time was wasted)
+                    if (m_frameClock.isValid() && m_frameClock.elapsed() < 30) {
+                        return;
+                    }
+                    m_frameClock.start();
+                    const QImage image = videoFrame.toImage();
+                    if (!image.isNull()) {
+                        const qreal dpr = devicePixelRatioF();
+                        m_frame = image.width() > width() * dpr * 1.5 ? image.scaledToWidth(qRound(width() * dpr * 1.5), Qt::SmoothTransformation) : image;
+                        update();
+                    }
+                });
+            }
+            connect(m_player, &QMediaPlayer::positionChanged, this, [this] {
+                update();
+            });
+            connect(m_player, &QMediaPlayer::playbackStateChanged, this, [this] {
+                update();
+            });
+            m_player->setSource(m_mediaUrl);
+        }
+        if (playing()) {
+            m_player->pause();
+        } else {
+            m_player->play();
+        }
+        update();
+    }
+    void seekTo(qreal x)
+    {
+        if (m_trackRect.width() <= 0) {
+            return;
+        }
+        if (!m_player) {
+            togglePlay();
+        }
+        const qint64 length = m_player->duration() > 0 ? m_player->duration() : qint64(m_detail.value(QStringLiteral("duration")).toDouble() * 1000);
+        m_player->setPosition(qint64(qBound(0.0, (x - m_trackRect.left()) / m_trackRect.width(), 1.0) * length));
+        update();
+    }
     void setCanOpen(bool canOpen)
     {
         m_canOpen = canOpen;
@@ -429,6 +520,15 @@ protected:
             event->accept();
             return;
         }
+        if (event->button() == Qt::LeftButton && m_playRect.contains(event->position())) {
+            togglePlay();
+            return;
+        }
+        if (event->button() == Qt::LeftButton && m_trackRect.adjusted(0, -8, 0, 8).contains(event->position())) {
+            m_seeking = true;
+            seekTo(event->position().x());
+            return;
+        }
         if (event->button() == Qt::LeftButton && (m_pagerPrev.contains(event->position()) || m_pagerNext.contains(event->position()))) {
             const int pages = m_detail.value(QStringLiteral("pages")).toInt();
             const int page = qBound(1, m_page + (m_pagerNext.contains(event->position()) ? 1 : -1), qMax(1, pages));
@@ -458,6 +558,10 @@ protected:
             resizeEvent(nullptr);
             return;
         }
+        if (m_seeking) {
+            seekTo(event->position().x());
+            return;
+        }
         if (m_panFrom) {
             m_zoomTopLeft += event->position() - *m_panFrom;
             m_panFrom = event->position();
@@ -466,7 +570,9 @@ protected:
             return;
         }
         setCursor(onGrip(event->position()) ? Qt::SizeVerCursor
-                      : (m_pagerPrev.contains(event->position()) || m_pagerNext.contains(event->position())) ? Qt::PointingHandCursor
+                      : (m_pagerPrev.contains(event->position()) || m_pagerNext.contains(event->position()) || m_playRect.contains(event->position())
+                         || m_trackRect.adjusted(0, -8, 0, 8).contains(event->position()))
+                      ? Qt::PointingHandCursor
                       : zoomed() ? Qt::OpenHandCursor
                                  : Qt::ArrowCursor);
         QWidget::mouseMoveEvent(event);
@@ -476,6 +582,10 @@ protected:
         if (m_dragFrom >= 0) {
             m_dragFrom = -1;
             setNgSetting("INFO_PREVIEW_RATIO", QString::number(m_ratio, 'f', 3));
+            return;
+        }
+        if (m_seeking) {
+            m_seeking = false;
             return;
         }
         if (m_panFrom) {
@@ -617,7 +727,7 @@ protected:
             const QFontMetricsF fm(row);
             const qreal rowHeight = fm.height() + 8;
             qreal y = 44;
-            const qreal bottom = height() - fm.height() - 34;
+            const qreal bottom = height() - fm.height() - 42;
             for (const NgFileFacts::Entry &entry : std::as_const(m_entries)) {
                 if (y + rowHeight > bottom) {
                     break;
@@ -643,6 +753,13 @@ protected:
                                  fm.elidedText(entry.name, Qt::ElideMiddle, box.width() - side - rightWidth - 34));
                 y += rowHeight;
             }
+        } else if (!m_frame.isNull()) {
+            // a video playing: its frame, as large as it fits
+            const QSizeF size = QSizeF(m_frame.size()) / devicePixelRatioF();
+            const qreal scale = qMin(width() / size.width(), height() / size.height());
+            const QSizeF shown = size * scale;
+            painter.fillRect(rect(), Qt::black);
+            painter.drawImage(QRectF(QPointF((width() - shown.width()) / 2, (height() - shown.height()) / 2), shown), m_frame);
         } else if (!m_pixmap.isNull()) {
             // the picture whole, as large as it fits (or zoomed in with the wheel)
             const QRectF target = zoomed() ? zoomedRect() : fitRect();
@@ -708,7 +825,7 @@ protected:
             painter.setPen(QColor(255, 255, 255, 185));
             painter.drawText(text.adjusted(boldFm.horizontalAdvance(m_badge), 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter, size);
         }
-        m_pagerPrev = m_pagerNext = QRectF();
+        m_pagerPrev = m_pagerNext = m_playRect = m_trackRect = QRectF();
         switch (m_bar) {
         case NgFileFacts::Photo:
             paintPhotoBar(painter);
@@ -858,7 +975,7 @@ protected:
         // on the picture just above, as a print's stamp; a small histogram of the picture at the end
         QFont mono = monoFont(0.86);
         mono.setWeight(QFont::DemiBold);
-        const qreal h = QFontMetricsF(mono).height() + 18;
+        const qreal h = QFontMetricsF(mono).height() + 26;
         const QRectF band(0, height() - h, width(), h);
         QList<Segment> segments;
         if (const QString f = detailText("fnumber"); !f.isEmpty()) {
@@ -956,7 +1073,7 @@ protected:
         value.setWeight(QFont::Bold);
         QFont word = font();
         word.setPointSizeF(word.pointSizeF() * 0.74);
-        const qreal h = QFontMetricsF(value).height() + QFontMetricsF(word).height() + 10;
+        const qreal h = QFontMetricsF(value).height() + QFontMetricsF(word).height() + 18;
         const QRectF band(0, height() - h, width(), h);
         drawBand(painter, band, true);
         const QColor ink(42, 42, 48), dim(42, 42, 48, 140), hair(0, 0, 0, 28);
@@ -1006,17 +1123,40 @@ protected:
         QFont word = font();
         word.setPointSizeF(word.pointSizeF() * 0.8);
         const QFontMetricsF vfm(value), wfm(word);
-        const qreal h = vfm.height() + 22;
+        const qreal h = vfm.height() + 34;
         const QRectF band(0, height() - h, width(), h);
         drawBand(painter, band, false);
-        const QRectF track(12, band.top() + 9, width() - 24, 3);
+        // ▶ / ⏸ on the left, the line of time beside it (it seeks), the time played and the length under it
+        const qreal button = 26;
+        m_playRect = m_mediaUrl.isEmpty() ? QRectF() : QRectF(10, band.top() + (band.height() - button) / 2, button, button);
+        const qreal lineLeft = m_playRect.isNull() ? 12 : m_playRect.right() + 10;
+        const QColor accent = m_badgeTint.isValid() ? m_badgeTint : QColor(240, 160, 64);
+        if (!m_playRect.isNull()) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(255, 255, 255, playing() ? 235 : 215));
+            painter.drawEllipse(m_playRect);
+            painter.setBrush(QColor(12, 14, 20));
+            const QPointF c = m_playRect.center();
+            if (playing()) {
+                painter.drawRect(QRectF(c.x() - 4.5, c.y() - 5, 3, 10));
+                painter.drawRect(QRectF(c.x() + 1.5, c.y() - 5, 3, 10));
+            } else {
+                const QPointF triangle[3] = {c + QPointF(-3.5, -6), c + QPointF(6, 0), c + QPointF(-3.5, 6)};
+                painter.drawPolygon(triangle, 3);
+            }
+        }
+        const QRectF track(lineLeft, band.top() + 11, width() - lineLeft - 12, 4);
+        m_trackRect = m_mediaUrl.isEmpty() ? QRectF() : track;
+        const double seconds = m_player && m_player->duration() > 0 ? m_player->duration() / 1000.0 : m_detail.value(QStringLiteral("duration")).toDouble();
+        const double at = m_player ? m_player->position() / 1000.0 : 0;
+        const qreal done = seconds > 0 ? qBound(0.0, at / seconds, 1.0) : 0;
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor(255, 255, 255, 60));
-        painter.drawRoundedRect(track, 1.5, 1.5);
-        painter.setBrush(m_badgeTint.isValid() ? m_badgeTint : QColor(240, 160, 64));
-        painter.drawEllipse(QPointF(track.left() + 1.5, track.center().y()), 4, 4);
-        const double seconds = m_detail.value(QStringLiteral("duration")).toDouble();
-        const QString length = seconds > 0 ? clock(seconds) : QString();
+        painter.drawRoundedRect(track, 2, 2);
+        painter.setBrush(accent);
+        painter.drawRoundedRect(QRectF(track.left(), track.top(), track.width() * done, track.height()), 2, 2);
+        painter.drawEllipse(QPointF(track.left() + track.width() * done, track.center().y()), 5, 5);
+        const QString length = seconds > 0 ? (m_player ? clock(at) + QStringLiteral(" / ") + clock(seconds) : clock(seconds)) : QString();
         QStringList what;
         if (video) {
             const int w = m_detail.value(QStringLiteral("width")).toInt(), hh = m_detail.value(QStringLiteral("height")).toInt();
@@ -1047,7 +1187,7 @@ protected:
                 quality << (channels == 1 ? ngTr("mono", "mono") : channels == 2 ? ngTr("stereo", "stereo") : QStringLiteral("%1 ch").arg(channels));
             }
         }
-        const QRectF row(12, track.bottom() + 2, width() - 24, band.bottom() - track.bottom() - 4);
+        const QRectF row(lineLeft, track.bottom() + 3, width() - lineLeft - 12, band.bottom() - track.bottom() - 6);
         painter.setFont(value);
         painter.setPen(Qt::white);
         const qreal lengthWidth = vfm.horizontalAdvance(length);
@@ -1068,7 +1208,7 @@ protected:
     {
         // an editor's status line: the language in its colour, then lines, encoding and line ends, indentation
         QFont mono = monoFont(0.8);
-        const qreal h = QFontMetricsF(mono).height() + 10;
+        const qreal h = QFontMetricsF(mono).height() + 16;
         const QRectF band(0, height() - h, width(), h);
         painter.fillRect(band, QColor(27, 31, 42, 240));
         QList<Segment> segments;
@@ -1111,11 +1251,11 @@ protected:
         QFont strong = value;
         strong.setWeight(QFont::Bold);
         const QFontMetricsF fm(value);
-        const qreal h = fm.height() + 24;
+        const qreal h = fm.height() + 32;
         const QRectF band(0, height() - h, width(), h);
         drawBand(painter, band, false);
         const qint64 unpacked = m_detail.value(QStringLiteral("unpacked")).toLongLong(), packed = m_detail.value(QStringLiteral("packed")).toLongLong();
-        const QRectF meter(12, band.top() + 9, width() - 24, 5);
+        const QRectF meter(12, band.top() + 12, width() - 24, 5);
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor(255, 255, 255, 40));
         painter.drawRoundedRect(meter, 2.5, 2.5);
@@ -1160,7 +1300,7 @@ protected:
         for (const auto &chip : std::as_const(m_chips)) {
             words = words || !chip.second.isEmpty();
         }
-        const qreal h = QFontMetricsF(value).height() + (words ? QFontMetricsF(word).height() + 6 : 16);
+        const qreal h = QFontMetricsF(value).height() + (words ? QFontMetricsF(word).height() + 14 : 24);
         const QRectF band(0, height() - h, width(), h);
         drawBand(painter, band, false);
         QList<Segment> segments;
@@ -1187,6 +1327,13 @@ private:
     std::function<void(int)> m_pageWanted;
     QImage m_histogram;
     qint64 m_histogramKey = 0;
+    QUrl m_mediaUrl;
+    bool m_mediaVideo = false;
+    QMediaPlayer *m_player = nullptr;
+    QImage m_frame;
+    QElapsedTimer m_frameClock;
+    QRectF m_playRect, m_trackRect;
+    bool m_seeking = false;
     QPixmap m_pixmap;
     QList<QPixmap> m_stack;
     QStringList m_lines;
@@ -2085,8 +2232,9 @@ void NgInfoView::showOne()
         });
     }
     if ((audio || video) && item.isLocalFile()) {
-        m_media->setUrl(item.url(), video ? MediaWidget::Video : MediaWidget::Audio);
-        m_media->show();
+        // played inside the preview, from the bar at its foot (a player under it was a second picture of the same video,
+        // and its native video surface broke the panel's glass)
+        m_hero->setMedia(item.url(), video);
     }
 
     // ---- name, kind, size, pinned

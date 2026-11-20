@@ -107,6 +107,7 @@ input, Dolphin NG reads these environment variables:
 | `DOLPHIN_NG_TEST_INFO`     | the Information panel shown once the window is up (a number: also its width) |
 | `DOLPHIN_NG_TEST_ZOOM`     | the Information panel's preview zoomed in by that factor once it has a picture, its −/+ buttons shown |
 | `DOLPHIN_NG_TEST_PAGE`     | a PDF in the Information panel turned to that page once it shows |
+| `DOLPHIN_NG_TEST_PLAY`     | a video or song in the Information panel played a moment after it shows |
 | `DOLPHIN_NG_DEMO_CRUMB`    | that location bar button drawn as under the pointer                           |
 | `DOLPHIN_NG_<KEY>`         | any NG setting, for one run                                                   |
 
