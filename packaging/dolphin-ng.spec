@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      4bf84605d22d8e484b5d69378b4538bf3e51ee6d
+%global commit      f7d874716f9c5f77039fb4176dd7b522b8d20ff6
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611191315
+%global snapdate    202611200931
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -130,6 +130,9 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Fri Nov 20 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611200931gitf7d8747-1
+- Stock Dolphin no longer shows Dolphin NG's icon in the task manager; window titles say Dolphin NG
+
 * Thu Nov 19 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611191315git4bf8460-1
 - The sidebar keeps its width with "Remember open tabs"
 - Help > About shows the Dolphin NG commit
