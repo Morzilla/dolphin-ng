@@ -30,6 +30,7 @@
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QProgressBar>
@@ -100,6 +101,8 @@ public:
                                             "QToolButton:hover { background: rgba(10, 12, 20, 200); }"));
         m_eye->hide();
         setMouseTracking(true);
+        // the height the user gave it by dragging its bottom edge, as a share of the width (0.75 by default)
+        m_ratio = qBound(MinRatio, ngSetting("INFO_PREVIEW_RATIO", QStringLiteral("0.75")).toDouble(), MaxRatio);
     }
     QToolButton *eye() const
     {
@@ -168,7 +171,9 @@ protected:
         if (event) {
             QWidget::resizeEvent(event);
         }
-        const int height = qRound(width() * (m_stack.isEmpty() && m_pixmap.isNull() && m_lines.isEmpty() ? 0.56 : 0.75));
+        // (an icon alone, with nothing to show, a little lower)
+        const bool bare = m_stack.isEmpty() && m_pixmap.isNull() && m_lines.isEmpty();
+        const int height = qRound(width() * (bare ? m_ratio * 0.75 : m_ratio));
         if (height != this->height()) {
             setFixedHeight(qMax(m_chips.isEmpty() ? 110 : 160, height));
         }
@@ -178,11 +183,59 @@ protected:
     {
         m_eye->setVisible(m_canOpen);
         QWidget::enterEvent(event);
+        update();
     }
     void leaveEvent(QEvent *event) override
     {
         m_eye->hide();
         QWidget::leaveEvent(event);
+        update();
+    }
+    // the bottom edge drags the card taller or shorter; a double click there brings back the first height
+    bool onGrip(const QPointF &pos) const
+    {
+        return pos.y() >= height() - 10;
+    }
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() == Qt::LeftButton && onGrip(event->position())) {
+            m_dragFrom = event->globalPosition().y();
+            m_dragHeight = height();
+            event->accept();
+            return;
+        }
+        QWidget::mousePressEvent(event);
+    }
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (m_dragFrom >= 0) {
+            const bool bare = m_stack.isEmpty() && m_pixmap.isNull() && m_lines.isEmpty();
+            const qreal wanted = (m_dragHeight + event->globalPosition().y() - m_dragFrom) / qMax(1.0, qreal(width()));
+            m_ratio = qBound(MinRatio, bare ? wanted / 0.75 : wanted, MaxRatio);
+            resizeEvent(nullptr);
+            return;
+        }
+        setCursor(onGrip(event->position()) ? Qt::SizeVerCursor : Qt::ArrowCursor);
+        QWidget::mouseMoveEvent(event);
+    }
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        if (m_dragFrom >= 0) {
+            m_dragFrom = -1;
+            setNgSetting("INFO_PREVIEW_RATIO", QString::number(m_ratio, 'f', 3));
+            return;
+        }
+        QWidget::mouseReleaseEvent(event);
+    }
+    void mouseDoubleClickEvent(QMouseEvent *event) override
+    {
+        if (onGrip(event->position())) {
+            m_ratio = 0.75;
+            setNgSetting("INFO_PREVIEW_RATIO", QString());
+            resizeEvent(nullptr);
+            return;
+        }
+        QWidget::mouseDoubleClickEvent(event);
     }
     void paintEvent(QPaintEvent *) override
     {
@@ -249,6 +302,12 @@ protected:
         }
         paintOverlay(painter, shape);
         painter.restore();
+        // the grip of the bottom edge, while the pointer is over the card
+        if (underMouse() || m_dragFrom >= 0) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(255, 255, 255, m_dragFrom >= 0 ? 230 : 170));
+            painter.drawRoundedRect(QRectF(width() / 2.0 - 18, height() - 7, 36, 4), 2, 2);
+        }
     }
 
     void paintOverlay(QPainter &painter, const QPainterPath &shape)
@@ -329,6 +388,11 @@ private:
     QColor m_tint;
     bool m_canOpen = false;
     QToolButton *m_eye = nullptr;
+    static constexpr qreal MinRatio = 0.4;
+    static constexpr qreal MaxRatio = 1.6;
+    qreal m_ratio = 0.75;
+    qreal m_dragFrom = -1;
+    int m_dragHeight = 0;
 };
 
 // ---- the three facts of the Dossier: a value large, its word under it
@@ -674,19 +738,21 @@ void NgInfoView::build()
         });
     });
     nameRow->addWidget(m_copyName, 0, Qt::AlignTop);
+    // pinning as an icon beside it, filled with the accent while pinned (a pill of its own took a line)
+    m_pin = new QToolButton(m_body);
+    m_pin->setCheckable(true);
+    m_pin->setAutoRaise(true);
+    m_pin->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    m_pin->setIconSize(QSize(16, 16));
+    m_pin->setIcon(QIcon::fromTheme(QStringLiteral("window-pin"), QIcon::fromTheme(QStringLiteral("pin"))));
+    nameRow->addWidget(m_pin, 0, Qt::AlignTop);
     headGroup->addLayout(nameRow);
     auto *chips = new QHBoxLayout();
     chips->setSpacing(8);
     m_kind = new QLabel(m_body);
     m_size = new QLabel(m_body);
-    m_pin = new QToolButton(m_body);
-    m_pin->setCheckable(true);
-    m_pin->setAutoRaise(true);
-    m_pin->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    m_pin->setIcon(QIcon::fromTheme(QStringLiteral("window-pin"), QIcon::fromTheme(QStringLiteral("pin"))));
     chips->addWidget(m_kind);
     chips->addStretch();
-    chips->addWidget(m_pin);
     headGroup->addLayout(chips);
     // the size on a line of its own (a folder's, with what it holds, took the room of the pin button)
     m_size->setWordWrap(true);
@@ -696,7 +762,7 @@ void NgInfoView::build()
     connect(m_pin, &QToolButton::clicked, this, [this](bool on) {
         const KFileItemList items = m_items.isEmpty() ? KFileItemList{m_item} : m_items;
         Q_EMIT pinRequested(items, on);
-        m_pin->setText(on ? ngTr("Pinned", "Fissato") : ngTr("Pin to the top", "Fissa in cima"));
+        updatePinTip();
     });
 
     // the quick actions: one pill of icons, the name of the one under the pointer below it
@@ -742,6 +808,10 @@ void NgInfoView::build()
     m_mix = new NgInfoMix(m_body);
     m_mix->hide();
     m_layout->addWidget(m_mix);
+    // the dates right under what it is (or what a folder holds), before rating and tags
+    m_dates = new NgInfoDates(m_body);
+    m_dates->hide();
+    m_layout->addWidget(m_dates);
 
     // where it came from, who made it, its rating and tags
     m_lines = new QWidget(m_body);
@@ -802,10 +872,6 @@ void NgInfoView::build()
     m_linesLayout->addWidget(above(caption(ngTr("Tags", "Etichette")), false), 6, 0);
     m_linesLayout->addWidget(m_tags, 7, 0);
     m_layout->addWidget(m_lines);
-
-    m_dates = new NgInfoDates(m_body);
-    m_dates->hide();
-    m_layout->addWidget(m_dates);
     m_layout->addStretch();
     restyle();
 }
@@ -829,9 +895,18 @@ void NgInfoView::restyle()
                                   .arg(accent.green())
                                   .arg(accent.blue())
                                   .arg(ink, accent.name()));
-    m_pin->setStyleSheet(QStringLiteral("QToolButton { border-radius: 12px; padding: 3px 10px; background: %1; }"
-                                        "QToolButton:checked { background: %2; color: %3; }")
-                             .arg(veilCss, accent.name(), ngOnAccent(accent).name()));
+    m_pin->setStyleSheet(QStringLiteral("QToolButton { border: 0; border-radius: 12px; padding: 3px; }"
+                                        "QToolButton:hover { background: rgba(%1, 0.12); }"
+                                        "QToolButton:checked { background: %2; }")
+                             .arg(ink, accent.name()));
+}
+
+void NgInfoView::updatePinTip()
+{
+    const bool many = m_items.count() > 1;
+    m_pin->setToolTip(m_pin->isChecked() ? (many ? ngTr("Pinned to the top: click to unpin them", "Fissati in cima: clic per toglierli")
+                                                 : ngTr("Pinned to the top: click to unpin it", "Fissato in cima: clic per toglierlo"))
+                                         : ngTr("Pin to the top", "Fissa in cima"));
 }
 
 void NgInfoView::layoutActions()
@@ -975,7 +1050,7 @@ void NgInfoView::askPreview(const KFileItemList &items)
         m_previewJob->kill();
     }
     const qreal dpr = devicePixelRatioF();
-    const int side = qBound(256, qRound(qMax(m_hero->width(), 260) * dpr * 1.2), 1024);
+    const int side = qBound(256, qRound(qMax(qMax(m_hero->width(), m_hero->height()), 260) * dpr * 1.2), 1024);
     // (kept for the files seen last: coming back to one shows it at once)
     static QHash<QString, QPixmap> kept;
     if (items.count() == 1) {
@@ -1081,7 +1156,7 @@ void NgInfoView::showOne()
     }
     const bool pinned = m_pinnedQuery ? m_pinnedQuery({item}) : false;
     m_pin->setChecked(pinned);
-    m_pin->setText(pinned ? ngTr("Pinned", "Fissato") : ngTr("Pin to the top", "Fissa in cima"));
+    updatePinTip();
 
     // ---- quick actions
     m_actionList.clear();
@@ -1278,7 +1353,7 @@ void NgInfoView::showMany()
                                                : KIO::convertSize(total) + (folders ? ngTr(" and %1 folders", " e %1 cartelle").arg(folders) : QString()));
     const bool pinned = m_pinnedQuery ? m_pinnedQuery(m_items) : false;
     m_pin->setChecked(pinned);
-    m_pin->setText(pinned ? ngTr("Pinned", "Fissati") : ngTr("Pin to the top", "Fissa in cima"));
+    updatePinTip();
     QList<NgInfoMix::Part> parts;
     // (one and many: "1 image", "3 images")
     static const char *const english[] = {"folder", "image", "document", "sheet", "archive", "audio or video", "code file", "package", "other"};

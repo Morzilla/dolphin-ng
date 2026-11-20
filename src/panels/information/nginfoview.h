@@ -87,6 +87,7 @@ private:
     void restyle();
     void layoutActions();
     void updateOverlay();
+    void updatePinTip();
 
     KFileItem m_item;
     KFileItemList m_items;
