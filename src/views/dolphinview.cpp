@@ -2047,6 +2047,11 @@ void DolphinView::restoreState(QDataStream &stream)
 
     // Restore the previously selected items
     stream >> m_selectedUrls;
+    // dolphin-ng: only when asked for (NG settings, Window: "…and the files that were selected"); an old selection on
+    // opening the window looked like a choice just made, and the next action took it
+    if (ngSetting("RESTORE_SELECTION").toLower() != QLatin1String("on")) {
+        m_selectedUrls.clear();
+    }
 
     // Restore the view position
     stream >> m_restoredContentsPosition;

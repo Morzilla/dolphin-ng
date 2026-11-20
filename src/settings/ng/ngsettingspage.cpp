@@ -1244,6 +1244,21 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
         rowLayout->addStretch();
         page->addWidget(row);
     }
+    // what a new start shows: Dolphin's own choice ("Show on startup"), here where it is looked for, with the selection
+    // apart (it came back with the folders, and looked like a choice just made)
+    m_startAt = new QComboBox(this);
+    m_startAt->addItem(ngTr("The folders and tabs of last time", "Le cartelle e le schede dell'ultima volta"), true);
+    m_startAt->addItem(ngTr("The home folder", "La cartella iniziale"), false);
+    {
+        auto *row = new QWidget(this);
+        auto *rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->addWidget(new QLabel(ngTr("At start-up:", "All'avvio:"), row));
+        rowLayout->addWidget(m_startAt);
+        rowLayout->addStretch();
+        page->addWidget(row);
+    }
+    m_restoreSelection = toggle(ngTr("…and the files that were selected", "…e anche i file che erano selezionati"));
     note(ngTr("Applies to the windows opened from now on.", "Vale per le finestre aperte da ora in poi."));
     page->addStretch();
 
@@ -1456,6 +1471,11 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
         connect(box, &QCheckBox::toggled, this, &NgSettingsPage::changed);
     }
     connect(m_hoverDelay, &QSpinBox::valueChanged, this, &NgSettingsPage::changed);
+    connect(m_restoreSelection, &QCheckBox::toggled, this, &NgSettingsPage::changed);
+    connect(m_startAt, &QComboBox::currentIndexChanged, this, &NgSettingsPage::changed);
+    connect(m_startAt, &QComboBox::currentIndexChanged, this, [this] {
+        m_restoreSelection->setEnabled(m_startAt->currentData().toBool());
+    });
     for (QComboBox *combo : {m_tabsPlace, m_backdrop, m_devices, m_disksPos, m_lavaStyle, m_lavaColours, m_rim, m_rows, m_mark, m_sigla, m_cards, m_cardsFit, m_cardsInfo, m_cardsMark, m_cardsBadge, m_activitySize}) {
         connect(combo, &QComboBox::currentIndexChanged, this, &NgSettingsPage::changed);
     }
@@ -1610,6 +1630,9 @@ void NgSettingsPage::updateDependencies()
 void NgSettingsPage::loadSettings()
 {
     m_perFolder->setChecked(!GeneralSettings::globalViewProps());
+    m_startAt->setCurrentIndex(GeneralSettings::rememberOpenedTabs() ? 0 : 1);
+    m_restoreSelection->setChecked(ngSetting("RESTORE_SELECTION").toLower() == QLatin1String("on"));
+    m_restoreSelection->setEnabled(GeneralSettings::rememberOpenedTabs());
     m_glassPanel->setChecked(ngSetting("SIDEBAR").toLower() != QLatin1String("plain"));
     m_backdrop->setCurrentIndex(qMax(0, m_backdrop->findData(ngSetting("GLASS_MODE").toLower())));
     m_image->setText(ngSetting("GLASS_IMAGE"));
@@ -1696,6 +1719,11 @@ void NgSettingsPage::applySettings()
         GeneralSettings::setGlobalViewProps(!m_perFolder->isChecked());
         GeneralSettings::self()->save();
     }
+    if (GeneralSettings::rememberOpenedTabs() != m_startAt->currentData().toBool()) {
+        GeneralSettings::setRememberOpenedTabs(m_startAt->currentData().toBool());
+        GeneralSettings::self()->save();
+    }
+    setNgSetting("RESTORE_SELECTION", m_restoreSelection->isChecked() ? QStringLiteral("on") : QString());
     setNgSetting("SIDEBAR", m_glassPanel->isChecked() ? QString() : QStringLiteral("plain"));
     setNgSetting("GLASS_MODE", m_backdrop->currentData().toString());
     setNgSetting("GLASS_IMAGE", m_image->text().trimmed());
@@ -1807,6 +1835,8 @@ void NgSettingsPage::restoreDefaults()
     m_devices->setCurrentIndex(0);
     m_disksPos->setCurrentIndex(0);
     m_tabsPlace->setCurrentIndex(0);
+    m_startAt->setCurrentIndex(0);
+    m_restoreSelection->setChecked(false);
     m_sectionsFollow->setChecked(false);
     fillSectionOrder({QStringLiteral("places"), QStringLiteral("pinned"), QStringLiteral("filters"), QStringLiteral("disks")}, true, true, true);
     for (const auto &entry : std::as_const(m_deviceBoxes)) {
