@@ -46,6 +46,22 @@ QColor ngVeil(const QPalette &palette)
     return dark ? QColor(255, 255, 255, 18) : QColor(0, 0, 0, 13);
 }
 
+// a name that can break anywhere: a label cannot wrap inside a word, and a long file name without spaces
+// ("186851_2026-AE_-_09_Studio_Legale…") made the panel as wide as the name. A zero width space after every letter
+// lets it wrap at the panel's edge, wherever that falls
+QString ngBreakable(const QString &text)
+{
+    QString out;
+    out.reserve(text.size() * 2);
+    for (const QChar c : text) {
+        out.append(c);
+        if (!c.isSpace() && !c.isHighSurrogate()) {
+            out.append(QChar(0x200B));
+        }
+    }
+    return out;
+}
+
 // text painted by the panel itself: with the shadow of the sidebar's text on glass (see ngSidebarHalo)
 void ngInfoText(QPainter &painter, const QRectF &rect, int flags, const QString &text, qreal strength = 1.0)
 {
@@ -445,6 +461,7 @@ NgInfoView::NgInfoView(QWidget *parent)
     setWidgetResizable(true);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     viewport()->setAutoFillBackground(false);
+    viewport()->installEventFilter(this); // (its width changes alone when the scroll bar comes or goes)
     build();
     connect(NgActivity::self(), &NgActivity::changed, this, &NgInfoView::showActivity);
 }
@@ -463,6 +480,10 @@ void NgInfoView::setPinnedQuery(std::function<bool(const KFileItemList &)> query
 
 bool NgInfoView::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == viewport() && event->type() == QEvent::Resize && m_body) {
+        m_body->setFixedWidth(viewport()->width());
+        layoutActions();
+    }
     // the name of the quick action under the pointer, under the pill
     if (event->type() == QEvent::Enter || event->type() == QEvent::FocusIn) {
         const QString caption = watched->property("_ng_caption").toString();
@@ -505,7 +526,6 @@ void NgInfoView::build()
     // the name, then the kind, the size and pinning on one line
     m_name = new QLabel(m_body);
     m_name->setWordWrap(true);
-    m_name->setTextInteractionFlags(Qt::TextSelectableByMouse);
     QFont nameFont = m_name->font();
     nameFont.setPointSizeF(nameFont.pointSizeF() * 1.12);
     nameFont.setWeight(QFont::Bold);
@@ -734,6 +754,9 @@ void NgInfoView::changeEvent(QEvent *event)
 void NgInfoView::resizeEvent(QResizeEvent *event)
 {
     QScrollArea::resizeEvent(event);
+    // the content as wide as the panel, whatever a part of it asks for: nothing pushes past the edge (a part that cannot
+    // be narrower is cut, not the whole panel)
+    m_body->setFixedWidth(viewport()->width());
     const int width = qMax(120, viewport()->width() - 32);
     m_media->setVideoSize(QSize(width, width * 9 / 16));
     layoutActions();
@@ -853,7 +876,7 @@ void NgInfoView::showOne()
     }
 
     // ---- name, kind, size, pinned
-    m_name->setText(item.text());
+    m_name->setText(ngBreakable(item.text()));
     m_kind->setText(kind.sigla.isEmpty() ? item.mimeComment() : kind.sigla);
     m_kind->show();
     m_kind->setStyleSheet(QStringLiteral("QLabel { color: white; background: %1; border-radius: 8px; padding: 1px 8px; font-weight: bold; }").arg(kind.tint.name()));
@@ -936,7 +959,7 @@ void NgInfoView::showFacts()
         parts.append({part.colour, part.count, part.label});
     }
     m_mix->setParts(parts);
-    m_origin->setText(facts->origin);
+    m_origin->setText(ngBreakable(facts->origin));
     m_origin->setVisible(!facts->origin.isEmpty());
     m_originLabel->setVisible(!facts->origin.isEmpty());
     const QString whoCaption = facts->whoKind == NgFileFacts::Camera ? ngTr("Camera", "Fotocamera")
@@ -945,12 +968,12 @@ void NgInfoView::showFacts()
         : facts->whoKind == NgFileFacts::Program                     ? ngTr("Made with", "Creato con")
                                                                      : QString();
     m_whoLabel->setText(whoCaption);
-    m_who->setText(facts->who);
+    m_who->setText(ngBreakable(facts->who));
     m_who->setVisible(!facts->who.isEmpty());
     m_whoLabel->setVisible(!facts->who.isEmpty());
     if (m_item.isDir() && !facts->lastName.isEmpty()) {
         m_whoLabel->setText(ngTr("Changed last", "Cambiato per ultimo"));
-        m_who->setText(facts->lastName);
+        m_who->setText(ngBreakable(facts->lastName));
         m_who->setVisible(true);
         m_whoLabel->setVisible(true);
     }
