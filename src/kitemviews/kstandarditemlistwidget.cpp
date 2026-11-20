@@ -58,7 +58,8 @@ namespace
 // dolphin-ng: how the file type is marked at the start of a row (setting MARK).
 // Watermark is the faint icon and large abbreviation; the others pair a small line glyph with the abbreviation.
 void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, const QString &sigla, const QColor &tint, bool dark, int count = -1,
-                          const QString &sizeText = QString(), const QFont *font = nullptr, int special = 0, bool whole = false);
+                          const QString &sizeText = QString(), const QFont *font = nullptr, int special = 0, bool whole = false, const QColor &tabColour = QColor(),
+                          QRectF *tabOut = nullptr);
 
 // dolphin-ng: the well-known folders of the home (xdg-user-dirs), recognised by where they are: 0 for any other
 // folder, else 1 desktop, 2 downloads, 3 documents, 4 pictures, 5 music, 6 videos, 7 templates, 8 public
@@ -3273,7 +3274,7 @@ QList<QPixmap> ngFolderPictures(const QString &folder, const QStringList &names,
 // text, a table, lines of code, a waveform... The kind comes from the category of the file and, where the category
 // is too wide (audio or video, text or slides), from its extension.
 void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, const QString &sigla, const QColor &tint, bool dark, int count, const QString &sizeText,
-                          const QFont *font, int special, bool whole)
+                          const QFont *font, int special, bool whole, const QColor &tabColour, QRectF *tabOut)
 {
     painter->setRenderHint(QPainter::Antialiasing);
     // CARDS_BADGE=inside: the type and the size are part of the drawing (printed on the box, the type as the page's
@@ -3369,8 +3370,14 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
         painter->setPen(Qt::NoPen);
         painter->setBrush(back);
         painter->drawPath(backShape);
+        // a tagged folder: its tab in the tag's colour, as a paper folder's labelled tab (the card writes the tag on it)
+        painter->setBrush(tabColour.isValid() ? tabColour : back);
         painter->drawPath(tab);
         painter->drawPolygon(slope);
+        painter->setBrush(back);
+        if (tabOut) {
+            *tabOut = QRectF(body.left(), body.top(), body.width() * 0.40, tabDepth);
+        }
         const QRectF cover(body.left(), body.top() + tabDepth, body.width(), body.height() - tabDepth);
         QLinearGradient shine(cover.topLeft(), cover.bottomLeft());
         shine.setColorAt(0.0, frontTop);
@@ -3977,6 +3984,8 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
     QString kindWords; // dolphin-ng: "PDF document", "Folder"... (Scheda and Dossier)
     const NgFileFacts *facts = nullptr; // Dossier: what is inside the file, where it came from
     QStringList tags; // dolphin-ng: the file's tags (Scheda and Tessera; the Dossier has them in its facts)
+    m_ngCardTags.clear();
+    m_ngCardTagTab = QRectF();
     m_ngCardHeader = QRectF();
     if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
         if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
@@ -3994,7 +4003,10 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                 kindWords = fileItem.isDir() ? ngTr("Folder", "Cartella") : fileItem.mimeComment();
                 m_ngTagsPath = fileItem.isLocalFile() ? fileItem.localPath() : QString();
                 if (look != NgCardStyle::Dossier) {
+                    // drawn over the picture (see paintNgCardTags), not as a line of their own: they add to what the card
+                    // says, they never take the place of a date
                     tags = ngFileTags(m_ngTagsPath);
+                    m_ngCardTags = tags;
                 }
                 if (!m_ngTagsHooked) {
                     // a tag added or taken away (the Information panel): the card is laid out again
@@ -4257,9 +4269,6 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
             }
         }
 
-        if (!tags.isEmpty()) {
-            y = tagRow(x0, y, right, tags) + 6;
-        }
         struct Line {
             QString label;
             QString value;
@@ -4320,20 +4329,13 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
             lines.append({ngTr("Modified", "Modificato"), dateLine(modified)});
         }
         const qreal lineHeight = smallFm.height() + 1;
-        // (the tags under the kind take the room of the second date when the card is short)
-        if (!tags.isEmpty() && lines.count() > 1 && card.height() < nameFm.height() + smallFm.height() + chipHeight + 2 * lineHeight + 22) {
-            lines.removeLast();
-        }
-        const qreal blockHeight = nameFm.height() + 2 + smallFm.height() + 5 + (tags.isEmpty() ? 0 : chipHeight + 5) + lines.count() * lineHeight;
+        const qreal blockHeight = nameFm.height() + 2 + smallFm.height() + 5 + lines.count() * lineHeight;
         qreal y = card.top() + qMax(pad * 0.7, (card.height() - blockHeight) / 2.0);
         setName(x1, y, right - x1);
         y += nameFm.height() + 2;
         const QString kind = !kindWords.isEmpty() ? kindWords : typeText;
         putText(smallFm.elidedText(kind, Qt::ElideRight, right - x1), QPointF(x1, y + smallFm.ascent()), small, 2);
         y += smallFm.height() + 5;
-        if (!tags.isEmpty()) {
-            y = tagRow(x1, y, right, tags) + 5;
-        }
         qreal labelWidth = 0;
         for (const auto &line : std::as_const(lines)) {
             labelWidth = qMax(labelWidth, smallFm.horizontalAdvance(line.first));
@@ -5460,7 +5462,8 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
                 }
             } else {
                 ngPaintContentSketch(painter, m_ngCardThumb, m_ngCategory, m_ngSigla, m_ngTint, dark, itemCount, m_ngInfoSize, m_ngInfoInside ? &m_customizedFont : nullptr,
-                                     m_ngCategory == int(NgKind::Folder) ? ngSpecialFolder(data().value("url").toUrl().toLocalFile()) : 0);
+                                     m_ngCategory == int(NgKind::Folder) ? ngSpecialFolder(data().value("url").toUrl().toLocalFile()) : 0, false,
+                                     m_ngCardTags.isEmpty() ? QColor() : ngTagColour(m_ngCardTags.first()), &m_ngCardTagTab);
             }
             painter->restore();
         } else if (!m_pixmap.isNull() && m_ngInfoInside) {
@@ -5495,11 +5498,15 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
             const QVariant items = data().value("count");
             const int itemCount = items.isValid() && items.typeId() != QMetaType::QString ? items.toInt() : -1;
             ngPaintContentSketch(painter, m_ngCardThumb, m_ngCategory, m_ngSigla, m_ngTint, dark, itemCount, m_ngInfoSize, &m_customizedFont,
-                                 m_ngCategory == int(NgKind::Folder) ? ngSpecialFolder(data().value("url").toUrl().toLocalFile()) : 0, whole);
+                                 m_ngCategory == int(NgKind::Folder) ? ngSpecialFolder(data().value("url").toUrl().toLocalFile()) : 0, whole,
+                                 m_ngCardTags.isEmpty() ? QColor() : ngTagColour(m_ngCardTags.first()), &m_ngCardTagTab);
         }
         painter->restore();
     } else if (!m_pixmap.isNull()) {
         drawPixmap(painter, m_pixmap);
+    }
+    if (m_layout == CardsLayout && !m_ngCardTags.isEmpty() && !m_ngCardThumb.isEmpty()) {
+        paintNgCardTags(painter);
     }
     if (!m_overlays.isEmpty() && !m_pixmap.isNull()) {
         drawOverlays(painter);
@@ -5846,6 +5853,96 @@ QSizeF KStandardItemListWidget::preferredRatingSize(const KItemListStyleOption &
 qreal KStandardItemListWidget::columnPadding(const KItemListStyleOption &option)
 {
     return option.padding * 6;
+}
+
+// dolphin-ng: a card's tags over its picture. A folder: the first tag written on the folder's tab, painted in its colour
+// (see ngPaintContentSketch), the others as dots beside it. A file: pills at the top left of the picture. When they do
+// not fit, dots of their colours; with the pointer on the card they open into pills, over the picture
+void KStandardItemListWidget::paintNgCardTags(QPainter *painter)
+{
+    QFont font = m_customizedFont;
+    font.setPointSizeF(font.pointSizeF() * 0.76);
+    font.setWeight(QFont::DemiBold);
+    const QFontMetricsF fm(font);
+    const qreal pillHeight = fm.height() + 3, gap = 4, dot = 9;
+    const bool open = isHovered();
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing);
+    painter->setFont(font);
+    auto pill = [&](const QRectF &r, const QString &tag) {
+        QColor fill = ngTagColour(tag);
+        painter->setPen(QPen(QColor(0, 0, 0, 70), 1));
+        painter->setBrush(fill);
+        painter->drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), r.height() / 2, r.height() / 2);
+        painter->setPen(Qt::white);
+        painter->drawText(r.adjusted(6, 0, -6, 0), Qt::AlignCenter, fm.elidedText(tag, Qt::ElideRight, r.width() - 12));
+    };
+    auto dots = [&](qreal x, qreal centreY, int from) {
+        for (int i = from; i < m_ngCardTags.size(); ++i) {
+            painter->setPen(QPen(QColor(255, 255, 255, 200), 1.2));
+            painter->setBrush(ngTagColour(m_ngCardTags.at(i)));
+            painter->drawEllipse(QPointF(x + dot / 2, centreY), dot / 2, dot / 2);
+            x += dot + 3;
+        }
+    };
+    auto pillWidth = [&](const QString &tag) {
+        return fm.horizontalAdvance(tag) + 14;
+    };
+    // open (pointer on the card): every tag as a pill, from the top left of the picture, wrapping under each other
+    auto openAll = [&](QPointF at, qreal right) {
+        qreal x = at.x(), y = at.y();
+        for (const QString &tag : std::as_const(m_ngCardTags)) {
+            const qreal w = qMin(pillWidth(tag), right - at.x());
+            if (x > at.x() && x + w > right) {
+                x = at.x();
+                y += pillHeight + 3;
+            }
+            pill(QRectF(x, y, w, pillHeight), tag);
+            x += w + gap;
+        }
+    };
+    if (m_ngCategory == int(NgKind::Folder) && !m_ngCardTagTab.isEmpty()) {
+        const QRectF tab = m_ngCardTagTab;
+        if (open) {
+            openAll(QPointF(tab.left(), tab.top() - pillHeight * 0.35), rect().right() - 8);
+        } else {
+            // the first tag's name on the tab when it fits there (the tab may reach along the top of the folder)
+            const QString first = m_ngCardTags.first();
+            const qreal room = m_ngCardThumb.right() - tab.left() - 6;
+            const qreal w = pillWidth(first);
+            if (w <= room) {
+                pill(QRectF(tab.left(), tab.top() - 1, qMax(w, tab.width()), qMax(tab.height() + 2, pillHeight)), first);
+                dots(tab.left() + qMax(w, tab.width()) + 4, tab.top() + qMax(tab.height() + 2, pillHeight) / 2, 1);
+            } else {
+                dots(tab.left() + tab.width() + 4, tab.center().y(), 1);
+            }
+        }
+    } else {
+        const QRectF thumb = m_ngCardThumb.adjusted(5, 5, -5, -5);
+        if (open) {
+            openAll(thumb.topLeft(), rect().right() - 8);
+        } else {
+            qreal total = 0;
+            for (const QString &tag : std::as_const(m_ngCardTags)) {
+                total += pillWidth(tag) + gap;
+            }
+            if (total - gap <= thumb.width()) {
+                qreal x = thumb.left();
+                for (const QString &tag : std::as_const(m_ngCardTags)) {
+                    pill(QRectF(x, thumb.top(), pillWidth(tag), pillHeight), tag);
+                    x += pillWidth(tag) + gap;
+                }
+            } else {
+                // (no room for the names: their colours, and the names come with the pointer)
+                const qreal w = m_ngCardTags.size() * (dot + 3) + 5;
+                painter->setPen(Qt::NoPen);
+                painter->setBrush(QColor(10, 12, 18, 120));
+                painter->drawRoundedRect(QRectF(thumb.left(), thumb.top(), w, dot + 6), (dot + 6) / 2, (dot + 6) / 2);
+                dots(thumb.left() + 4, thumb.top() + (dot + 6) / 2, 0);
+            }
+        }
+    }
+    painter->restore();
 }
 
 #include "moc_kstandarditemlistwidget.cpp"
