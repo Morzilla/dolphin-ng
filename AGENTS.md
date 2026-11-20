@@ -105,6 +105,7 @@ input, Dolphin NG reads these environment variables:
 | `DOLPHIN_NG_TEST_DOCK_WIDTH`| the sidebar widened to (or narrowed step by step down to) that width          |
 | `DOLPHIN_NG_TEST_HIDE_PLACES`| the sidebar button pressed once the window is up                             |
 | `DOLPHIN_NG_TEST_INFO`     | the Information panel shown once the window is up (a number: also its width) |
+| `DOLPHIN_NG_TEST_ZOOM`     | the Information panel's preview zoomed in by that factor once it has a picture, its −/+ buttons shown |
 | `DOLPHIN_NG_DEMO_CRUMB`    | that location bar button drawn as under the pointer                           |
 | `DOLPHIN_NG_<KEY>`         | any NG setting, for one run                                                   |
 

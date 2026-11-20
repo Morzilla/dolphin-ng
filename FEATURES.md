@@ -62,10 +62,12 @@ per unit (Folders, Pages, Words, Duration, Pixels, Other). In the two-line rows 
 
 The Information panel (F11) is drawn again: one place for what the cards show about a file and for what can be
 done with it. At the top a large preview: the picture (its eye opens the lightbox), the first lines of a text or
-of code, a folder's own pictures; audio and video play right there. Then the name, the kind in its colour, the size
-and a button to pin it; the quick actions of its kind in one pill of icons, and the work in progress on the file;
-the three facts of the Dossier (pages, pixels, duration… read from the file, without the search index); where it
-came from and who made it; its rating and tags, changed on the spot; its dates on one line. With several items
+of code, a folder's own pictures; audio and video play right there. Over it the kind as a badge and the facts as
+pills (size, pixels, pages, lines, duration… read from the file, without the search index). The wheel or the −/+
+buttons zoom the picture (drag it to move around, a double click shows it whole); the card's bottom edge drags it
+taller or shorter. Then the name with buttons to copy it and to pin the item; the quick actions of its kind in one
+pill of icons, and the work in progress on the file; what a folder holds, by kind; its dates on one line; where it
+came from and who made it; its rating and tags, changed on the spot. With several items
 selected: their pictures, how many and how large, and a bar of the kinds they are. The panel is about the item
 selected; "Show item on hover" in its right-click menu makes it follow the pointer too (off by default), and a file
 seen again is shown at once, its preview not loaded anew. NG setting `INFO=classic` (in `dolphinrc`, group

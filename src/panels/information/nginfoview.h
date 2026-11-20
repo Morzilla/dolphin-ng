@@ -78,7 +78,7 @@ private:
     void build();
     void showOne();
     void showMany();
-    void askPreview(const KFileItemList &items);
+    void askPreview(const KFileItemList &items, int sharper = 1);
     void showFacts();
     void showActivity();
     void showRating(int rating);

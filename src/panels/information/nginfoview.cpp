@@ -30,6 +30,9 @@
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenu>
+#include <cmath>
+#include <functional>
+#include <optional>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -100,6 +103,24 @@ public:
         m_eye->setStyleSheet(QStringLiteral("QToolButton { background: rgba(10, 12, 20, 150); border-radius: 16px; padding: 7px; }"
                                             "QToolButton:hover { background: rgba(10, 12, 20, 200); }"));
         m_eye->hide();
+        // zoom out and in, beside it (the wheel does the same around the pointer)
+        auto zoomButton = [this](const QString &icon, const QString &tip, qreal factor) {
+            auto *button = new QToolButton(this);
+            button->setIcon(QIcon::fromTheme(icon));
+            button->setIconSize(QSize(18, 18));
+            button->setAutoRaise(true);
+            button->setToolTip(tip);
+            button->setCursor(Qt::PointingHandCursor);
+            button->setAutoRepeat(true);
+            button->setStyleSheet(m_eye->styleSheet());
+            button->hide();
+            connect(button, &QToolButton::clicked, this, [this, factor] {
+                zoomBy(factor, rect().center());
+            });
+            return button;
+        };
+        m_zoomOut = zoomButton(QStringLiteral("zoom-out"), ngTr("Zoom out", "Riduci"), 1 / 1.5);
+        m_zoomIn = zoomButton(QStringLiteral("zoom-in"), ngTr("Zoom in (or the wheel)", "Ingrandisci (o la rotellina)"), 1.5);
         setMouseTracking(true);
         // the height the user gave it by dragging its bottom edge, as a share of the width (0.75 by default)
         m_ratio = qBound(MinRatio, ngSetting("INFO_PREVIEW_RATIO", QStringLiteral("0.75")).toDouble(), MaxRatio);
@@ -115,8 +136,15 @@ public:
         m_lines.clear();
         m_icon.clear();
         m_canOpen = false;
-        m_eye->hide();
+        m_zoom = 1.0;
+        showButtons(false);
+        m_sharperAsked = false;
         update();
+    }
+    // asked once the picture is zoomed in: a larger preview, so that it stays sharp
+    void setSharperWanted(std::function<void()> wanted)
+    {
+        m_sharperWanted = std::move(wanted);
     }
     void setIcon(const QString &icon, const QColor &tint)
     {
@@ -127,7 +155,17 @@ public:
     void setPixmap(const QPixmap &pixmap)
     {
         m_pixmap = pixmap;
+        showButtons(underMouse());
         update();
+        // for tests: DOLPHIN_NG_TEST_ZOOM=factor zooms the first picture in, its buttons shown (no input sent)
+        if (const qreal factor = qEnvironmentVariable("DOLPHIN_NG_TEST_ZOOM").toDouble(); factor > 1 && !zoomed()) {
+            QTimer::singleShot(800, this, [this, factor] {
+                if (!zoomed()) {
+                    zoomBy(factor, rect().center());
+                }
+                showButtons(true);
+            });
+        }
     }
     void addToStack(const QPixmap &pixmap)
     {
@@ -154,7 +192,7 @@ public:
     void setCanOpen(bool canOpen)
     {
         m_canOpen = canOpen;
-        m_eye->setVisible(canOpen && underMouse());
+        showButtons(underMouse());
     }
     bool hasPicture() const
     {
@@ -177,17 +215,43 @@ protected:
         if (height != this->height()) {
             setFixedHeight(qMax(m_chips.isEmpty() ? 110 : 160, height));
         }
-        m_eye->move(width() - m_eye->sizeHint().width() - 10, 10);
+        placeButtons();
+    }
+    void placeButtons()
+    {
+        int x = width() - 10;
+        for (QToolButton *button : {m_eye, m_zoomIn, m_zoomOut}) {
+            if (button->isVisible()) {
+                x -= button->sizeHint().width();
+                button->move(x, 10);
+                x -= 6;
+            }
+        }
+    }
+    bool canZoom() const
+    {
+        return !m_pixmap.isNull() && m_stack.isEmpty();
+    }
+    void showButtons(bool hovered)
+    {
+        m_eye->setVisible(hovered && m_canOpen);
+        m_zoomIn->setVisible((hovered || zoomed()) && canZoom());
+        m_zoomOut->setVisible((hovered || zoomed()) && canZoom());
+        if (m_zoomIn->isVisible()) {
+            m_zoomIn->setEnabled(m_zoom < MaxZoom);
+            m_zoomOut->setEnabled(zoomed());
+        }
+        placeButtons();
     }
     void enterEvent(QEnterEvent *event) override
     {
-        m_eye->setVisible(m_canOpen);
+        showButtons(true);
         QWidget::enterEvent(event);
         update();
     }
     void leaveEvent(QEvent *event) override
     {
-        m_eye->hide();
+        showButtons(false);
         QWidget::leaveEvent(event);
         update();
     }
@@ -204,6 +268,11 @@ protected:
             event->accept();
             return;
         }
+        if (event->button() == Qt::LeftButton && zoomed()) {
+            m_panFrom = event->position();
+            setCursor(Qt::ClosedHandCursor);
+            return;
+        }
         QWidget::mousePressEvent(event);
     }
     void mouseMoveEvent(QMouseEvent *event) override
@@ -215,7 +284,14 @@ protected:
             resizeEvent(nullptr);
             return;
         }
-        setCursor(onGrip(event->position()) ? Qt::SizeVerCursor : Qt::ArrowCursor);
+        if (m_panFrom) {
+            m_zoomTopLeft += event->position() - *m_panFrom;
+            m_panFrom = event->position();
+            keepInside();
+            update();
+            return;
+        }
+        setCursor(onGrip(event->position()) ? Qt::SizeVerCursor : zoomed() ? Qt::OpenHandCursor : Qt::ArrowCursor);
         QWidget::mouseMoveEvent(event);
     }
     void mouseReleaseEvent(QMouseEvent *event) override
@@ -223,6 +299,11 @@ protected:
         if (m_dragFrom >= 0) {
             m_dragFrom = -1;
             setNgSetting("INFO_PREVIEW_RATIO", QString::number(m_ratio, 'f', 3));
+            return;
+        }
+        if (m_panFrom) {
+            m_panFrom.reset();
+            setCursor(Qt::OpenHandCursor);
             return;
         }
         QWidget::mouseReleaseEvent(event);
@@ -235,7 +316,70 @@ protected:
             resizeEvent(nullptr);
             return;
         }
+        if (zoomed()) {
+            m_zoom = 1.0;
+            setCursor(Qt::ArrowCursor);
+            showButtons(true);
+            update();
+            return;
+        }
         QWidget::mouseDoubleClickEvent(event);
+    }
+    // the wheel zooms the picture in and out around the pointer; back at its whole size, the wheel scrolls the panel
+    void wheelEvent(QWheelEvent *event) override
+    {
+        const int delta = event->angleDelta().y();
+        if (m_pixmap.isNull() || !m_stack.isEmpty() || delta == 0 || (!zoomed() && delta < 0)) {
+            event->ignore();
+            return;
+        }
+        zoomBy(std::pow(1.25, delta / 120.0), event->position());
+        event->accept();
+    }
+    // zoom by a factor, the point under the pointer (or the centre) staying where it is
+    void zoomBy(qreal factor, const QPointF &at)
+    {
+        if (!canZoom()) {
+            return;
+        }
+        const QRectF before = zoomed() ? zoomedRect() : fitRect();
+        const qreal zoom = qBound(1.0, m_zoom * factor, MaxZoom);
+        m_zoomTopLeft = at - (at - before.topLeft()) * (zoom / m_zoom);
+        m_zoom = zoom < 1.02 ? 1.0 : zoom;
+        keepInside();
+        if (!m_zoomIn->underMouse() && !m_zoomOut->underMouse()) {
+            setCursor(zoomed() ? Qt::OpenHandCursor : Qt::ArrowCursor);
+        }
+        if (m_zoom > 1.5 && !m_sharperAsked && m_sharperWanted) {
+            m_sharperAsked = true;
+            m_sharperWanted();
+        }
+        showButtons(underMouse());
+        update();
+    }
+    bool zoomed() const
+    {
+        return m_zoom > 1.0 && !m_pixmap.isNull() && m_stack.isEmpty();
+    }
+    QRectF fitRect() const
+    {
+        const QSizeF size = QSizeF(m_pixmap.size()) / m_pixmap.devicePixelRatio();
+        const qreal scale = qMin((width() - 16.0) / size.width(), (height() - 16.0) / size.height());
+        const QSizeF shown = size * qMin(scale, 3.0);
+        return QRectF(QPointF((width() - shown.width()) / 2, (height() - shown.height()) / 2), shown);
+    }
+    QRectF zoomedRect() const
+    {
+        return QRectF(m_zoomTopLeft, fitRect().size() * m_zoom);
+    }
+    // the zoomed picture covers the card where it is larger than it, and stays centred where it is not
+    void keepInside()
+    {
+        const QSizeF size = fitRect().size() * m_zoom;
+        auto clamp = [](qreal pos, qreal length, qreal room) {
+            return length <= room ? (room - length) / 2 : qBound(room - length, pos, 0.0);
+        };
+        m_zoomTopLeft = QPointF(clamp(m_zoomTopLeft.x(), size.width(), width()), clamp(m_zoomTopLeft.y(), size.height(), height()));
     }
     void paintEvent(QPaintEvent *) override
     {
@@ -287,13 +431,10 @@ protected:
                 y += metrics.height() + 1;
             }
         } else if (!m_pixmap.isNull()) {
-            // the picture whole, as large as it fits
-            const QSizeF size = QSizeF(m_pixmap.size()) / m_pixmap.devicePixelRatio();
-            const qreal scale = qMin((width() - 16.0) / size.width(), (height() - 16.0) / size.height());
-            const QSizeF shown = size * qMin(scale, 3.0);
-            const QRectF target(QPointF((width() - shown.width()) / 2, (height() - shown.height()) / 2), shown);
+            // the picture whole, as large as it fits (or zoomed in with the wheel)
+            const QRectF target = zoomed() ? zoomedRect() : fitRect();
             QPainterPath picture;
-            picture.addRoundedRect(target, 6, 6);
+            picture.addRoundedRect(target, zoomed() ? 0 : 6, zoomed() ? 0 : 6);
             painter.setClipPath(picture, Qt::IntersectClip);
             painter.drawPixmap(target, m_pixmap, QRectF(QPointF(0, 0), QSizeF(m_pixmap.size())));
         } else if (!m_icon.isEmpty()) {
@@ -312,6 +453,23 @@ protected:
 
     void paintOverlay(QPainter &painter, const QPainterPath &shape)
     {
+        if (zoomed()) {
+            // zoomed in: the picture alone, and how much it is enlarged
+            painter.setClipPath(shape);
+            const QString text = QStringLiteral("%1%").arg(qRound(m_zoom * 100));
+            QFont font = this->font();
+            font.setPointSizeF(font.pointSizeF() * 0.85);
+            font.setWeight(QFont::DemiBold);
+            painter.setFont(font);
+            const QFontMetricsF metrics(font);
+            const QRectF pill(width() - metrics.horizontalAdvance(text) - 30, height() - metrics.height() - 20, metrics.horizontalAdvance(text) + 18, metrics.height() + 8);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(10, 12, 20, 170));
+            painter.drawRoundedRect(pill, pill.height() / 2, pill.height() / 2);
+            painter.setPen(Qt::white);
+            painter.drawText(pill, Qt::AlignCenter, text);
+            return;
+        }
         painter.setClipPath(shape);
         QFont bold = font();
         bold.setPointSizeF(bold.pointSizeF() * 0.92);
@@ -393,6 +551,14 @@ private:
     qreal m_ratio = 0.75;
     qreal m_dragFrom = -1;
     int m_dragHeight = 0;
+    static constexpr qreal MaxZoom = 8.0;
+    qreal m_zoom = 1.0;
+    QPointF m_zoomTopLeft;
+    QToolButton *m_zoomIn = nullptr;
+    QToolButton *m_zoomOut = nullptr;
+    std::optional<QPointF> m_panFrom;
+    bool m_sharperAsked = false;
+    std::function<void()> m_sharperWanted;
 };
 
 // ---- the three facts of the Dossier: a value large, its word under it
@@ -693,6 +859,11 @@ void NgInfoView::build()
 
     m_hero = new NgInfoHero(m_body);
     m_layout->addWidget(m_hero);
+    m_hero->setSharperWanted([this] {
+        if (!m_item.isNull()) {
+            askPreview({m_item}, 3);
+        }
+    });
     connect(m_hero->eye(), &QToolButton::clicked, this, [this] {
         if (!m_item.isNull()) {
             Q_EMIT lightboxRequested(m_item);
@@ -1044,16 +1215,17 @@ void NgInfoView::showItems(const KFileItemList &items)
     showMany();
 }
 
-void NgInfoView::askPreview(const KFileItemList &items)
+void NgInfoView::askPreview(const KFileItemList &items, int sharper)
 {
     if (m_previewJob) {
         m_previewJob->kill();
     }
     const qreal dpr = devicePixelRatioF();
-    const int side = qBound(256, qRound(qMax(qMax(m_hero->width(), m_hero->height()), 260) * dpr * 1.2), 1024);
+    // (sharper: for a picture zoomed in, larger and not kept)
+    const int side = qBound(256, qRound(qMax(qMax(m_hero->width(), m_hero->height()), 260) * dpr * 1.2 * sharper), 1024 * sharper);
     // (kept for the files seen last: coming back to one shows it at once)
     static QHash<QString, QPixmap> kept;
-    if (items.count() == 1) {
+    if (items.count() == 1 && sharper == 1) {
         const QString key = items.first().url().toString() + QLatin1Char('|') + QString::number(items.first().time(KFileItem::ModificationTime).toSecsSinceEpoch());
         const auto found = kept.constFind(key);
         if (found != kept.constEnd()) {
@@ -1065,11 +1237,14 @@ void NgInfoView::askPreview(const KFileItemList &items)
     m_previewJob->setIgnoreMaximumSize(items.count() == 1);
     m_previewJob->setDevicePixelRatio(dpr);
     const bool stack = items.count() > 1;
-    connect(m_previewJob, &KIO::PreviewJob::gotPreview, this, [this, stack](const KFileItem &item, const QPixmap &pixmap) {
+    connect(m_previewJob, &KIO::PreviewJob::gotPreview, this, [this, stack, sharper](const KFileItem &item, const QPixmap &pixmap) {
         if (stack) {
             m_hero->addToStack(pixmap);
         } else {
             m_hero->setPixmap(pixmap);
+            if (sharper > 1) {
+                return;
+            }
             if (kept.size() > 40) {
                 kept.clear();
             }
