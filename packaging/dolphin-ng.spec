@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      f7d874716f9c5f77039fb4176dd7b522b8d20ff6
+%global commit      c0d9301e21ed57422ab480d32e7fdd41595cc760
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611200931
+%global snapdate    202611201541
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -130,6 +130,12 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Fri Nov 20 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611201541gitc0d9301-1
+- Information panel redrawn: facts over the preview, zoom with the wheel, tags and rating editable
+- Tags shown on the cards in their colours
+- A light glass on light schemes; a wider sidebar on a first start
+- The Information panel also with older Baloo Widgets
+
 * Fri Nov 20 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611200931gitf7d8747-1
 - Stock Dolphin no longer shows Dolphin NG's icon in the task manager; window titles say Dolphin NG
 
