@@ -196,7 +196,6 @@ Icon=dolphin-ng
 Terminal=false
 Categories=Qt;KDE;System;FileTools;FileManager;
 MimeType=inode/directory;
-StartupWMClass=dolphin
 ENTRY
 install -Dm644 "$ROOT/ng/icons/dolphin-ng.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/dolphin-ng.svg"
 if [ ! -e "$HOME/.local/share/kxmlgui5/dolphin/dolphinui.rc" ]; then

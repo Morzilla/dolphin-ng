@@ -107,7 +107,6 @@ Icon=dolphin-ng
 Terminal=false
 Categories=Qt;KDE;System;FileTools;FileManager;
 MimeType=inode/directory;
-StartupWMClass=dolphin
 EOT
 
 %post

@@ -140,8 +140,10 @@ int main(int argc, char **argv)
 #else
     const QString ngVersion = QStringLiteral(DOLPHIN_VERSION_STRING " (Dolphin NG)");
 #endif
+    // (the name shown in window titles and the task manager: "Dolphin NG", told apart from Dolphin; the component name
+    // stays "dolphin", which is where the settings live)
     KAboutData aboutData(QStringLiteral("dolphin"),
-                         i18n("Dolphin"),
+                         QStringLiteral("Dolphin NG"),
                          ngVersion,
                          i18nc("@title", "File Manager"),
                          KAboutLicense::GPL,

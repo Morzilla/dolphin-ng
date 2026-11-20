@@ -63,7 +63,6 @@ Icon=dolphin-ng
 Terminal=false
 Categories=Qt;KDE;System;FileTools;FileManager;
 MimeType=inode/directory;
-StartupWMClass=dolphin
 EOT
   install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" LICENSES/*
 }
