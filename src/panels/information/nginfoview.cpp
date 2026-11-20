@@ -240,7 +240,7 @@ public:
     }
     QSize sizeHint() const override
     {
-        return QSize(260, fontMetrics().height() * 2 + 22);
+        return QSize(260, fontMetrics().height() * 2 + 30);
     }
 
 protected:
@@ -252,7 +252,7 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         const int count = int(m_facts.count());
-        const qreal gap = 6, tileWidth = (width() - gap * (count - 1)) / count;
+        const qreal gap = 8, tileWidth = (width() - gap * (count - 1)) / count;
         QFont big = font();
         big.setPointSizeF(big.pointSizeF() * 1.15);
         big.setWeight(QFont::Bold);
@@ -265,7 +265,7 @@ protected:
             QPainterPath path;
             path.addRoundedRect(tile, 10, 10);
             painter.fillPath(path, ngVeil(palette()));
-            const QRectF inner = tile.adjusted(9, 7, -7, -7);
+            const QRectF inner = tile.adjusted(12, 10, -10, -10);
             painter.setFont(big);
             painter.setPen(palette().color(QPalette::WindowText));
             // (a long value shrinks rather than losing its end: "4032×3024" whole)
@@ -391,7 +391,7 @@ public:
     }
     QSize sizeHint() const override
     {
-        return QSize(260, fontMetrics().height() * 2 + 14);
+        return QSize(260, fontMetrics().height() * 2 + 22);
     }
 
 protected:
@@ -416,10 +416,10 @@ protected:
         QColor line = palette().color(QPalette::WindowText);
         line.setAlphaF(0.12);
         for (int i = 0; i < m_dates.count(); ++i) {
-            const QRectF cell(i * w + 8, 6, w - 14, height() - 12);
+            const QRectF cell(i * w + 12, 9, w - 20, height() - 18);
             if (i > 0) {
                 painter.setPen(QPen(line, 1));
-                painter.drawLine(QPointF(i * w + 0.5, 6), QPointF(i * w + 0.5, height() - 6));
+                painter.drawLine(QPointF(i * w + 0.5, 9), QPointF(i * w + 0.5, height() - 9));
             }
             painter.setFont(small);
             painter.setPen(dim);
@@ -481,8 +481,9 @@ void NgInfoView::build()
     m_body = new QWidget(this);
     m_body->setAutoFillBackground(false);
     m_layout = new QVBoxLayout(m_body);
-    m_layout->setContentsMargins(10, 6, 10, 14);
-    m_layout->setSpacing(10);
+    // (room around and between the blocks: packed close they read as one crowded column)
+    m_layout->setContentsMargins(16, 12, 16, 20);
+    m_layout->setSpacing(16);
     setWidget(m_body);
 
     m_hero = new NgInfoHero(m_body);
@@ -505,7 +506,9 @@ void NgInfoView::build()
     nameFont.setPointSizeF(nameFont.pointSizeF() * 1.12);
     nameFont.setWeight(QFont::Bold);
     m_name->setFont(nameFont);
-    m_layout->addWidget(m_name);
+    auto *headGroup = new QVBoxLayout();
+    headGroup->setSpacing(8);
+    headGroup->addWidget(m_name);
     auto *chips = new QHBoxLayout();
     chips->setSpacing(8);
     m_kind = new QLabel(m_body);
@@ -519,7 +522,8 @@ void NgInfoView::build()
     chips->addWidget(m_size);
     chips->addStretch();
     chips->addWidget(m_pin);
-    m_layout->addLayout(chips);
+    headGroup->addLayout(chips);
+    m_layout->addLayout(headGroup);
     connect(m_pin, &QToolButton::clicked, this, [this](bool on) {
         const KFileItemList items = m_items.isEmpty() ? KFileItemList{m_item} : m_items;
         Q_EMIT pinRequested(items, on);
@@ -531,24 +535,27 @@ void NgInfoView::build()
     m_actions->setObjectName(QStringLiteral("ngInfoActions"));
     m_actions->setAttribute(Qt::WA_StyledBackground);
     m_actionsLayout = new QHBoxLayout(m_actions);
-    m_actionsLayout->setContentsMargins(3, 3, 3, 3);
-    m_actionsLayout->setSpacing(1);
+    m_actionsLayout->setContentsMargins(4, 4, 4, 4);
+    m_actionsLayout->setSpacing(2);
+    auto *actionsGroup = new QVBoxLayout();
+    actionsGroup->setSpacing(4);
     auto *actionsRow = new QHBoxLayout();
     actionsRow->addWidget(m_actions);
     actionsRow->addStretch();
-    m_layout->addLayout(actionsRow);
+    actionsGroup->addLayout(actionsRow);
     m_actionCaption = new QLabel(m_body);
-    m_actionCaption->setContentsMargins(6, 0, 0, 0);
+    m_actionCaption->setContentsMargins(8, 0, 0, 0);
     m_actionCaption->setEnabled(false);
-    m_layout->addWidget(m_actionCaption);
+    actionsGroup->addWidget(m_actionCaption);
+    m_layout->addLayout(actionsGroup);
 
     // the work in progress on the file
     m_activity = new QWidget(m_body);
     m_activity->setObjectName(QStringLiteral("ngInfoActivity"));
     m_activity->setAttribute(Qt::WA_StyledBackground);
     auto *activityLayout = new QVBoxLayout(m_activity);
-    activityLayout->setContentsMargins(10, 8, 10, 8);
-    activityLayout->setSpacing(5);
+    activityLayout->setContentsMargins(14, 10, 14, 12);
+    activityLayout->setSpacing(7);
     m_activityText = new QLabel(m_activity);
     m_activityText->setWordWrap(true);
     m_activityBar = new QProgressBar(m_activity);
@@ -570,9 +577,9 @@ void NgInfoView::build()
     // where it came from, who made it, its rating and tags
     m_lines = new QWidget(m_body);
     m_linesLayout = new QGridLayout(m_lines);
-    m_linesLayout->setContentsMargins(2, 0, 2, 0);
-    m_linesLayout->setHorizontalSpacing(12);
-    m_linesLayout->setVerticalSpacing(5);
+    m_linesLayout->setContentsMargins(4, 0, 4, 0);
+    m_linesLayout->setHorizontalSpacing(16);
+    m_linesLayout->setVerticalSpacing(10);
     m_linesLayout->setColumnStretch(1, 1);
     auto caption = [this](const QString &text) {
         auto *label = new QLabel(text, m_lines);
