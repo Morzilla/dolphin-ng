@@ -326,6 +326,7 @@ private:
         QString text;
         QRectF rect;
         bool tinted = false; // the type chip takes the colour of the row
+        QColor colour; // a tag: its own colour
     };
     QList<NgChip> m_ngChips; // second line under the name: type and other details as small pills
     struct NgTimeLine {
@@ -359,6 +360,8 @@ private:
     QString m_ngDossierSign;
     QString m_ngFactsPath;
     bool m_ngFactsHooked = false;
+    QString m_ngTagsPath; // the card's file, for the notice that its tags changed
+    bool m_ngTagsHooked = false;
     qreal m_ngCardIconSide = 0; // side of the icon when the pixmap is not a preview
     bool m_ngCardPreview = false; // the pixmap is a preview, not the icon of the type
     bool m_ngCardWatermark = false; // the type is drawn as the background instead of the icon

@@ -3976,6 +3976,7 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
     QList<NgQuickAction> quickActions;
     QString kindWords; // dolphin-ng: "PDF document", "Folder"... (Scheda and Dossier)
     const NgFileFacts *facts = nullptr; // Dossier: what is inside the file, where it came from
+    QStringList tags; // dolphin-ng: the file's tags (Scheda and Tessera; the Dossier has them in its facts)
     m_ngCardHeader = QRectF();
     if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
         if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
@@ -3991,6 +3992,20 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                     quickActions = ngQuickActionsFor(fileItem.localPath(), fileItem.mimetype());
                 }
                 kindWords = fileItem.isDir() ? ngTr("Folder", "Cartella") : fileItem.mimeComment();
+                m_ngTagsPath = fileItem.isLocalFile() ? fileItem.localPath() : QString();
+                if (look != NgCardStyle::Dossier) {
+                    tags = ngFileTags(m_ngTagsPath);
+                }
+                if (!m_ngTagsHooked) {
+                    // a tag added or taken away (the Information panel): the card is laid out again
+                    m_ngTagsHooked = true;
+                    connect(NgFacts::instance(), &NgFacts::changed, this, [this](const QString &path) {
+                        if (!m_ngTagsPath.isEmpty() && path == m_ngTagsPath) {
+                            invalidateCache();
+                            update();
+                        }
+                    });
+                }
                 if (look == NgCardStyle::Dossier && fileItem.isLocalFile()) {
                     // what the Dossier tells beyond the dates: read in the background, the card is laid out again then
                     const qint64 newest = qMax(fileItem.time(KFileItem::ModificationTime).toSecsSinceEpoch(), values.value("ngNewest").toLongLong());
@@ -4108,6 +4123,32 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
         }
         return y + chipHeight;
     };
+    // the tags as chips in their colours: as many as fit, at most two, then "+N" for the rest
+    auto tagRow = [this, &chipFm, chipHeight](qreal x, qreal y, qreal right, const QStringList &tags) {
+        for (int i = 0; i < tags.count(); ++i) {
+            const int rest = tags.count() - i;
+            const QString more = QStringLiteral("+%1").arg(rest);
+            const qreal moreWidth = chipFm.horizontalAdvance(more) + 14;
+            const qreal width = chipFm.horizontalAdvance(tags.at(i)) + 14;
+            const bool last = rest == 1;
+            if (i == 2 || x + width + (last ? 0 : moreWidth + 4) > right) {
+                if (x + moreWidth <= right) {
+                    NgChip chip;
+                    chip.text = more;
+                    chip.rect = QRectF(x, y, moreWidth, chipHeight);
+                    m_ngChips.append(chip);
+                }
+                break;
+            }
+            NgChip chip;
+            chip.text = tags.at(i);
+            chip.rect = QRectF(x, y, width, chipHeight);
+            chip.colour = ngTagColour(tags.at(i));
+            m_ngChips.append(chip);
+            x += width + 4;
+        }
+        return y + chipHeight;
+    };
     // while hovered the card shows the preview eye in its top right corner (the popup opens on a click or, with the
     // hover preview on, when the pointer rests on it); the menu stays on the right click
     auto actionsAt = [](qreal, qreal) {};
@@ -4216,6 +4257,9 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
             }
         }
 
+        if (!tags.isEmpty()) {
+            y = tagRow(x0, y, right, tags) + 6;
+        }
         struct Line {
             QString label;
             QString value;
@@ -4276,13 +4320,20 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
             lines.append({ngTr("Modified", "Modificato"), dateLine(modified)});
         }
         const qreal lineHeight = smallFm.height() + 1;
-        const qreal blockHeight = nameFm.height() + 2 + smallFm.height() + 5 + lines.count() * lineHeight;
+        // (the tags under the kind take the room of the second date when the card is short)
+        if (!tags.isEmpty() && lines.count() > 1 && card.height() < nameFm.height() + smallFm.height() + chipHeight + 2 * lineHeight + 22) {
+            lines.removeLast();
+        }
+        const qreal blockHeight = nameFm.height() + 2 + smallFm.height() + 5 + (tags.isEmpty() ? 0 : chipHeight + 5) + lines.count() * lineHeight;
         qreal y = card.top() + qMax(pad * 0.7, (card.height() - blockHeight) / 2.0);
         setName(x1, y, right - x1);
         y += nameFm.height() + 2;
         const QString kind = !kindWords.isEmpty() ? kindWords : typeText;
         putText(smallFm.elidedText(kind, Qt::ElideRight, right - x1), QPointF(x1, y + smallFm.ascent()), small, 2);
         y += smallFm.height() + 5;
+        if (!tags.isEmpty()) {
+            y = tagRow(x1, y, right, tags) + 5;
+        }
         qreal labelWidth = 0;
         for (const auto &line : std::as_const(lines)) {
             labelWidth = qMax(labelWidth, smallFm.horizontalAdvance(line.first));
@@ -4502,7 +4553,7 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                     m_ngDossierSignRect = QRectF(lx, originTop + (originHeight - side) / 2.0, side, side);
                     lx += side + 6;
                 }
-                chipRow(lx, originTop + (originHeight - chipHeight) / 2.0, lineRight, facts->tags, facts->tags.count());
+                tagRow(lx, originTop + (originHeight - chipHeight) / 2.0, lineRight, facts->tags);
             }
         }
 }
@@ -5564,10 +5615,12 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
                 painter->setFont(chipFont);
                 continue;
             }
-            QColor fill = chip.tinted ? m_ngTint : QColor(ink, ink, ink);
-            fill.setAlpha(chip.tinted ? (dark ? 34 : 40) : (dark ? 18 : 16));
-            QColor edge = chip.tinted ? m_ngTint : QColor(ink, ink, ink);
-            edge.setAlpha(chip.tinted ? 110 : 26);
+            const bool tinted = chip.tinted || chip.colour.isValid();
+            const QColor tint = chip.colour.isValid() ? chip.colour : m_ngTint;
+            QColor fill = tinted ? tint : QColor(ink, ink, ink);
+            fill.setAlpha(tinted ? (dark ? 34 : 40) : (dark ? 18 : 16));
+            QColor edge = tinted ? tint : QColor(ink, ink, ink);
+            edge.setAlpha(tinted ? 110 : 26);
             const qreal radius = chip.rect.height() / 2.0;
             const bool onBand = look == NgCardStyle::Tessera && m_ngCardThumb.contains(chip.rect.center());
             if (onBand) {
@@ -5575,14 +5628,16 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
                 painter->setPen(Qt::NoPen);
                 painter->setBrush(dark ? QColor(12, 13, 16, 228) : QColor(252, 252, 252, 232));
                 painter->drawRoundedRect(chip.rect, radius, radius);
-                edge.setAlpha(chip.tinted ? 150 : 60);
+                edge.setAlpha(tinted ? 150 : 60);
             }
             painter->setPen(QPen(edge, 1));
             painter->setBrush(fill);
             painter->drawRoundedRect(chip.rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
-            QColor chipText = chip.tinted ? m_ngTint : onBand ? text : m_additionalInfoTextColor;
-            if (chip.tinted && !dark) {
+            QColor chipText = tinted ? tint : onBand ? text : m_additionalInfoTextColor;
+            if (tinted && !dark) {
                 chipText = chipText.darker(135);
+            } else if (chip.colour.isValid()) {
+                chipText = chipText.lighter(125);
             }
             painter->setPen(chipText);
             painter->drawText(chip.rect, Qt::AlignCenter, chip.text);

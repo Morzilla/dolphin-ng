@@ -47,6 +47,11 @@ DOLPHIN_EXPORT int ngSettingsGeneration();
 class QDateTime;
 /** dolphin-ng: "oggi", "ieri", "7 giorni fa", "2 anni fa". */
 DOLPHIN_EXPORT QString ngAgoText(const QDateTime &when);
+// dolphin-ng: a tag's colour, the same wherever the tag is shown (cards, panel): picked from its name, from a set of
+// colours that read on light and dark grounds
+DOLPHIN_EXPORT QColor ngTagColour(const QString &tag);
+// dolphin-ng: the tags of a local file, read from its extended attributes (as KDE writes them, without Baloo)
+DOLPHIN_EXPORT QStringList ngFileTags(const QString &path);
 DOLPHIN_EXPORT QString ngSetting(const char *name, const QString &fallback = QString());
 DOLPHIN_EXPORT int ngSettingInt(const char *name, int fallback);
 /** dolphin-ng: the interface text, in Italian when the desktop language is Italian and in English otherwise. */

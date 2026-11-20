@@ -68,8 +68,15 @@ public:
      */
     const NgFileFacts *facts(const QString &path, const QString &mime, bool isDir, qint64 modified, qint64 size);
 
+    /**
+     * What is told by the file's attributes changed (its tags, its rating: the file's dates and size stay the same):
+     * the facts are read again, and the cards of the file are laid out again.
+     */
+    void attributesChanged(const QString &path);
+
 Q_SIGNALS:
     void ready(const QString &path);
+    void changed(const QString &path);
 
 private:
     explicit NgFacts(QObject *parent = nullptr);

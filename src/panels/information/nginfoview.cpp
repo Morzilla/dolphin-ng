@@ -30,6 +30,8 @@
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenu>
+#include <QCursor>
+#include <QToolTip>
 #include <QImageReader>
 #include <QPointer>
 #include <QProcess>
@@ -92,6 +94,99 @@ void ngInfoText(QPainter &painter, const QRectF &rect, int flags, const QString 
 }
 
 // ---- the preview at the top: a picture, the first lines of a text, an icon, or a stack of several pictures
+// the tags: chips side by side, on as many lines as they need (in one row a few tags squeezed each other to "V…e")
+namespace
+{
+// (in a namespace of this file: the view container has a class of the same name, and the linker kept one of the two)
+class NgFlowLayout : public QLayout
+{
+public:
+    explicit NgFlowLayout(QWidget *parent)
+        : QLayout(parent)
+    {
+        setContentsMargins(0, 0, 0, 0);
+    }
+    ~NgFlowLayout() override
+    {
+        while (QLayoutItem *item = takeAt(0)) {
+            delete item;
+        }
+    }
+    void addItem(QLayoutItem *item) override
+    {
+        m_items.append(item);
+    }
+    int count() const override
+    {
+        return m_items.count();
+    }
+    QLayoutItem *itemAt(int index) const override
+    {
+        return m_items.value(index);
+    }
+    QLayoutItem *takeAt(int index) override
+    {
+        return index >= 0 && index < m_items.count() ? m_items.takeAt(index) : nullptr;
+    }
+    Qt::Orientations expandingDirections() const override
+    {
+        return {};
+    }
+    bool hasHeightForWidth() const override
+    {
+        return true;
+    }
+    int heightForWidth(int width) const override
+    {
+        return arrange(QRect(0, 0, width, 0), false);
+    }
+    void setGeometry(const QRect &rect) override
+    {
+        QLayout::setGeometry(rect);
+        arrange(rect, true);
+    }
+    QSize sizeHint() const override
+    {
+        return minimumSize();
+    }
+    QSize minimumSize() const override
+    {
+        QSize size;
+        for (QLayoutItem *item : m_items) {
+            size = size.expandedTo(item->minimumSize());
+        }
+        return size;
+    }
+
+private:
+    int arrange(const QRect &rect, bool place) const
+    {
+        const int gap = 4;
+        int x = rect.x();
+        int y = rect.y();
+        int lineHeight = 0;
+        for (QLayoutItem *item : m_items) {
+            if (item->isEmpty()) {
+                continue;
+            }
+            const QSize hint = item->sizeHint().boundedTo(QSize(rect.width(), QWIDGETSIZE_MAX));
+            if (x > rect.x() && x + hint.width() > rect.right() + 1) {
+                x = rect.x();
+                y += lineHeight + gap;
+                lineHeight = 0;
+            }
+            if (place) {
+                item->setGeometry(QRect(QPoint(x, y), hint));
+            }
+            x += hint.width() + gap;
+            lineHeight = qMax(lineHeight, hint.height());
+        }
+        return y + lineHeight - rect.y();
+    }
+    QList<QLayoutItem *> m_items;
+};
+}
+
 class NgInfoHero : public QWidget
 {
 public:
@@ -1032,15 +1127,14 @@ void NgInfoView::build()
             const int rating = m_rating == i * 2 ? 0 : i * 2;
             if (!m_item.isNull() && m_item.isLocalFile()) {
                 KFileMetaData::UserMetaData(m_item.localPath()).setRating(rating);
+                NgFacts::instance()->attributesChanged(m_item.localPath());
             }
             showRating(rating);
         });
     }
     starsLayout->addStretch();
     m_tags = new QWidget(m_lines);
-    m_tagsLayout = new QHBoxLayout(m_tags);
-    m_tagsLayout->setContentsMargins(0, 0, 0, 0);
-    m_tagsLayout->setSpacing(4);
+    m_tagsLayout = new NgFlowLayout(m_tags);
     // (a label: smaller, with room above it that sets the pair off from the one before; the value right under it)
     auto above = [](QLabel *label, bool first) {
         QFont small = label->font();
@@ -1543,14 +1637,32 @@ void NgInfoView::showTags()
     }
     const QPalette palette = QApplication::palette();
     const QColor veil = ngVeil(palette);
+    Q_UNUSED(veil)
+    const bool dark = ngIsDark(palette);
     for (const QString &tag : std::as_const(m_tagList)) {
-        auto *chip = new QLabel(tag, m_tags);
-        chip->setStyleSheet(QStringLiteral("QLabel { background: rgba(%1, %2, %3, %4); border-radius: 9px; padding: 1px 8px; }")
-                                .arg(veil.red())
-                                .arg(veil.green())
-                                .arg(veil.blue())
-                                .arg(QString::number(qMin(1.0, veil.alphaF() * 1.8), 'f', 3)));
+        // in the tag's colour, as on the cards; the cross takes it away
+        const QColor colour = ngTagColour(tag);
+        const QColor text = dark ? colour.lighter(125) : colour.darker(135);
+        auto *chip = new QToolButton(m_tags);
+        chip->setText(tag + QStringLiteral("  ×"));
+        chip->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        chip->setToolTip(ngTr("Remove the tag “%1”", "Togli l'etichetta «%1»").arg(tag));
+        chip->setCursor(Qt::PointingHandCursor);
+        chip->setStyleSheet(QStringLiteral("QToolButton { background: rgba(%1, %2, %3, %4); border: 1px solid rgba(%1, %2, %3, 0.43); border-radius: 10px;"
+                                           " padding: 1px 6px 1px 8px; color: %5; }"
+                                           "QToolButton:hover { background: rgba(%1, %2, %3, 0.30); }")
+                                .arg(colour.red())
+                                .arg(colour.green())
+                                .arg(colour.blue())
+                                .arg(dark ? QStringLiteral("0.14") : QStringLiteral("0.16"))
+                                .arg(text.name()));
+        connect(chip, &QToolButton::clicked, this, [this, tag] {
+            QStringList tags = m_tagList;
+            tags.removeAll(tag);
+            writeTags(tags);
+        });
         m_tagsLayout->addWidget(chip);
+        chip->show(); // (a child added to a shown panel stays hidden until later, and the layout passed it over)
     }
     auto *add = new QToolButton(m_tags);
     add->setText(ngTr("+ tag", "+ etichetta"));
@@ -1558,7 +1670,8 @@ void NgInfoView::showTags()
     add->setEnabled(!m_item.isNull() && m_item.isLocalFile());
     connect(add, &QToolButton::clicked, this, &NgInfoView::editTags);
     m_tagsLayout->addWidget(add);
-    m_tagsLayout->addStretch();
+    add->show();
+    m_tagsLayout->invalidate();
 }
 
 void NgInfoView::editTags()
@@ -1571,9 +1684,26 @@ void NgInfoView::editTags()
     if (!ok || tag.isEmpty() || m_tagList.contains(tag)) {
         return;
     }
-    m_tagList.append(tag);
-    KFileMetaData::UserMetaData(m_item.localPath()).setTags(m_tagList);
+    writeTags(m_tagList + QStringList{tag});
+}
+
+void NgInfoView::writeTags(const QStringList &tags)
+{
+    if (m_item.isNull() || !m_item.isLocalFile()) {
+        return;
+    }
+    const QString path = m_item.localPath();
+    KFileMetaData::UserMetaData data(path);
+    if (!data.isSupported() || data.setTags(tags) != KFileMetaData::UserMetaData::NoError) {
+        // (a file system without extended attributes: FAT, some network shares)
+        QToolTip::showText(QCursor::pos(), ngTr("Tags cannot be kept on this file: its file system does not hold them.",
+                                                "Le etichette non si possono salvare su questo file: il suo file system non le supporta."),
+                           this);
+        return;
+    }
+    m_tagList = tags;
     showTags();
+    NgFacts::instance()->attributesChanged(path);
 }
 
 void NgInfoView::showActivity()

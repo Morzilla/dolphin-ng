@@ -571,6 +571,7 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
         return false;
     }
     bool opaque = true;
+    bool frosted = false; // the card shows the wallpaper (a picture of it, or the live blur)
     painter.setRenderHint(QPainter::Antialiasing);
     const QRectF card = QRectF(rect()).adjusted(6, 6, -6, -6);
     const qreal radius = 12;
@@ -615,6 +616,7 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
         painter.setClipPath(clip, Qt::IntersectClip); // keep a clip set by the caller (the Places titles)
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
         painter.drawImage(card, frame);
+        frosted = true;
         QColor tint = palette().color(QPalette::Window);
         tint.setAlphaF(1.0 - qBound(0, ngSettingInt("GLASS", 55), 100) / 100.0);
         painter.fillRect(card, tint);
@@ -666,6 +668,7 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
             m_lavaTimer->stop();
         }
         painter.drawPixmap(card, backdrop, source);
+        frosted = true;
         QColor tint = palette().color(QPalette::Window);
         tint.setAlphaF(1.0 - qBound(0, ngSettingInt("GLASS", 55), 100) / 100.0); // how much of the picture shows
         painter.fillRect(card, tint);
@@ -720,6 +723,7 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
         painter.setBrush(QColor(0, 0, 0, qRound(m_glass * 255 / 100)));
         painter.drawRoundedRect(card, radius, radius);
         painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+        frosted = true;
     } else {
         // live blur without a blur effect in the compositor: a hole would show the windows behind sharp, text over
         // text. The card stays a tinted panel of the window's colour until a blur is there
@@ -729,6 +733,16 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
         painter.drawRoundedRect(card, radius, radius);
     }
 
+    if (frosted && !ngAurora() && !ngIsDark(palette())) {
+        // a light scheme: frost over the wallpaper, so the card is a light glass about as bright as the window, not a
+        // grey slab under black text (a dark wallpaper, as Kubuntu's, greyed it)
+        painter.save();
+        QPainterPath clip;
+        clip.addRoundedRect(card, radius, radius);
+        painter.setClipPath(clip, Qt::IntersectClip);
+        painter.fillRect(card, QColor(255, 255, 255, qRound(ngEnvInt("DOLPHIN_NG_FROST", 55) * 255 / 100.0)));
+        painter.restore();
+    }
     if (!ngAurora()) {
         // light veil, a little stronger at the top
         QLinearGradient veil(card.topLeft(), card.bottomLeft());

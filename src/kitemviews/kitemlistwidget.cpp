@@ -1600,6 +1600,30 @@ NgKind ngKindFor(const QString &name, bool isDir)
 }
 
 // dolphin-ng: "oggi", "ieri", "7 giorni fa", "2 anni fa"
+QColor ngTagColour(const QString &tag)
+{
+    // (a hash of our own: qHash is seeded anew in every process, and a tag would change colour each start)
+    static const QColor colours[] = {QColor(0xe0, 0x5a, 0x5a), QColor(0xe8, 0x8a, 0x2e), QColor(0xd4, 0xa5, 0x17), QColor(0x4c, 0xa8, 0x5a),
+                                     QColor(0x2a, 0xa1, 0x98), QColor(0x3d, 0x8b, 0xe0), QColor(0x7b, 0x6c, 0xe0), QColor(0xc8, 0x5a, 0xb4)};
+    quint32 hash = 2166136261u;
+    for (const QChar c : tag.trimmed().toLower()) {
+        hash = (hash ^ c.unicode()) * 16777619u;
+    }
+    return colours[hash % (sizeof(colours) / sizeof(colours[0]))];
+}
+
+QStringList ngFileTags(const QString &path)
+{
+    if (path.isEmpty()) {
+        return {};
+    }
+    KFileMetaData::UserMetaData data(path);
+    if (!data.isSupported()) {
+        return {};
+    }
+    return data.tags();
+}
+
 QString ngAgoText(const QDateTime &when)
 {
     const qint64 days = when.date().daysTo(QDate::currentDate());

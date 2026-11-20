@@ -85,6 +85,7 @@ private:
     void showRating(int rating);
     void showTags();
     void editTags();
+    void writeTags(const QStringList &tags);
     void restyle();
     void layoutActions();
     void updateOverlay();
@@ -125,7 +126,7 @@ private:
     QWidget *m_stars = nullptr;
     QList<QToolButton *> m_starButtons;
     QWidget *m_tags = nullptr;
-    QHBoxLayout *m_tagsLayout = nullptr;
+    QLayout *m_tagsLayout = nullptr;
     NgInfoDates *m_dates = nullptr;
     QStringList m_tagList;
     QColor m_overlayTint;

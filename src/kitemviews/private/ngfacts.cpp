@@ -581,6 +581,15 @@ NgFacts *NgFacts::instance()
     return facts;
 }
 
+void NgFacts::attributesChanged(const QString &path)
+{
+    auto it = m_cache.find(path);
+    if (it != m_cache.end() && !it->pending) {
+        m_cache.erase(it);
+    }
+    Q_EMIT changed(path);
+}
+
 NgFacts::NgFacts(QObject *parent)
     : QObject(parent)
 {
