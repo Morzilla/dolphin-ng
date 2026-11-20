@@ -58,6 +58,17 @@ per unit (Folders, Pages, Words, Duration, Pixels, Other). In the two-line rows 
 
 ![The home as cards](ng/screenshots/features/home-cards.png)
 
+## The Information panel
+
+The Information panel (F11) is drawn again: one place for what the cards show about a file and for what can be
+done with it. At the top a large preview: the picture (its eye opens the lightbox), the first lines of a text or
+of code, a folder's own pictures; audio and video play right there. Then the name, the kind in its colour, the size
+and a button to pin it; the quick actions of its kind in one pill of icons, and the work in progress on the file;
+the three facts of the Dossier (pages, pixels, duration… read from the file, without the search index); where it
+came from and who made it; its rating and tags, changed on the spot; its dates on one line. With several items
+selected: their pictures, how many and how large, and a bar of the kinds they are. NG setting `INFO=classic` (in
+`dolphinrc`, group `[DolphinNG]`) brings back Dolphin's own panel.
+
 ## Quick actions
 
 Hovering a card or a row brings a pill of actions for that kind of file. They run in the background and show

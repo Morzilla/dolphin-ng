@@ -434,6 +434,7 @@ if(HAVE_BALOO)
     target_sources(dolphinstatic PRIVATE
         panels/information/informationpanel.cpp
         panels/information/informationpanelcontent.cpp
+        panels/information/nginfoview.cpp
         panels/information/pixmapviewer.cpp
         panels/information/mediawidget.cpp
         settings/interface/panelsettingspage.cpp

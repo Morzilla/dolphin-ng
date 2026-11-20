@@ -1393,6 +1393,18 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
             }
         });
     }
+    // for tests: DOLPHIN_NG_TEST_INFO shows the Information panel once the window is up (the panels' actions are not
+    // reachable over D-Bus)
+    if (qEnvironmentVariableIsSet("DOLPHIN_NG_TEST_INFO")) {
+        QTimer::singleShot(1200, this, [this] {
+            if (auto *dock = findChild<QDockWidget *>(QStringLiteral("infoDock"))) {
+                dock->show();
+                if (const int width = qEnvironmentVariableIntValue("DOLPHIN_NG_TEST_INFO"); width > 1) {
+                    resizeDocks({dock}, {width}, Qt::Horizontal);
+                }
+            }
+        });
+    }
     // for tests: DOLPHIN_NG_TEST_HIDE_PLACES presses the sidebar button once the window is up (no input sent)
     if (qEnvironmentVariableIsSet("DOLPHIN_NG_TEST_HIDE_PLACES")) {
         QTimer::singleShot(1500, this, [this] {
@@ -3536,6 +3548,25 @@ void DolphinMainWindow::setupDockWidgets()
     InformationPanel *infoPanel = new InformationPanel(infoDock);
     infoPanel->setCustomContextMenuActions({lockLayoutAction});
     connect(infoPanel, &InformationPanel::urlActivated, this, &DolphinMainWindow::handleUrl);
+    // dolphin-ng: what the NG Information panel asks of the view in front
+    connect(infoPanel, &InformationPanel::ngQuickActionRequested, this, [this](const KFileItem &item, int action) {
+        if (m_activeViewContainer) {
+            m_activeViewContainer->view()->ngQuickAction(item, action);
+        }
+    });
+    connect(infoPanel, &InformationPanel::ngPinRequested, this, [this](const KFileItemList &items, bool pinned) {
+        if (m_activeViewContainer) {
+            m_activeViewContainer->view()->ngSetPinned(items, pinned);
+        }
+    });
+    connect(infoPanel, &InformationPanel::ngLightboxRequested, this, [this](const KFileItem &item) {
+        if (m_activeViewContainer) {
+            m_activeViewContainer->ngShowLightbox(item);
+        }
+    });
+    infoPanel->ngSetPinnedQuery([this](const KFileItemList &items) {
+        return m_activeViewContainer && m_activeViewContainer->view()->ngAllPinned(items);
+    });
     infoDock->setWidget(infoPanel);
 
     createPanelAction(QIcon::fromTheme(QStringLiteral("documentinfo")), Qt::Key_F11, infoDock, QStringLiteral("show_information_panel"));

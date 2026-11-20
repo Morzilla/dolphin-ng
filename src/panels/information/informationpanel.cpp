@@ -7,6 +7,8 @@
 #include "informationpanel.h"
 
 #include "informationpanelcontent.h"
+#include "nginfoview.h"
+#include "kitemviews/kitemlistwidget.h" // ngSetting
 
 #define HAVE_KDIRNOTIFY __has_include(<KDirNotify>)
 #if HAVE_KDIRNOTIFY
@@ -198,10 +200,14 @@ void InformationPanel::showContextMenu(const QPoint &pos)
     const bool isChecked = action->isChecked();
     if (action == previewAction) {
         InformationPanelSettings::setPreviewsShown(isChecked);
-        m_content->refreshPreview();
+        if (m_content) {
+            m_content->refreshPreview();
+        }
     } else if (action == previewAutoPlayAction) {
         InformationPanelSettings::setPreviewsAutoPlay(isChecked);
-        m_content->setPreviewAutoPlay(isChecked);
+        if (m_content) {
+            m_content->setPreviewAutoPlay(isChecked);
+        }
     } else if (action == showHoveredAction) {
         InformationPanelSettings::setShowHovered(isChecked);
         if (!isChecked) {
@@ -209,13 +215,17 @@ void InformationPanel::showContextMenu(const QPoint &pos)
             showItemInfo();
         }
     } else if (action == configureAction) {
-        m_inConfigurationMode = true;
-        m_content->configureShownProperties();
+        if (m_content) {
+            m_inConfigurationMode = true;
+            m_content->configureShownProperties();
+        }
     } else if (action == dateformatAction) {
         int dateFormat = static_cast<int>(isChecked ? Baloo::DateFormats::ShortFormat : Baloo::DateFormats::LongFormat);
 
         InformationPanelSettings::setDateFormat(dateFormat);
-        m_content->refreshMetaData();
+        if (m_content) {
+            m_content->refreshMetaData();
+        }
     }
 }
 
@@ -231,7 +241,11 @@ void InformationPanel::showItemInfo()
     bool canShowHoverItem = !m_isSelectionActive && !m_hoveredItem.isNull() && InformationPanelSettings::showHovered();
     if (m_selection.count() > 1 && !canShowHoverItem) {
         // The information for a selection of items should be shown
-        m_content->showItems(m_selection);
+        if (m_ngView) {
+            m_ngView->showItems(m_selection);
+        } else {
+            m_content->showItems(m_selection);
+        }
         return;
     }
 
@@ -246,7 +260,11 @@ void InformationPanel::showItemInfo()
 
     if (!item.isNull()) {
         m_shownUrl = item.url();
-        m_content->showItem(item);
+        if (m_ngView) {
+            m_ngView->showItem(item);
+        } else {
+            m_content->showItem(item);
+        }
         return;
     }
 
@@ -265,7 +283,11 @@ void InformationPanel::slotFolderStatFinished(KJob *job)
 {
     m_folderStatJob = nullptr;
     const KIO::UDSEntry entry = static_cast<KIO::StatJob *>(job)->statResult();
-    m_content->showItem(KFileItem(entry, m_shownUrl));
+    if (m_ngView) {
+        m_ngView->showItem(KFileItem(entry, m_shownUrl));
+    } else {
+        m_content->showItem(KFileItem(entry, m_shownUrl));
+    }
 }
 
 void InformationPanel::slotInfoTimeout()
@@ -390,8 +412,12 @@ void InformationPanel::markUrlAsInvalid()
 void InformationPanel::readSettings()
 {
     if (m_initialized) {
-        m_content->refreshPreview();
-        m_content->refreshMetaData();
+        if (m_ngView) {
+            m_ngView->refresh();
+        } else {
+            m_content->refreshPreview();
+            m_content->refreshMetaData();
+        }
     }
 }
 
@@ -425,6 +451,23 @@ void InformationPanel::init()
     connect(dirNotify, &OrgKdeKDirNotifyInterface::leftDirectory, this, &InformationPanel::slotLeftDirectory);
 #endif
 
+    QVBoxLayout *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    if (ngSetting("INFO").toLower() != QLatin1String("classic")) {
+        // dolphin-ng: the panel drawn again (see NgInfoView); "classic" keeps Dolphin's own
+        m_content = nullptr;
+        m_ngView = new NgInfoView(this);
+        connect(m_ngView, &NgInfoView::urlActivated, this, &InformationPanel::urlActivated);
+        connect(m_ngView, &NgInfoView::quickActionRequested, this, &InformationPanel::ngQuickActionRequested);
+        connect(m_ngView, &NgInfoView::pinRequested, this, &InformationPanel::ngPinRequested);
+        connect(m_ngView, &NgInfoView::lightboxRequested, this, &InformationPanel::ngLightboxRequested);
+        if (m_ngPinnedQuery) {
+            m_ngView->setPinnedQuery(m_ngPinnedQuery);
+        }
+        layout->addWidget(m_ngView);
+        m_initialized = true;
+        return;
+    }
     m_content = new InformationPanelContent(this);
     connect(m_content, &InformationPanelContent::urlActivated, this, &InformationPanel::urlActivated);
     connect(m_content, &InformationPanelContent::configurationFinished, this, [this]() {
@@ -432,11 +475,17 @@ void InformationPanel::init()
     });
     connect(m_content, &InformationPanelContent::contextMenuRequested, this, &InformationPanel::showContextMenu);
 
-    QVBoxLayout *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(m_content);
 
     m_initialized = true;
+}
+
+void InformationPanel::ngSetPinnedQuery(std::function<bool(const KFileItemList &)> query)
+{
+    m_ngPinnedQuery = std::move(query);
+    if (m_ngView) {
+        m_ngView->setPinnedQuery(m_ngPinnedQuery);
+    }
 }
 
 #include "moc_informationpanel.cpp"

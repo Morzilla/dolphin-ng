@@ -168,6 +168,11 @@ public:
     KFileItemList selectedItems() const;
     /** dolphin-ng: pin the items to the top of the folder (or unpin them) */
     void ngSetPinned(const KFileItemList &items, bool pinned);
+    /** dolphin-ng: run quick action \a action of \a item, as its chip on a card does (the NG Information panel) */
+    void ngQuickAction(const KFileItem &item, int action)
+    {
+        ngRunQuickAction(item, action);
+    }
     /** dolphin-ng: true if all of them are pinned */
     bool ngAllPinned(const KFileItemList &items) const;
 

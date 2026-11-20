@@ -11,7 +11,10 @@
 
 #include <KFileItem>
 
+#include <functional>
+
 class InformationPanelContent;
+class NgInfoView;
 namespace KIO
 {
 class Job;
@@ -25,6 +28,9 @@ class InformationPanel : public Panel
     Q_OBJECT
 
 public:
+    /** dolphin-ng: whether items are pinned, as the window's view knows it (for the NG panel) */
+    void ngSetPinnedQuery(std::function<bool(const KFileItemList &)> query);
+
     explicit InformationPanel(QWidget *parent = nullptr);
     ~InformationPanel() override;
 
@@ -35,6 +41,11 @@ public:
     void readSettings() override;
 
 Q_SIGNALS:
+    /** dolphin-ng: what the NG panel asks of the view (see NgInfoView) */
+    void ngQuickActionRequested(const KFileItem &item, int action);
+    void ngPinRequested(const KFileItemList &items, bool pinned);
+    void ngLightboxRequested(const KFileItem &item);
+
     void urlActivated(const QUrl &url);
 
 public Q_SLOTS:
@@ -152,6 +163,8 @@ private:
     KIO::Job *m_folderStatJob;
 
     InformationPanelContent *m_content;
+    NgInfoView *m_ngView = nullptr;
+    std::function<bool(const KFileItemList &)> m_ngPinnedQuery; // dolphin-ng: the panel drawn again (NG setting INFO, "classic" for Dolphin's own)
     bool m_inConfigurationMode = false;
 };
 

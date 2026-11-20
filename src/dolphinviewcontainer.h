@@ -64,6 +64,9 @@ class DolphinViewContainer : public QWidget
     Q_OBJECT
 
 public:
+    /** dolphin-ng: the lightbox of the pictures of this view, open on \a item */
+    void ngShowLightbox(const KFileItem &item);
+
     DolphinViewContainer(const QUrl &url, QWidget *parent);
     ~DolphinViewContainer() override;
 

@@ -4366,6 +4366,11 @@ static void ngOpenLightbox(DolphinView *view, const KFileItem &item)
     (new NgLightbox(view))->open(item);
 }
 
+void DolphinViewContainer::ngShowLightbox(const KFileItem &item)
+{
+    ngOpenLightbox(m_view, item);
+}
+
 // dolphin-ng: the filters of the sort bar again, as a section at the bottom of the sidebar: a title pill and one
 // row per kind of file with its count; the active one sits on a pill, a click chooses it.
 class NgFilterPanel : public QWidget

@@ -27,6 +27,7 @@ src/                        Dolphin's sources, with the NG code inside them
 ├── dolphintabwidget.cpp    the tabs; the title row's tab bar (ngCreateTopBar), its close buttons and icons
 ├── dolphinmainwindow.cpp   the window: tabs in the title bar as pills (ngStyleTitleRow), client-side window buttons,
 │                           the moved tool bar buttons, the window's own state group, the check for the compositor's blur
+├── panels/information/nginfoview.cpp  the Information panel drawn again (NgInfoView; INFO=classic: Dolphin's own)
 ├── panels/places/          the sidebar (places, pinned, filters, disks): its pills and section titles are painted
 │                           by the panel, glass or plain, never left to the widget style
 ├── settings/ng/            the NG settings pages (Configure › NG, NG quick actions)
@@ -103,6 +104,8 @@ input, Dolphin NG reads these environment variables:
 | `DOLPHIN_NG_DEMO_MENU_HOLD`| ms the demo menu stays open                                                   |
 | `DOLPHIN_NG_TEST_DOCK_WIDTH`| the sidebar widened to (or narrowed step by step down to) that width          |
 | `DOLPHIN_NG_TEST_HIDE_PLACES`| the sidebar button pressed once the window is up                             |
+| `DOLPHIN_NG_TEST_INFO`     | the Information panel shown once the window is up (a number: also its width) |
+| `DOLPHIN_NG_DEMO_CRUMB`    | that location bar button drawn as under the pointer                           |
 | `DOLPHIN_NG_<KEY>`         | any NG setting, for one run                                                   |
 
 Window actions can be triggered over D-Bus:
