@@ -1,0 +1,55 @@
+Source: dolphin-ng
+Section: kde
+Priority: optional
+Maintainer: Morzilla <3956663+Morzilla@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13),
+               cmake,
+               extra-cmake-modules,
+               g++,
+               gettext,
+               qt6-base-dev,
+               qt6-base-private-dev,
+               qt6-multimedia-dev,
+               libbaloowidgets-dev,
+               libkf6baloo-dev,
+               libkf6bookmarks-dev,
+               libkf6codecs-dev,
+               libkf6colorscheme-dev,
+               libkf6completion-dev,
+               libkf6config-dev,
+               libkf6coreaddons-dev,
+               libkf6crash-dev,
+               libkf6dbusaddons-dev,
+               libkf6doctools-dev,
+               libkf6filemetadata-dev,
+               libkf6guiaddons-dev,
+               libkf6i18n-dev,
+               libkf6iconthemes-dev,
+               libkf6kcmutils-dev,
+               libkf6kio-dev,
+               libkf6newstuff-dev,
+               libkf6notifications-dev,
+               libkf6parts-dev,
+               libkf6solid-dev,
+               libkf6textwidgets-dev,
+               libkf6userfeedback-dev,
+               libkf6widgetsaddons-dev,
+               libkf6windowsystem-dev,
+               libpackagekitqt6-dev
+Standards-Version: 4.7.0
+Homepage: https://github.com/Morzilla/dolphin-ng
+Rules-Requires-Root: no
+
+Package: dolphin-ng
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, kio
+Recommends: imagemagick, ffmpeg, poppler-utils, python3-gi
+Description: fork of Dolphin that rethinks how you work with your files
+ Dolphin NG is a fork of KDE's Dolphin: cards and drawn rows that tell what a
+ file is at a glance, quick filters by kind of file, groups that follow the
+ sorting, quick actions one click away, and work in progress shown on the files
+ themselves.
+ .
+ It installs under /opt/ng/dolphin-ng, next to Ubuntu's Dolphin, which stays the
+ default file manager: start it as "Dolphin NG" from the menu, or with the
+ dolphin-ng command.

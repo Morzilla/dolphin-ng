@@ -1,0 +1,38 @@
+#!/usr/bin/make -f
+# Dolphin NG installs apart from the system, next to Ubuntu's own Dolphin: its libraries have the same names as
+# Dolphin's, so they live in its prefix and its programs find them through an RPATH (not on the library path)
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+NGPREFIX = /opt/ng/dolphin-ng
+# the commit and the date of the snapshot, from the upstream version (26.08.1+202611191319git4bf8460), for Help > About
+include /usr/share/dpkg/pkg-info.mk
+NGCOMMIT = $(lastword $(subst git, ,$(DEB_VERSION_UPSTREAM))) $(lastword $(subst +, ,$(firstword $(subst git, ,$(DEB_VERSION_UPSTREAM)))))
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DCMAKE_INSTALL_PREFIX=$(NGPREFIX) -DBUILD_TESTING=OFF -DKDE_INSTALL_USE_QT_SYS_PATHS=OFF \
+		-DCMAKE_INSTALL_RPATH=$(NGPREFIX)/lib/$(DEB_HOST_MULTIARCH) -DCMAKE_BUILD_WITH_INSTALL_RPATH=OFF \
+		-DDOLPHIN_NG_COMMIT="$(NGCOMMIT)"
+
+override_dh_auto_install:
+	dh_auto_install
+	install -Dm755 ng/dolphin-ng debian/dolphin-ng$(NGPREFIX)/bin/dolphin-ng-launch
+	install -Dm755 ng/ng-job debian/dolphin-ng$(NGPREFIX)/bin/ng-job
+	install -Dm755 ng/ng-transcribe debian/dolphin-ng$(NGPREFIX)/bin/ng-transcribe
+	install -Dm644 ng/dolphinui.rc.example debian/dolphin-ng$(NGPREFIX)/share/kxmlgui5/dolphin/dolphinui.rc
+	install -Dm644 ng/icons/dolphin-ng.svg debian/dolphin-ng/usr/share/icons/hicolor/scalable/apps/dolphin-ng.svg
+	mkdir -p debian/dolphin-ng/usr/bin debian/dolphin-ng/usr/share/applications
+	printf '#!/bin/sh\nDOLPHIN_NG_PREFIX=%s exec %s/bin/dolphin-ng-launch "$$@"\n' $(NGPREFIX) $(NGPREFIX) > debian/dolphin-ng/usr/bin/dolphin-ng
+	chmod 755 debian/dolphin-ng/usr/bin/dolphin-ng
+	ln -s $(NGPREFIX)/bin/ng-job debian/dolphin-ng/usr/bin/ng-job
+	ln -s $(NGPREFIX)/bin/ng-transcribe debian/dolphin-ng/usr/bin/ng-transcribe
+	printf '[Desktop Entry]\nType=Application\nName=Dolphin NG\nGenericName=File Manager\nComment=A fork of Dolphin with cards, quick filters and quick actions\nExec=/usr/bin/dolphin-ng %%u\nIcon=dolphin-ng\nTerminal=false\nCategories=Qt;KDE;System;FileTools;FileManager;\nMimeType=inode/directory;\nStartupWMClass=dolphin-ng\n' > debian/dolphin-ng/usr/share/applications/dolphin-ng.desktop
+
+# its private libraries are not for other packages: no shlibs, no symbols checks, no ldconfig triggers
+override_dh_makeshlibs:
+
+override_dh_shlibdeps:
+	dh_shlibdeps -l$(CURDIR)/debian/dolphin-ng$(NGPREFIX)/lib/$(DEB_HOST_MULTIARCH)
+
+override_dh_auto_test:
