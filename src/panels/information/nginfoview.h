@@ -29,6 +29,7 @@ class QVBoxLayout;
 namespace KIO
 {
 class PreviewJob;
+class DirectorySizeJob;
 }
 
 /**
@@ -90,6 +91,7 @@ private:
     KFileItemList m_items;
     std::function<bool(const KFileItemList &)> m_pinnedQuery;
     QPointer<KIO::PreviewJob> m_previewJob;
+    QPointer<KIO::DirectorySizeJob> m_sizeJob; // a folder's size, counted in the background
 
     QWidget *m_body = nullptr;
     QVBoxLayout *m_layout = nullptr;

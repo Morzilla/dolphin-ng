@@ -1423,8 +1423,7 @@ void KFileItemModel::ngSetPinned(const KFileItemList &items, bool pinned)
 {
     KItemRangeList ranges;
     for (const KFileItem &item : items) {
-        const int i = index(item.url());
-        if (i < 0 || !item.isLocalFile()) {
+        if (!item.isLocalFile()) {
             continue;
         }
         KFileMetaData::UserMetaData metadata(item.localPath());
@@ -1433,6 +1432,12 @@ void KFileItemModel::ngSetPinned(const KFileItemList &items, bool pinned)
         }
         metadata.setAttribute(QStringLiteral("ng.pinned"), pinned ? QStringLiteral("1") : QString());
         NgPins::self()->set(item.localPath(), pinned);
+        // (an item that is not in this folder's list, the folder itself from the Information panel: pinned all the
+        // same, the sidebar's Pinned section follows NgPins; nothing to show again here)
+        const int i = index(item.url());
+        if (i < 0) {
+            continue;
+        }
         ItemData *data = m_itemData.at(i);
         data->ngPinned = pinned;
         if (pinned) {
@@ -1451,7 +1456,11 @@ void KFileItemModel::ngSetPinned(const KFileItemList &items, bool pinned)
 bool KFileItemModel::ngIsPinned(const KFileItem &item) const
 {
     const int i = index(item.url());
-    return i >= 0 && m_itemData.at(i)->ngPinned;
+    if (i < 0) {
+        // (not in this folder's list: the folder itself, from the Information panel)
+        return item.isLocalFile() && NgPins::self()->contains(item.localPath());
+    }
+    return m_itemData.at(i)->ngPinned;
 }
 
 void KFileItemModel::ngRebuildFamilies()

@@ -12,6 +12,7 @@
 
 #include <KFileMetaData/UserMetaData>
 #include <KIO/Global>
+#include <KIO/DirectorySizeJob>
 #include <KIO/PreviewJob>
 
 #include <QApplication>
@@ -471,6 +472,9 @@ NgInfoView::NgInfoView(QWidget *parent)
 
 NgInfoView::~NgInfoView()
 {
+    if (m_sizeJob) {
+        m_sizeJob->kill();
+    }
     if (m_previewJob) {
         m_previewJob->kill();
     }
@@ -569,10 +573,13 @@ void NgInfoView::build()
     m_pin->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     m_pin->setIcon(QIcon::fromTheme(QStringLiteral("window-pin"), QIcon::fromTheme(QStringLiteral("pin"))));
     chips->addWidget(m_kind);
-    chips->addWidget(m_size);
     chips->addStretch();
     chips->addWidget(m_pin);
     headGroup->addLayout(chips);
+    // the size on a line of its own (a folder's, with what it holds, took the room of the pin button)
+    m_size->setWordWrap(true);
+    m_size->setContentsMargins(2, 0, 0, 0);
+    headGroup->addWidget(m_size);
     m_layout->addLayout(headGroup);
     connect(m_pin, &QToolButton::clicked, this, [this](bool on) {
         const KFileItemList items = m_items.isEmpty() ? KFileItemList{m_item} : m_items;
@@ -626,11 +633,10 @@ void NgInfoView::build()
 
     // where it came from, who made it, its rating and tags
     m_lines = new QWidget(m_body);
+    // each label above its value (side by side, a long label and a long value both had half the width)
     m_linesLayout = new QGridLayout(m_lines);
     m_linesLayout->setContentsMargins(4, 0, 4, 0);
-    m_linesLayout->setHorizontalSpacing(16);
-    m_linesLayout->setVerticalSpacing(10);
-    m_linesLayout->setColumnStretch(1, 1);
+    m_linesLayout->setVerticalSpacing(0);
     auto caption = [this](const QString &text) {
         auto *label = new QLabel(text, m_lines);
         label->setEnabled(false);
@@ -667,14 +673,22 @@ void NgInfoView::build()
     m_tagsLayout = new QHBoxLayout(m_tags);
     m_tagsLayout->setContentsMargins(0, 0, 0, 0);
     m_tagsLayout->setSpacing(4);
-    m_linesLayout->addWidget(m_originLabel, 0, 0, Qt::AlignTop);
-    m_linesLayout->addWidget(m_origin, 0, 1);
-    m_linesLayout->addWidget(m_whoLabel, 1, 0, Qt::AlignTop);
-    m_linesLayout->addWidget(m_who, 1, 1);
-    m_linesLayout->addWidget(caption(ngTr("Rating", "Voto")), 2, 0, Qt::AlignVCenter);
-    m_linesLayout->addWidget(m_stars, 2, 1);
-    m_linesLayout->addWidget(caption(ngTr("Tags", "Etichette")), 3, 0, Qt::AlignVCenter);
-    m_linesLayout->addWidget(m_tags, 3, 1);
+    // (a label: smaller, with room above it that sets the pair off from the one before; the value right under it)
+    auto above = [](QLabel *label, bool first) {
+        QFont small = label->font();
+        small.setPointSizeF(small.pointSizeF() * 0.86);
+        label->setFont(small);
+        label->setContentsMargins(0, first ? 0 : 12, 0, 3);
+        return label;
+    };
+    m_linesLayout->addWidget(above(m_originLabel, true), 0, 0);
+    m_linesLayout->addWidget(m_origin, 1, 0);
+    m_linesLayout->addWidget(above(m_whoLabel, false), 2, 0);
+    m_linesLayout->addWidget(m_who, 3, 0);
+    m_linesLayout->addWidget(above(caption(ngTr("Rating", "Voto")), false), 4, 0);
+    m_linesLayout->addWidget(m_stars, 5, 0);
+    m_linesLayout->addWidget(above(caption(ngTr("Tags", "Etichette")), false), 6, 0);
+    m_linesLayout->addWidget(m_tags, 7, 0);
     m_layout->addWidget(m_lines);
 
     m_dates = new NgInfoDates(m_body);
@@ -908,6 +922,28 @@ void NgInfoView::showOne()
     m_kind->show();
     m_kind->setStyleSheet(QStringLiteral("QLabel { color: white; background: %1; border-radius: 8px; padding: 1px 8px; font-weight: bold; }").arg(kind.tint.name()));
     m_size->setText(item.isDir() ? item.mimeComment() : KIO::convertSize(item.size()));
+    if (item.isDir() && item.isLocalFile()) {
+        // a folder: what it holds in all, counted in the background (a large one takes a while: "counting…" until then)
+        if (m_sizeJob) {
+            m_sizeJob->kill();
+        }
+        m_size->setText(ngTr("Folder · counting…", "Cartella · conteggio…"));
+        m_sizeJob = KIO::directorySize(item.url());
+        const QUrl url = item.url();
+        connect(m_sizeJob, &KJob::result, this, [this, url](KJob *job) {
+            auto *sizeJob = static_cast<KIO::DirectorySizeJob *>(job);
+            if (job->error() || m_item.isNull() || m_item.url() != url) {
+                return;
+            }
+            const qulonglong files = sizeJob->totalFiles(), folders = sizeJob->totalSubdirs();
+            QString text = KIO::convertSize(sizeJob->totalSize()) + QStringLiteral(" · ")
+                + (files == 1 ? ngTr("1 file", "1 file") : ngTr("%1 files", "%1 file").arg(QLocale().toString(files)));
+            if (folders > 0) {
+                text += QStringLiteral(", ") + (folders == 1 ? ngTr("1 folder", "1 cartella") : ngTr("%1 folders", "%1 cartelle").arg(QLocale().toString(folders)));
+            }
+            m_size->setText(text);
+        });
+    }
     const bool pinned = m_pinnedQuery ? m_pinnedQuery({item}) : false;
     m_pin->setChecked(pinned);
     m_pin->setText(pinned ? ngTr("Pinned", "Fissato") : ngTr("Pin to the top", "Fissa in cima"));
