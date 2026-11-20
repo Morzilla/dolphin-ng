@@ -86,6 +86,7 @@ private:
     void editTags();
     void restyle();
     void layoutActions();
+    void updateOverlay();
 
     KFileItem m_item;
     KFileItemList m_items;
@@ -122,6 +123,8 @@ private:
     QHBoxLayout *m_tagsLayout = nullptr;
     NgInfoDates *m_dates = nullptr;
     QStringList m_tagList;
+    QColor m_overlayTint;
+    QList<std::pair<QString, QString>> m_overlayFacts;
     struct Action {
         QString label;
         QString icon;

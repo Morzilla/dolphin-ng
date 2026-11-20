@@ -138,6 +138,16 @@ public:
         m_lines = lines;
         update();
     }
+    // what is told over the preview: the kind as a badge at the top left, the size and the facts as pills at the bottom
+    // on a dark veil (as a photo viewer does), so that the panel under it is shorter
+    void setOverlay(const QString &badge, const QColor &tint, const QList<std::pair<QString, QString>> &chips)
+    {
+        m_badge = badge;
+        m_badgeTint = tint;
+        m_chips = chips;
+        resizeEvent(nullptr);
+        update();
+    }
     void setCanOpen(bool canOpen)
     {
         m_canOpen = canOpen;
@@ -155,10 +165,12 @@ public:
 protected:
     void resizeEvent(QResizeEvent *event) override
     {
-        QWidget::resizeEvent(event);
-        const int height = qRound(width() * (m_stack.isEmpty() && m_pixmap.isNull() && m_lines.isEmpty() ? 0.5 : 0.75));
+        if (event) {
+            QWidget::resizeEvent(event);
+        }
+        const int height = qRound(width() * (m_stack.isEmpty() && m_pixmap.isNull() && m_lines.isEmpty() ? 0.56 : 0.75));
         if (height != this->height()) {
-            setFixedHeight(qMax(110, height));
+            setFixedHeight(qMax(m_chips.isEmpty() ? 110 : 160, height));
         }
         m_eye->move(width() - m_eye->sizeHint().width() - 10, 10);
     }
@@ -235,10 +247,81 @@ protected:
             const int side = qMin(96, qMin(width(), height()) - 24);
             QIcon::fromTheme(m_icon, QIcon::fromTheme(QStringLiteral("unknown"))).paint(&painter, QRect((width() - side) / 2, (height() - side) / 2, side, side));
         }
+        paintOverlay(painter, shape);
         painter.restore();
     }
 
+    void paintOverlay(QPainter &painter, const QPainterPath &shape)
+    {
+        painter.setClipPath(shape);
+        QFont bold = font();
+        bold.setPointSizeF(bold.pointSizeF() * 0.92);
+        bold.setWeight(QFont::Bold);
+        QFont small = font();
+        small.setPointSizeF(small.pointSizeF() * 0.82);
+        const QFontMetricsF boldFm(bold), smallFm(small);
+        // the kind, top left
+        if (!m_badge.isEmpty()) {
+            const QRectF badge(10, 10, boldFm.horizontalAdvance(m_badge) + 16, boldFm.height() + 6);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(m_badgeTint);
+            painter.drawRoundedRect(badge, badge.height() / 2, badge.height() / 2);
+            painter.setFont(bold);
+            painter.setPen(Qt::white);
+            painter.drawText(badge, Qt::AlignCenter, m_badge);
+        }
+        if (m_chips.isEmpty()) {
+            return;
+        }
+        // the pills, laid from the bottom left, on as many rows as they need
+        const qreal pad = 10, gap = 6, chipHeight = boldFm.height() + 8;
+        struct Placed {
+            QRectF rect;
+            int index;
+        };
+        QList<Placed> placed;
+        qreal x = pad;
+        int row = 0;
+        for (int i = 0; i < m_chips.count(); ++i) {
+            const qreal w = qMin(width() - 2 * pad, boldFm.horizontalAdvance(m_chips.at(i).first) + (m_chips.at(i).second.isEmpty() ? 0 : 5 + smallFm.horizontalAdvance(m_chips.at(i).second)) + 18);
+            if (x > pad && x + w > width() - pad) {
+                x = pad;
+                ++row;
+            }
+            placed.append({QRectF(x, 0, w, chipHeight), row});
+            x += w + gap;
+        }
+        const int rows = row + 1;
+        // a dark veil from the bottom up, under the pills
+        const qreal veilTop = height() - pad - rows * (chipHeight + gap) - 26;
+        QLinearGradient veil(0, veilTop, 0, height());
+        veil.setColorAt(0, QColor(0, 0, 0, 0));
+        veil.setColorAt(1, QColor(0, 0, 0, 150));
+        painter.fillRect(QRectF(0, veilTop, width(), height() - veilTop), veil);
+        for (int i = 0; i < placed.count(); ++i) {
+            QRectF rect = placed.at(i).rect;
+            rect.moveTop(height() - pad - (rows - placed.at(i).index) * (chipHeight + gap) + gap);
+            painter.setPen(QPen(QColor(255, 255, 255, 40), 1));
+            painter.setBrush(QColor(10, 12, 20, 140));
+            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), rect.height() / 2, rect.height() / 2);
+            const QRectF text = rect.adjusted(9, 0, -9, 0);
+            painter.setFont(bold);
+            painter.setPen(Qt::white);
+            const QString value = boldFm.elidedText(m_chips.at(i).first, Qt::ElideRight, text.width());
+            painter.drawText(text, Qt::AlignLeft | Qt::AlignVCenter, value);
+            if (!m_chips.at(i).second.isEmpty()) {
+                const qreal used = boldFm.horizontalAdvance(value) + 5;
+                painter.setFont(small);
+                painter.setPen(QColor(255, 255, 255, 190));
+                painter.drawText(text.adjusted(used, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter, smallFm.elidedText(m_chips.at(i).second, Qt::ElideRight, text.width() - used));
+            }
+        }
+    }
+
 private:
+    QString m_badge;
+    QColor m_badgeTint;
+    QList<std::pair<QString, QString>> m_chips;
     QPixmap m_pixmap;
     QList<QPixmap> m_stack;
     QStringList m_lines;
@@ -812,6 +895,26 @@ void NgInfoView::layoutActions()
     }
 }
 
+void NgInfoView::updateOverlay()
+{
+    // over the preview: the kind, the size, then the facts that are not those two again (the Dossier ends its facts with
+    // the size and the format when the file tells little)
+    if (m_item.isNull()) {
+        return;
+    }
+    QList<std::pair<QString, QString>> chips;
+    const QString size = m_size->text();
+    chips.append({size, QString()});
+    static const QStringList repeated{QStringLiteral("size"), QStringLiteral("dimensione"), QStringLiteral("format"), QStringLiteral("formato")};
+    for (const auto &fact : std::as_const(m_overlayFacts)) {
+        if (!repeated.contains(fact.second.toLower())) {
+            chips.append(fact);
+        }
+    }
+    m_hero->setOverlay(m_kind->text(), m_overlayTint, chips);
+    m_size->hide();
+}
+
 void NgInfoView::changeEvent(QEvent *event)
 {
     QScrollArea::changeEvent(event);
@@ -948,7 +1051,9 @@ void NgInfoView::showOne()
     m_name->setText(ngBreakable(item.text()));
     m_copyName->show();
     m_kind->setText(kind.sigla.isEmpty() ? item.mimeComment() : kind.sigla);
-    m_kind->show();
+    m_kind->hide(); // (told over the preview, see updateOverlay)
+    m_overlayTint = kind.tint;
+    m_overlayFacts.clear();
     m_kind->setStyleSheet(QStringLiteral("QLabel { color: white; background: %1; border-radius: 8px; padding: 1px 8px; font-weight: bold; }").arg(kind.tint.name()));
     m_size->setText(item.isDir() ? item.mimeComment() : KIO::convertSize(item.size()));
     if (item.isDir() && item.isLocalFile()) {
@@ -971,6 +1076,7 @@ void NgInfoView::showOne()
                 text += QStringLiteral(", ") + (folders == 1 ? ngTr("1 folder", "1 cartella") : ngTr("%1 folders", "%1 cartelle").arg(QLocale().toString(folders)));
             }
             m_size->setText(text);
+            updateOverlay();
         });
     }
     const bool pinned = m_pinnedQuery ? m_pinnedQuery({item}) : false;
@@ -989,6 +1095,7 @@ void NgInfoView::showOne()
     // ---- the work in progress, the facts, what it holds, where it came from
     showActivity();
     showFacts();
+    updateOverlay();
 
     // ---- the dates
     auto date = [](const QDateTime &when) {
@@ -1045,7 +1152,9 @@ void NgInfoView::showFacts()
     for (const NgFact &fact : facts->facts) {
         shown.append({fact.value, fact.word});
     }
-    m_facts->setFacts(shown);
+    m_facts->setFacts({}); // (the facts are told over the preview, see updateOverlay)
+    m_overlayFacts = shown;
+    updateOverlay();
     QList<NgInfoMix::Part> parts;
     for (const NgMixPart &part : facts->mix) {
         parts.append({part.colour, part.count, part.label});
@@ -1164,6 +1273,7 @@ void NgInfoView::showMany()
     m_name->setText(ngTr("%1 items selected", "%1 elementi selezionati").arg(m_items.count()));
     m_copyName->hide();
     m_kind->hide();
+    m_overlayFacts.clear();
     m_size->setText(folders == m_items.count() ? ngTr("%1 folders", "%1 cartelle").arg(folders)
                                                : KIO::convertSize(total) + (folders ? ngTr(" and %1 folders", " e %1 cartelle").arg(folders) : QString()));
     const bool pinned = m_pinnedQuery ? m_pinnedQuery(m_items) : false;
@@ -1185,6 +1295,8 @@ void NgInfoView::showMany()
         return a.count > b.count;
     });
     m_mix->setParts(parts);
+    m_hero->setOverlay(QString(), QColor(), {{QString::number(m_items.count()), ngTr("items", "elementi")}, {m_size->text(), QString()}});
+    m_size->hide();
     askPreview(m_items.mid(0, 3));
 }
 
