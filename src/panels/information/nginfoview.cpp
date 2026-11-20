@@ -409,7 +409,14 @@ public:
                     const QImage image = videoFrame.toImage();
                     if (!image.isNull()) {
                         const qreal dpr = devicePixelRatioF();
-                        m_frame = image.width() > width() * dpr * 1.5 ? image.scaledToWidth(qRound(width() * dpr * 1.5), Qt::SmoothTransformation) : image;
+                        const bool first = m_frame.isNull();
+                        // (zoomed in, kept sharper: up to three times the card's width)
+                        const qreal room = width() * dpr * qMax<qreal>(1.5, qMin<qreal>(m_zoom * 1.2, 3.0));
+                        m_frame = image.width() > room ? image.scaledToWidth(qRound(room), Qt::SmoothTransformation) : image;
+                        if (first && zoomed()) {
+                            keepInside(); // (the zoom was taken on the still picture: laid again on the frames)
+                        }
+                        showButtons(underMouse());
                         update();
                     }
                 });
@@ -482,7 +489,7 @@ protected:
     }
     bool canZoom() const
     {
-        return !m_pixmap.isNull() && m_stack.isEmpty();
+        return (!m_pixmap.isNull() || !m_frame.isNull()) && m_stack.isEmpty(); // (a video playing: its frames)
     }
     void showButtons(bool hovered)
     {
@@ -616,7 +623,7 @@ protected:
     void wheelEvent(QWheelEvent *event) override
     {
         const int delta = event->angleDelta().y();
-        if (m_pixmap.isNull() || !m_stack.isEmpty() || delta == 0 || (!zoomed() && delta < 0)) {
+        if (!canZoom() || delta == 0 || (!zoomed() && delta < 0)) {
             event->ignore();
             return;
         }
@@ -645,13 +652,16 @@ protected:
     }
     bool zoomed() const
     {
-        return m_zoom > 1.0 && !m_pixmap.isNull() && m_stack.isEmpty();
+        return m_zoom > 1.0 && canZoom();
     }
     QRectF fitRect() const
     {
-        const QSizeF size = QSizeF(m_pixmap.size()) / m_pixmap.devicePixelRatio();
-        const qreal scale = qMin((width() - 16.0) / size.width(), (height() - 16.0) / size.height());
-        const QSizeF shown = size * qMin(scale, 3.0);
+        // the frame of a video playing fills the card; a picture keeps a margin and is not blown up past three times
+        const bool frame = !m_frame.isNull();
+        const QSizeF size = frame ? QSizeF(m_frame.size()) / devicePixelRatioF() : QSizeF(m_pixmap.size()) / m_pixmap.devicePixelRatio();
+        const qreal margin = frame ? 0.0 : 16.0;
+        const qreal scale = qMin((width() - margin) / size.width(), (height() - margin) / size.height());
+        const QSizeF shown = size * (frame ? scale : qMin(scale, 3.0));
         return QRectF(QPointF((width() - shown.width()) / 2, (height() - shown.height()) / 2), shown);
     }
     QRectF zoomedRect() const
@@ -755,11 +765,8 @@ protected:
             }
         } else if (!m_frame.isNull()) {
             // a video playing: its frame, as large as it fits
-            const QSizeF size = QSizeF(m_frame.size()) / devicePixelRatioF();
-            const qreal scale = qMin(width() / size.width(), height() / size.height());
-            const QSizeF shown = size * scale;
             painter.fillRect(rect(), Qt::black);
-            painter.drawImage(QRectF(QPointF((width() - shown.width()) / 2, (height() - shown.height()) / 2), shown), m_frame);
+            painter.drawImage(zoomed() ? zoomedRect() : fitRect(), m_frame); // (zoomed with the wheel as a picture is)
         } else if (!m_pixmap.isNull()) {
             // the picture whole, as large as it fits (or zoomed in with the wheel)
             const QRectF target = zoomed() ? zoomedRect() : fitRect();
@@ -792,12 +799,19 @@ protected:
             font.setWeight(QFont::DemiBold);
             painter.setFont(font);
             const QFontMetricsF metrics(font);
-            const QRectF pill(width() - metrics.horizontalAdvance(text) - 30, height() - metrics.height() - 20, metrics.horizontalAdvance(text) + 18, metrics.height() + 8);
+            // (a video or a song keeps its player: the percentage goes to the top left, out of the band's way)
+            const bool media = m_bar == NgFileFacts::Video || m_bar == NgFileFacts::Audio;
+            const QSizeF pillSize(metrics.horizontalAdvance(text) + 18, metrics.height() + 8);
+            const QRectF pill = media ? QRectF(QPointF(10, 10), pillSize) : QRectF(QPointF(width() - pillSize.width() - 12, height() - pillSize.height() - 12), pillSize);
             painter.setPen(Qt::NoPen);
             painter.setBrush(QColor(10, 12, 20, 170));
             painter.drawRoundedRect(pill, pill.height() / 2, pill.height() / 2);
             painter.setPen(Qt::white);
             painter.drawText(pill, Qt::AlignCenter, text);
+            if (media) {
+                m_pagerPrev = m_pagerNext = m_playRect = m_trackRect = QRectF();
+                paintPlayerBar(painter);
+            }
             return;
         }
         painter.setClipPath(shape);
