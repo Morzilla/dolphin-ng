@@ -84,6 +84,7 @@ private:
     void showTags();
     void editTags();
     void restyle();
+    void layoutActions();
 
     KFileItem m_item;
     KFileItemList m_items;
@@ -118,6 +119,13 @@ private:
     QHBoxLayout *m_tagsLayout = nullptr;
     NgInfoDates *m_dates = nullptr;
     QStringList m_tagList;
+    struct Action {
+        QString label;
+        QString icon;
+        int index;
+    };
+    QList<Action> m_actionList; // the quick actions of the item shown: as many as fit in the pill, the rest in its menu
+    int m_actionsWidth = -1;
     int m_rating = 0;
     bool m_hookedFacts = false;
 };

@@ -74,9 +74,19 @@ void InformationPanel::setSelection(const KFileItemList &selection)
     }
 }
 
+// dolphin-ng: does the panel follow the item under the pointer? With the NG panel its own setting, off by default: the
+// panel is about the item selected (it changed at every move of the pointer, its preview loading again and again)
+static bool ngShowHovered()
+{
+    if (ngSetting("INFO").toLower() != QLatin1String("classic")) {
+        return ngSetting("INFO_HOVER").toLower() == QLatin1String("on");
+    }
+    return InformationPanelSettings::showHovered();
+}
+
 void InformationPanel::requestDelayedItemInfo(const KFileItem &item)
 {
-    if (!isVisible() || !InformationPanelSettings::showHovered()) {
+    if (!isVisible() || !ngShowHovered()) {
         return;
     }
 
@@ -171,7 +181,7 @@ void InformationPanel::showContextMenu(const QPoint &pos)
     QAction *showHoveredAction = popup.addAction(i18nc("@action:inmenu", "Show item on hover"));
     showHoveredAction->setIcon(QIcon::fromTheme(QStringLiteral("followmouse")));
     showHoveredAction->setCheckable(true);
-    showHoveredAction->setChecked(InformationPanelSettings::showHovered());
+    showHoveredAction->setChecked(ngShowHovered());
 
     QAction *configureAction = popup.addAction(i18nc("@action:inmenu", "Configure…"));
     configureAction->setIcon(QIcon::fromTheme(QStringLiteral("configure")));
@@ -209,7 +219,11 @@ void InformationPanel::showContextMenu(const QPoint &pos)
             m_content->setPreviewAutoPlay(isChecked);
         }
     } else if (action == showHoveredAction) {
-        InformationPanelSettings::setShowHovered(isChecked);
+        if (m_ngView) {
+            setNgSetting("INFO_HOVER", isChecked ? QStringLiteral("on") : QString());
+        } else {
+            InformationPanelSettings::setShowHovered(isChecked);
+        }
         if (!isChecked) {
             m_hoveredItem = KFileItem();
             showItemInfo();
@@ -238,7 +252,7 @@ void InformationPanel::showItemInfo()
     cancelRequest();
     //qDebug() << "showItemInfo" << m_fileItem;
 
-    bool canShowHoverItem = !m_isSelectionActive && !m_hoveredItem.isNull() && InformationPanelSettings::showHovered();
+    bool canShowHoverItem = !m_isSelectionActive && !m_hoveredItem.isNull() && ngShowHovered();
     if (m_selection.count() > 1 && !canShowHoverItem) {
         // The information for a selection of items should be shown
         if (m_ngView) {

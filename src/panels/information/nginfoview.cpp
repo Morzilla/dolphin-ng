@@ -25,6 +25,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QLocale>
+#include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
 #include <QProgressBar>
@@ -495,6 +496,9 @@ void NgInfoView::build()
     });
 
     m_media = new MediaWidget(m_body);
+    // (its video asked for the video's own size, as wide as 1280: the whole panel grew past its edge)
+    m_media->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    m_media->setMinimumWidth(0);
     m_media->hide();
     m_layout->addWidget(m_media);
 
@@ -658,6 +662,67 @@ void NgInfoView::restyle()
                              .arg(veilCss, accent.name(), ngOnAccent(accent).name()));
 }
 
+void NgInfoView::layoutActions()
+{
+    // As many quick actions as fit in the panel's width, the rest in a menu at the end of the pill (all of them in a
+    // row made the pill, and the whole panel, wider than the panel: nine actions for a video)
+    const int available = qMax(80, viewport()->width() - 32);
+    if (available == m_actionsWidth) {
+        return;
+    }
+    m_actionsWidth = available;
+    while (QLayoutItem *child = m_actionsLayout->takeAt(0)) {
+        delete child->widget();
+        delete child;
+    }
+    m_actions->setVisible(!m_actionList.isEmpty());
+    m_actionCaption->setVisible(!m_actionList.isEmpty());
+    m_actionCaption->setText(m_actionList.isEmpty() ? QString() : ngTr("Quick actions", "Azioni rapide"));
+    if (m_actionList.isEmpty()) {
+        return;
+    }
+    auto makeButton = [this](const QIcon &icon, const QString &label) {
+        auto *button = new QToolButton(m_actions);
+        button->setIcon(icon);
+        button->setIconSize(QSize(18, 18));
+        button->setToolTip(label);
+        button->setAutoRaise(true);
+        button->installEventFilter(this);
+        button->setProperty("_ng_caption", label);
+        return button;
+    };
+    int buttonWidth = 30;
+    {
+        QToolButton *probe = makeButton(QIcon::fromTheme(QStringLiteral("system-run")), QString()); // (made to measure)
+        buttonWidth = qMax(30, probe->sizeHint().width());
+        delete probe;
+    }
+    const int room = (available - 8) / (buttonWidth + 2);
+    const int shown = m_actionList.count() <= room ? int(m_actionList.count()) : qMax(1, room - 1);
+    for (int i = 0; i < shown; ++i) {
+        const Action action = m_actionList.at(i);
+        auto *button = makeButton(QIcon::fromTheme(action.icon, QIcon::fromTheme(QStringLiteral("system-run"))), action.label);
+        connect(button, &QToolButton::clicked, this, [this, action] {
+            Q_EMIT quickActionRequested(m_item, action.index);
+        });
+        m_actionsLayout->addWidget(button);
+    }
+    if (shown < m_actionList.count()) {
+        auto *more = makeButton(QIcon::fromTheme(QStringLiteral("overflow-menu"), QIcon::fromTheme(QStringLiteral("application-menu"))), ngTr("More actions", "Altre azioni"));
+        more->setPopupMode(QToolButton::InstantPopup);
+        more->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; width: 0px; }"));
+        auto *menu = new QMenu(more);
+        for (int i = shown; i < m_actionList.count(); ++i) {
+            const Action action = m_actionList.at(i);
+            menu->addAction(QIcon::fromTheme(action.icon, QIcon::fromTheme(QStringLiteral("system-run"))), action.label, this, [this, action] {
+                Q_EMIT quickActionRequested(m_item, action.index);
+            });
+        }
+        more->setMenu(menu);
+        m_actionsLayout->addWidget(more);
+    }
+}
+
 void NgInfoView::changeEvent(QEvent *event)
 {
     QScrollArea::changeEvent(event);
@@ -669,6 +734,9 @@ void NgInfoView::changeEvent(QEvent *event)
 void NgInfoView::resizeEvent(QResizeEvent *event)
 {
     QScrollArea::resizeEvent(event);
+    const int width = qMax(120, viewport()->width() - 32);
+    m_media->setVideoSize(QSize(width, width * 9 / 16));
+    layoutActions();
 }
 
 void NgInfoView::refresh()
@@ -682,6 +750,14 @@ void NgInfoView::refresh()
 
 void NgInfoView::showItem(const KFileItem &item)
 {
+    // the same file again (the pointer back on it, the selection told again): what is shown stays, its preview and
+    // its player are not loaded anew; only what may have changed is looked at
+    if (m_items.isEmpty() && !item.isNull() && !m_item.isNull() && item.url() == m_item.url()
+        && item.time(KFileItem::ModificationTime) == m_item.time(KFileItem::ModificationTime) && item.size() == m_item.size()) {
+        m_item = item;
+        showActivity();
+        return;
+    }
     m_item = item;
     m_items.clear();
     showOne();
@@ -705,15 +781,29 @@ void NgInfoView::askPreview(const KFileItemList &items)
     }
     const qreal dpr = devicePixelRatioF();
     const int side = qBound(256, qRound(qMax(m_hero->width(), 260) * dpr * 1.2), 1024);
+    // (kept for the files seen last: coming back to one shows it at once)
+    static QHash<QString, QPixmap> kept;
+    if (items.count() == 1) {
+        const QString key = items.first().url().toString() + QLatin1Char('|') + QString::number(items.first().time(KFileItem::ModificationTime).toSecsSinceEpoch());
+        const auto found = kept.constFind(key);
+        if (found != kept.constEnd()) {
+            m_hero->setPixmap(*found);
+            return;
+        }
+    }
     m_previewJob = new KIO::PreviewJob(items, QSize(side, side));
     m_previewJob->setIgnoreMaximumSize(items.count() == 1);
     m_previewJob->setDevicePixelRatio(dpr);
     const bool stack = items.count() > 1;
-    connect(m_previewJob, &KIO::PreviewJob::gotPreview, this, [this, stack](const KFileItem &, const QPixmap &pixmap) {
+    connect(m_previewJob, &KIO::PreviewJob::gotPreview, this, [this, stack](const KFileItem &item, const QPixmap &pixmap) {
         if (stack) {
             m_hero->addToStack(pixmap);
         } else {
             m_hero->setPixmap(pixmap);
+            if (kept.size() > 40) {
+                kept.clear();
+            }
+            kept.insert(item.url().toString() + QLatin1Char('|') + QString::number(item.time(KFileItem::ModificationTime).toSecsSinceEpoch()), pixmap);
         }
     });
 }
@@ -773,27 +863,13 @@ void NgInfoView::showOne()
     m_pin->setText(pinned ? ngTr("Pinned", "Fissato") : ngTr("Pin to the top", "Fissa in cima"));
 
     // ---- quick actions
-    while (QLayoutItem *child = m_actionsLayout->takeAt(0)) {
-        delete child->widget();
-        delete child;
-    }
+    m_actionList.clear();
     const QList<NgQuickAction> actions = item.isLocalFile() ? ngQuickActionsFor(item.localPath(), mime) : QList<NgQuickAction>();
     for (int i = 0; i < actions.count(); ++i) {
-        auto *button = new QToolButton(m_actions);
-        button->setIcon(QIcon::fromTheme(actions.at(i).icon, QIcon::fromTheme(QStringLiteral("system-run"))));
-        button->setIconSize(QSize(18, 18));
-        button->setToolTip(actions.at(i).label);
-        button->setAutoRaise(true);
-        button->installEventFilter(this);
-        button->setProperty("_ng_caption", actions.at(i).label);
-        connect(button, &QToolButton::clicked, this, [this, i] {
-            Q_EMIT quickActionRequested(m_item, i);
-        });
-        m_actionsLayout->addWidget(button);
+        m_actionList.append({actions.at(i).label, actions.at(i).icon, i});
     }
-    m_actions->setVisible(!actions.isEmpty());
-    m_actionCaption->setText(actions.isEmpty() ? QString() : ngTr("Quick actions", "Azioni rapide"));
-    m_actionCaption->setVisible(!actions.isEmpty());
+    m_actionsWidth = -1;
+    layoutActions();
 
     // ---- the work in progress, the facts, what it holds, where it came from
     showActivity();
@@ -955,12 +1031,9 @@ void NgInfoView::showMany()
     m_lines->setVisible(false);
     m_activity->setVisible(false);
     m_dates->setDates({});
-    while (QLayoutItem *child = m_actionsLayout->takeAt(0)) {
-        delete child->widget();
-        delete child;
-    }
-    m_actions->setVisible(false);
-    m_actionCaption->setVisible(false);
+    m_actionList.clear();
+    m_actionsWidth = -1;
+    layoutActions();
 
     KIO::filesize_t total = 0;
     int folders = 0;
