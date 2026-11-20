@@ -96,6 +96,7 @@ private:
     NgInfoHero *m_hero = nullptr;
     MediaWidget *m_media = nullptr;
     QLabel *m_name = nullptr;
+    QToolButton *m_copyName = nullptr;
     QLabel *m_kind = nullptr;
     QLabel *m_size = nullptr;
     QToolButton *m_pin = nullptr;

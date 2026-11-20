@@ -18,6 +18,9 @@
 #include <QEvent>
 #include <QFile>
 #include <QFontDatabase>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QTimer>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -532,7 +535,30 @@ void NgInfoView::build()
     m_name->setFont(nameFont);
     auto *headGroup = new QVBoxLayout();
     headGroup->setSpacing(8);
-    headGroup->addWidget(m_name);
+    // the name, and beside it a button that copies it: the real name (the label carries invisible break points, and
+    // is not selectable)
+    auto *nameRow = new QHBoxLayout();
+    nameRow->setSpacing(6);
+    nameRow->addWidget(m_name, 1);
+    m_copyName = new QToolButton(m_body);
+    m_copyName->setIcon(QIcon::fromTheme(QStringLiteral("edit-copy")));
+    m_copyName->setIconSize(QSize(16, 16));
+    m_copyName->setAutoRaise(true);
+    m_copyName->setToolTip(ngTr("Copy the name", "Copia il nome"));
+    connect(m_copyName, &QToolButton::clicked, this, [this] {
+        if (m_item.isNull()) {
+            return;
+        }
+        QGuiApplication::clipboard()->setText(m_item.text());
+        m_copyName->setIcon(QIcon::fromTheme(QStringLiteral("dialog-ok-apply"))); // a moment of confirmation
+        m_copyName->setToolTip(ngTr("Copied", "Copiato"));
+        QTimer::singleShot(1500, m_copyName, [this] {
+            m_copyName->setIcon(QIcon::fromTheme(QStringLiteral("edit-copy")));
+            m_copyName->setToolTip(ngTr("Copy the name", "Copia il nome"));
+        });
+    });
+    nameRow->addWidget(m_copyName, 0, Qt::AlignTop);
+    headGroup->addLayout(nameRow);
     auto *chips = new QHBoxLayout();
     chips->setSpacing(8);
     m_kind = new QLabel(m_body);
@@ -877,6 +903,7 @@ void NgInfoView::showOne()
 
     // ---- name, kind, size, pinned
     m_name->setText(ngBreakable(item.text()));
+    m_copyName->show();
     m_kind->setText(kind.sigla.isEmpty() ? item.mimeComment() : kind.sigla);
     m_kind->show();
     m_kind->setStyleSheet(QStringLiteral("QLabel { color: white; background: %1; border-radius: 8px; padding: 1px 8px; font-weight: bold; }").arg(kind.tint.name()));
@@ -1070,6 +1097,7 @@ void NgInfoView::showMany()
         ++kinds[int(ngKindFor(item.text(), item.isDir()).category)];
     }
     m_name->setText(ngTr("%1 items selected", "%1 elementi selezionati").arg(m_items.count()));
+    m_copyName->hide();
     m_kind->hide();
     m_size->setText(folders == m_items.count() ? ngTr("%1 folders", "%1 cartelle").arg(folders)
                                                : KIO::convertSize(total) + (folders ? ngTr(" and %1 folders", " e %1 cartelle").arg(folders) : QString()));
