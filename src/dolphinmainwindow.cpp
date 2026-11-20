@@ -571,6 +571,8 @@ private:
     bool m_queued = false;
 };
 
+static QIcon ngSidebarIcon(bool shown, const QColor &ink, bool right); // (defined further down)
+
 // dolphin-ng: no window state saved yet when this process started (a first start): the sidebar gets a comfortable width
 static bool ngNoSavedState = false;
 
@@ -794,7 +796,28 @@ DolphinMainWindow::DolphinMainWindow()
                 isMaximized() ? showNormal() : showMaximized();
             });
             connect(close, &QAbstractButton::clicked, this, &QWidget::close);
-            for (QWidget *button : buttonsLeft ? QList<QWidget *>{close, maximize, minimize} : QList<QWidget *>{minimize, maximize, close}) {
+            // beside them, on the inner side: the Information panel shown and hidden (as F11), the sidebar button's icon
+            // mirrored, its band on the right
+            auto *panel = new QToolButton(buttons);
+            panel->setAutoRaise(true);
+            panel->setIconSize(QSize(18, 18));
+            panel->setFixedSize(28, 26);
+            panel->setToolTip(ngTr("Show or hide the Information panel (F11)", "Mostra o nascondi il pannello Informazioni (F11)"));
+            QTimer::singleShot(0, this, [this, panel] {
+                QAction *info = actionCollection()->action(QStringLiteral("show_information_panel"));
+                auto *dock = findChild<QDockWidget *>(QStringLiteral("infoDock"));
+                if (!info || !dock) {
+                    panel->hide(); // (built without the panel)
+                    return;
+                }
+                connect(panel, &QToolButton::clicked, info, &QAction::trigger);
+                auto update = [this, panel, dock] {
+                    panel->setIcon(ngSidebarIcon(dock->isVisible(), palette().color(QPalette::WindowText), true));
+                };
+                connect(dock, &QDockWidget::visibilityChanged, panel, update);
+                update();
+            });
+            for (QWidget *button : buttonsLeft ? QList<QWidget *>{close, maximize, minimize, panel} : QList<QWidget *>{panel, minimize, maximize, close}) {
                 buttonsLayout->addWidget(button);
             }
             auto *drag = new QWidget(m_ngTabsToolBar);
@@ -4368,7 +4391,7 @@ QSize DolphinMainWindow::sizeHint() const
 // menu has the rest. Without the sort bar (classic list) they go back where they were.
 // dolphin-ng: the sidebar button's icon, drawn here in the NG outline style: a window with the sidebar column on
 // its left, filled while the sidebar is shown and empty while it is hidden
-static QIcon ngSidebarIcon(bool shown, const QColor &ink)
+static QIcon ngSidebarIcon(bool shown, const QColor &ink, bool right)
 {
     QIcon icon;
     for (const int size : {16, 22, 24, 32, 48}) {
@@ -4388,14 +4411,15 @@ static QIcon ngSidebarIcon(bool shown, const QColor &ink)
                 fill.setAlphaF(0.55);
                 painter.save();
                 painter.setClipPath(outline);
-                painter.fillRect(QRectF(frame.left(), frame.top(), 6.5, frame.height()), fill);
+                painter.fillRect(right ? QRectF(frame.right() - 6.5, frame.top(), 6.5, frame.height()) : QRectF(frame.left(), frame.top(), 6.5, frame.height()), fill);
                 painter.restore();
             }
             QPen pen(ink, 1.7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
             painter.setPen(pen);
             painter.setBrush(Qt::NoBrush);
             painter.drawPath(outline);
-            painter.drawLine(QPointF(frame.left() + 6.5, frame.top()), QPointF(frame.left() + 6.5, frame.bottom()));
+            const qreal edge = right ? frame.right() - 6.5 : frame.left() + 6.5; // (the Information panel: on the right)
+            painter.drawLine(QPointF(edge, frame.top()), QPointF(edge, frame.bottom()));
             painter.end();
             icon.addPixmap(pixmap);
         }
@@ -4418,7 +4442,7 @@ void DolphinMainWindow::ngPlaceSidebarToggle()
         m_ngSidebarToggle->setPriority(QAction::LowPriority); // the icon alone, the name in the tooltip
         connect(m_ngSidebarToggle, &QAction::triggered, places, &QAction::trigger);
         auto update = [this, dock] {
-            m_ngSidebarToggle->setIcon(ngSidebarIcon(dock->isVisible(), palette().color(QPalette::WindowText)));
+            m_ngSidebarToggle->setIcon(ngSidebarIcon(dock->isVisible(), palette().color(QPalette::WindowText), false));
         };
         connect(dock, &QDockWidget::visibilityChanged, this, update);
         update();
