@@ -59,7 +59,7 @@ namespace
 // Watermark is the faint icon and large abbreviation; the others pair a small line glyph with the abbreviation.
 void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, const QString &sigla, const QColor &tint, bool dark, int count = -1,
                           const QString &sizeText = QString(), const QFont *font = nullptr, int special = 0, bool whole = false, const QStringList &tags = {},
-                          bool openTabs = false);
+                          bool openTabs = false, const QStringList &inside = {});
 
 // dolphin-ng: the well-known folders of the home (xdg-user-dirs), recognised by where they are: 0 for any other
 // folder, else 1 desktop, 2 downloads, 3 documents, 4 pictures, 5 music, 6 videos, 7 templates, 8 public
@@ -3273,14 +3273,44 @@ QList<QPixmap> ngFolderPictures(const QString &folder, const QStringList &names,
 // dolphin-ng: the band of a card whose file has no preview shows a small drawing of the kind of content: a page of
 // text, a table, lines of code, a waveform... The kind comes from the category of the file and, where the category
 // is too wide (audio or video, text or slides), from its extension.
+// tagged files inside a folder: sheets of paper in their tags' colours rising out of it from the right of @p top (the
+// folder's front edge), within @p room, at most four; drawn before the front, which covers their lower part
+void ngPaintInsideSheets(QPainter *painter, qreal right, qreal top, qreal room, qreal rise, const QStringList &inside)
+{
+    // (only in the room right of the folder's tabs, never over their names: fewer sheets where it is short)
+    const qreal least = rise * 1.1;
+    int count = qMin<int>(4, inside.size());
+    while (count > 0 && room < least * (count * 0.6 + 0.4)) {
+        --count;
+    }
+    if (count == 0) {
+        return;
+    }
+    const qreal width = qMin(room / (count * 0.6 + 0.4), rise * 2.6), lift = qMax(4.0, rise * 0.85);
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing);
+    for (int i = count - 1; i >= 0; --i) {
+        // (from the right, each a little lower and to the left of the one behind it)
+        const qreal x = right - width - i * width * 0.6;
+        const QRectF sheet(x, top - lift + i * 1.5, width, lift + rise * 2);
+        painter->setPen(QPen(QColor(0, 0, 0, 50), 1));
+        painter->setBrush(QColor(250, 250, 248));
+        painter->drawRoundedRect(sheet, 2.5, 2.5);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(ngTagColour(inside.at(i)));
+        painter->drawRoundedRect(QRectF(sheet.left(), sheet.top(), sheet.width(), qMax(3.0, lift * 0.45)), 2.5, 2.5);
+    }
+    painter->restore();
+}
+
 // a folder's tags as its tabs, as a card file's index tabs: side by side from @p left at @p top, each in its colour with
 // its name and the slope of a folder's tab on its right, within @p room. Where they do not fit the last ones narrow to
 // their colour alone, the first keeps its name (shortened if it must); @p open names them all (the pointer on the card).
 // The tabs reach @p depth * 1.8 down: the folder drawn after them covers their lower part, the names stay in @p depth.
-void ngPaintIndexTabs(QPainter *painter, qreal left, qreal top, qreal room, qreal depth, qreal radius, const QStringList &tags, bool open, const QFont &font)
+qreal ngPaintIndexTabs(QPainter *painter, qreal left, qreal top, qreal room, qreal depth, qreal radius, const QStringList &tags, bool open, const QFont &font)
 {
     if (tags.isEmpty()) {
-        return;
+        return left;
     }
     const QFontMetricsF fm(font);
     const qreal pad = 7, step = depth * 0.7, narrow = depth * 1.3;
@@ -3337,6 +3367,7 @@ void ngPaintIndexTabs(QPainter *painter, qreal left, qreal top, qreal room, qrea
         }
     }
     painter->restore();
+    return xs.isEmpty() ? left : xs.last() + widths.last() + step; // (where the last tab's slope ends)
 }
 
 QFont ngIndexTabFont(const QFont *base)
@@ -3348,7 +3379,7 @@ QFont ngIndexTabFont(const QFont *base)
 }
 
 void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, const QString &sigla, const QColor &tint, bool dark, int count, const QString &sizeText,
-                          const QFont *font, int special, bool whole, const QStringList &tags, bool openTabs)
+                          const QFont *font, int special, bool whole, const QStringList &tags, bool openTabs, const QStringList &inside)
 {
     painter->setRenderHint(QPainter::Antialiasing);
     // CARDS_BADGE=inside: the type and the size are part of the drawing (printed on the box, the type as the page's
@@ -3448,15 +3479,19 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
         painter->setPen(Qt::NoPen);
         painter->setBrush(back);
         painter->drawPath(backShape);
+        qreal tabsRight = body.left() + body.width() * 0.43;
         if (tags.isEmpty()) {
             painter->drawPath(tab);
             painter->drawPolygon(slope);
         } else {
             // (along the whole band, not only the folder: a name has room to be read)
-            ngPaintIndexTabs(painter, body.left(), body.top(), band.right() - body.left() - 4, tabDepth, radius * 0.8, tags, openTabs, tabFont);
+            tabsRight = ngPaintIndexTabs(painter, body.left(), body.top(), band.right() - body.left() - 4, tabDepth, radius * 0.8, tags, openTabs, tabFont);
         }
         painter->setBrush(back);
         const QRectF cover(body.left(), body.top() + tabDepth, body.width(), body.height() - tabDepth);
+        // tagged files inside: sheets in their tags' colours peeking out of the folder, on the right, behind its front
+        ngPaintInsideSheets(painter, cover.right() - cover.width() * 0.08, cover.top(), cover.right() - cover.width() * 0.08 - tabsRight - 3, tabDepth, inside);
+        painter->setBrush(back);
         QLinearGradient shine(cover.topLeft(), cover.bottomLeft());
         shine.setColorAt(0.0, frontTop);
         shine.setColorAt(1.0, front);
@@ -4101,6 +4136,27 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                     m_ngFactsPath = fileItem.localPath();
                     facts = NgFacts::instance()->facts(m_ngFactsPath, fileItem.mimetype(), fileItem.isDir(), newest, fileItem.isDir() ? 0 : qint64(fileItem.size()));
                     if (!facts && !m_ngFactsHooked) {
+                        m_ngFactsHooked = true;
+                        connect(NgFacts::instance(), &NgFacts::ready, this, [this](const QString &path) {
+                            if (path == m_ngFactsPath) {
+                                invalidateCache();
+                                update();
+                            }
+                        });
+                    }
+                }
+                m_ngCardInnerTags.clear();
+                if (fileItem.isDir() && fileItem.isLocalFile()) {
+                    // a folder: the tags of what is inside, as sheets peeking out of it (read in the background with
+                    // its other facts; the card is drawn again when they come)
+                    const qint64 newest = qMax(fileItem.time(KFileItem::ModificationTime).toSecsSinceEpoch(), values.value("ngNewest").toLongLong());
+                    m_ngFactsPath = fileItem.localPath();
+                    const NgFileFacts *inside = facts ? facts : NgFacts::instance()->facts(m_ngFactsPath, fileItem.mimetype(), true, newest, 0);
+                    if (inside) {
+                        for (const auto &tag : inside->innerTags) {
+                            m_ngCardInnerTags.append(tag.first);
+                        }
+                    } else if (!m_ngFactsHooked) {
                         m_ngFactsHooked = true;
                         connect(NgFacts::instance(), &NgFacts::ready, this, [this](const QString &path) {
                             if (path == m_ngFactsPath) {
@@ -5436,14 +5492,17 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
             const QRectF backPanel(b.left() + 8, b.top() + 4 + tabStrip, b.width() - 16, b.height());
             painter->setPen(Qt::NoPen);
             painter->setBrush(back);
+            qreal tabsRight = backPanel.left() + backPanel.width() * 0.30;
             if (m_ngCardTags.isEmpty()) {
                 painter->drawRoundedRect(QRectF(backPanel.left(), b.top() + 4, backPanel.width() * 0.30, 20), 5, 5);
             } else {
-                ngPaintIndexTabs(painter, backPanel.left(), b.top() + 4, backPanel.width(), tabStrip, 5, m_ngCardTags, isHovered(), tabFont);
+                tabsRight = ngPaintIndexTabs(painter, backPanel.left(), b.top() + 4, backPanel.width(), tabStrip, 5, m_ngCardTags, isHovered(), tabFont);
                 painter->setPen(Qt::NoPen);
                 painter->setBrush(back);
             }
             painter->drawRoundedRect(backPanel, 7, 7);
+            // tagged files inside: their sheets peeking out on the right, behind the pictures
+            ngPaintInsideSheets(painter, backPanel.right() - 10, backPanel.top() + 2, backPanel.right() - 10 - tabsRight - 3, tabStrip, m_ngCardInnerTags);
             const QRectF inside = backPanel.adjusted(7, 7, -7, 0);
             const int count = folderPictures.count();
             const qreal gap = 4, tileWidth = (inside.width() - (count - 1) * gap) / count;
@@ -5549,7 +5608,7 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
             } else {
                 ngPaintContentSketch(painter, m_ngCardThumb, m_ngCategory, m_ngSigla, m_ngTint, dark, itemCount, m_ngInfoSize, m_ngInfoInside ? &m_customizedFont : nullptr,
                                      m_ngCategory == int(NgKind::Folder) ? ngSpecialFolder(data().value("url").toUrl().toLocalFile()) : 0, false, m_ngCardTags,
-                                     isHovered());
+                                     isHovered(), m_ngCardInnerTags);
             }
             painter->restore();
         } else if (!m_pixmap.isNull() && m_ngInfoInside) {
@@ -5585,7 +5644,7 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
             const int itemCount = items.isValid() && items.typeId() != QMetaType::QString ? items.toInt() : -1;
             ngPaintContentSketch(painter, m_ngCardThumb, m_ngCategory, m_ngSigla, m_ngTint, dark, itemCount, m_ngInfoSize, &m_customizedFont,
                                  m_ngCategory == int(NgKind::Folder) ? ngSpecialFolder(data().value("url").toUrl().toLocalFile()) : 0, whole, m_ngCardTags,
-                                 isHovered());
+                                 isHovered(), m_ngCardInnerTags);
         }
         painter->restore();
     } else if (!m_pixmap.isNull()) {

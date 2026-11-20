@@ -1864,6 +1864,14 @@ void NgInfoView::build()
     m_linesLayout->addWidget(m_stars, 5, 0);
     m_linesLayout->addWidget(above(caption(ngTr("Tags", "Etichette")), false), 6, 0);
     m_linesLayout->addWidget(m_tags, 7, 0);
+    // a folder: the tags of what is inside it, with how many carry each (not to be changed from here)
+    m_insideLabel = above(caption(ngTr("Tagged inside", "Etichette dentro la cartella")), false);
+    m_insideTags = new QWidget(m_lines);
+    new NgFlowLayout(m_insideTags);
+    m_linesLayout->addWidget(m_insideLabel, 8, 0);
+    m_linesLayout->addWidget(m_insideTags, 9, 0);
+    m_insideLabel->hide();
+    m_insideTags->hide();
     m_layout->addWidget(m_lines);
     m_layout->addStretch();
     restyle();
@@ -2395,6 +2403,8 @@ void NgInfoView::showFacts()
         m_originLabel->hide();
         m_who->hide();
         m_whoLabel->hide();
+        m_insideLabel->hide();
+        m_insideTags->hide();
         return; // being read: NgFacts::ready brings it here again
     }
     QList<std::pair<QString, QString>> shown;
@@ -2410,6 +2420,26 @@ void NgInfoView::showFacts()
         parts.append({part.colour, part.count, part.label});
     }
     m_mix->setParts(parts);
+    // a folder: the tags found inside it, as chips with their count
+    while (QLayoutItem *child = m_insideTags->layout()->takeAt(0)) {
+        delete child->widget();
+        delete child;
+    }
+    for (int i = 0; i < facts->innerTags.size() && i < 12; ++i) {
+        const auto &tag = facts->innerTags.at(i);
+        const QColor colour = ngTagColour(tag.first);
+        auto *chip = new QLabel(QStringLiteral("%1  <b>%2</b>").arg(tag.first.toHtmlEscaped()).arg(tag.second), m_insideTags);
+        chip->setStyleSheet(QStringLiteral("QLabel { background: rgba(%1, %2, %3, 0.80); color: white; border-radius: 10px; padding: 1px 9px; }")
+                                .arg(colour.red())
+                                .arg(colour.green())
+                                .arg(colour.blue()));
+        chip->setToolTip(tag.second == 1 ? ngTr("1 item inside has this tag", "1 elemento dentro ha questa etichetta")
+                                         : ngTr("%1 items inside have this tag", "%1 elementi dentro hanno questa etichetta").arg(tag.second));
+        m_insideTags->layout()->addWidget(chip);
+        chip->show();
+    }
+    m_insideLabel->setVisible(m_item.isDir() && !facts->innerTags.isEmpty());
+    m_insideTags->setVisible(m_item.isDir() && !facts->innerTags.isEmpty());
     m_origin->setText(ngBreakable(facts->origin));
     m_origin->setVisible(!facts->origin.isEmpty());
     m_originLabel->setVisible(!facts->origin.isEmpty());

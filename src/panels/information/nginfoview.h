@@ -128,6 +128,8 @@ private:
     QWidget *m_stars = nullptr;
     QList<QToolButton *> m_starButtons;
     QWidget *m_tags = nullptr;
+    QLabel *m_insideLabel = nullptr; // a folder: "Tagged inside"
+    QWidget *m_insideTags = nullptr; // a folder: the tags of what is inside, with their counts
     QLayout *m_tagsLayout = nullptr;
     NgInfoDates *m_dates = nullptr;
     QStringList m_tagList;

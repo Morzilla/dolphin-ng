@@ -58,6 +58,9 @@ struct NgFileFacts {
         int count = 0; // a folder: the files under it (0: a file)
     };
     QList<Entry> entries; // archives: the top level, folders first, at most eight
+    // folders: the tags of what is inside (its files and those of its subfolders, one level down), the most used first,
+    // with how many carry each
+    QList<std::pair<QString, int>> innerTags;
 };
 
 /**

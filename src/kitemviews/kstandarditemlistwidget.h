@@ -395,6 +395,7 @@ private:
     bool m_ngCardFolderCover = false; // m_ngCardFolderPictures is the folder's own cover (folder.jpg, cover.png...)
     QString m_ngCardFolderPath; // Tessera, folders: the folder whose pictures are shown in the band
     QStringList m_ngCardTags; // the file's tags, drawn over its picture (paintNgCardTags)
+    QStringList m_ngCardInnerTags; // a folder: the tags of what is inside, the most used first (sheets peeking out of it)
     QStringList m_ngCardPeek; // Tessera, folders: the first entries of the folder; a trailing "/" marks a folder
     int m_ngCardPeekMore = 0; // how many more there are (-1: many, not counted)
     bool m_ngCardEyeInPill = false; // Tessera: the preview eye is the last button of the pill

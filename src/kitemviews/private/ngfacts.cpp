@@ -268,6 +268,8 @@ void folderFacts(const QString &path, NgFileFacts *out)
         QColor colour;
     };
     QHash<QString, Tally> parts;
+    QHash<QString, int> innerTags;
+    QStringList subfolders;
     QDirIterator it(path, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::System);
     int seen = 0;
     while (it.hasNext() && seen < 5000) {
@@ -293,7 +295,32 @@ void folderFacts(const QString &path, NgFileFacts *out)
             tally.colour = own ? kind.tint : audio ? QColor(214, 140, 214) : ngCategoryTint(kind.category);
         }
         ++tally.count;
+        // the tags of what is inside (a subfolder: its own, and those of what it holds, below)
+        for (const QString &tag : KFileMetaData::UserMetaData(info.filePath()).tags()) {
+            ++innerTags[tag];
+        }
+        if (info.isDir() && !info.isSymLink() && subfolders.size() < 60) {
+            subfolders.append(info.filePath());
+        }
     }
+    // one level down, a few thousand entries at most: a tagged file in a subfolder shows on the folder too
+    int below = 0;
+    for (const QString &sub : std::as_const(subfolders)) {
+        QDirIterator inner(sub, QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+        while (inner.hasNext() && below < 3000) {
+            inner.next();
+            ++below;
+            for (const QString &tag : KFileMetaData::UserMetaData(inner.filePath()).tags()) {
+                ++innerTags[tag];
+            }
+        }
+    }
+    for (auto it = innerTags.cbegin(); it != innerTags.cend(); ++it) {
+        out->innerTags.append({it.key(), it.value()});
+    }
+    std::sort(out->innerTags.begin(), out->innerTags.end(), [](const std::pair<QString, int> &a, const std::pair<QString, int> &b) {
+        return a.second != b.second ? a.second > b.second : a.first < b.first;
+    });
     for (const Tally &tally : std::as_const(parts)) {
         NgMixPart part;
         part.colour = tally.colour;
@@ -712,6 +739,12 @@ void NgFacts::attributesChanged(const QString &path)
         m_cache.erase(it);
     }
     Q_EMIT changed(path);
+    // (and its folder's, which tells the tags inside it; the folder's own date does not change with them)
+    const QString folder = QFileInfo(path).absolutePath();
+    if (auto up = m_cache.find(folder); up != m_cache.end() && !up->pending) {
+        m_cache.erase(up);
+    }
+    Q_EMIT changed(folder);
 }
 
 NgFacts::NgFacts(QObject *parent)
