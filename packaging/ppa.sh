@@ -26,7 +26,7 @@ dolphin-ng (${VERSION}) ${SERIES}; urgency=medium
  -- ${DEBFULLNAME:-Morzilla} <${DEBEMAIL:-3956663+Morzilla@users.noreply.github.com}>  $(LC_ALL=C date -R)
 EOT
 if [ "$MODE" = source ]; then
-    dpkg-buildpackage -S -sa -d
+    dpkg-buildpackage -S -sa -d -us -uc # (signed afterwards, where the key is)
 else
     mk-build-deps -i -r $([ "$(id -u)" = 0 ] || echo "-s sudo") -t "apt-get -y --no-install-recommends" debian/control >/dev/null
     dpkg-buildpackage -b -us -uc -j"$(nproc)"
