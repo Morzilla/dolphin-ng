@@ -5639,6 +5639,16 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
             } else if (chip.colour.isValid()) {
                 chipText = chipText.lighter(125);
             }
+            if (chip.colour.isValid() && ngTextHalo()) {
+                // a tag on glass with the text shadow: a solid chip in its colour, white text (pastel on see-through
+                // was lost over whatever lay behind the window)
+                QColor solid = chip.colour;
+                solid.setAlphaF(0.80);
+                painter->setPen(Qt::NoPen);
+                painter->setBrush(solid);
+                painter->drawRoundedRect(chip.rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
+                chipText = QColor(255, 255, 255);
+            }
             painter->setPen(chipText);
             painter->drawText(chip.rect, Qt::AlignCenter, chip.text);
         }
@@ -5695,16 +5705,18 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
     const bool ngHaloCards = ngTextHalo();
     for (const NgCardText &entry : std::as_const(m_ngCardTexts)) {
         painter->setFont(entry.font);
-        const QColor ink = entry.tone == 1 ? strong : entry.tone == 2 ? dim : entry.tone == 3 ? QColor(232, 192, 72) : m_additionalInfoTextColor;
+        QColor ink = entry.tone == 1 ? strong : entry.tone == 2 ? dim : entry.tone == 3 ? QColor(232, 192, 72) : m_additionalInfoTextColor;
         if (ngHaloCards) {
-            // the details (kind, dates, facts) a lighter shadow than the strong words among them
+            // the details (kind, dates, facts): solid, and a shadow nearly as full as the names' (see-through and
+            // half shaded, they vanished over a white window behind the glass)
+            ink = ngHaloInk(ink, styleOption().palette);
             ngPaintTextHalo(
                 painter,
                 ink,
                 [&](const QPointF &offset) {
                     painter->drawText(entry.pos + offset, entry.text);
                 },
-                entry.tone == 1 ? 1.0 : 0.5);
+                entry.tone == 1 ? 1.0 : 0.85);
         }
         painter->setPen(ink);
         painter->drawText(entry.pos, entry.text);

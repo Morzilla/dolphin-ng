@@ -1719,6 +1719,18 @@ bool ngTextHalo()
     return mode == 2 || (mode == 1 && ngLowContrastOnGlass(s_ngAuroraBodyOpacity / 100.0));
 }
 
+QColor ngHaloInk(const QColor &ink, const QPalette &palette)
+{
+    if (ink.alphaF() > 0.98 || !ngTextHalo()) {
+        return ink;
+    }
+    const QColor ground = palette.color(QPalette::Active, QPalette::Window);
+    // (nearly the tone of the main text: on glass over a white window a mid grey had no contrast left; the smaller type
+    // of the details and captions keeps them apart from the names)
+    const qreal a = qMax(ink.alphaF(), 0.9);
+    return QColor::fromRgbF(a * ink.redF() + (1 - a) * ground.redF(), a * ink.greenF() + (1 - a) * ground.greenF(), a * ink.blueF() + (1 - a) * ground.blueF());
+}
+
 void ngPaintTextHalo(QPainter *painter, const QColor &textColour, const std::function<void(const QPointF &)> &draw, qreal strength)
 {
     // as Breeze NG draws it under the text of its controls: a shadow of the opposite tone, mostly below the strokes and

@@ -80,7 +80,10 @@ QString ngBreakable(const QString &text)
 // text painted by the panel itself: with the shadow of the sidebar's text on glass (see ngSidebarHalo)
 void ngInfoText(QPainter &painter, const QRectF &rect, int flags, const QString &text, qreal strength = 1.0)
 {
-    if (ngSidebarHalo()) {
+    if (ngSidebarHalo() || ngTextHalo()) {
+        // (a dimmed label solid and well shaded: see-through, it vanished over a white window behind the glass)
+        painter.setPen(ngHaloInk(painter.pen().color(), QApplication::palette()));
+        strength = qMax(strength, 0.85);
         ngPaintTextHalo(
             &painter,
             painter.pen().color(),
@@ -1061,7 +1064,7 @@ void NgInfoView::build()
     actionsGroup->addLayout(actionsRow);
     m_actionCaption = new QLabel(m_body);
     m_actionCaption->setContentsMargins(8, 0, 0, 0);
-    m_actionCaption->setEnabled(false);
+    m_actionCaption->setProperty("_ng_dim_label", true); // (dimmed by restyle(), not disabled: see there)
     actionsGroup->addWidget(m_actionCaption);
     m_layout->addLayout(actionsGroup);
 
@@ -1102,7 +1105,7 @@ void NgInfoView::build()
     m_linesLayout->setVerticalSpacing(0);
     auto caption = [this](const QString &text) {
         auto *label = new QLabel(text, m_lines);
-        label->setEnabled(false);
+        label->setProperty("_ng_dim_label", true);
         return label;
     };
     m_originLabel = caption(ngTr("Downloaded from", "Scaricato da"));
@@ -1159,6 +1162,25 @@ void NgInfoView::build()
 void NgInfoView::restyle()
 {
     const QPalette palette = QApplication::palette();
+    // the captions ("Rating", "Tags", "Quick actions"...) in the dimmed colour, solid on glass with the text shadow; not
+    // disabled labels any more: the widget style leaves disabled text without its shadow, and over a white window
+    // behind the glass they vanished
+    QColor captionInk = palette.color(QPalette::Disabled, QPalette::WindowText);
+    if (ngTextHalo()) {
+        // (on glass that may show white behind: three quarters of the text's colour, solid; the disabled colour was too
+        // faint to read even with its shadow)
+        captionInk = palette.color(QPalette::Active, QPalette::WindowText);
+        captionInk.setAlphaF(0.75);
+    }
+    captionInk = ngHaloInk(captionInk, palette);
+    const auto labels = findChildren<QLabel *>();
+    for (QLabel *label : labels) {
+        if (label->property("_ng_dim_label").toBool()) {
+            QPalette own = label->palette();
+            own.setColor(QPalette::WindowText, captionInk);
+            label->setPalette(own);
+        }
+    }
     const bool dark = ngIsDark(palette);
     const QColor veil = ngVeil(palette);
     const QString veilCss = QStringLiteral("rgba(%1, %2, %3, %4)").arg(veil.red()).arg(veil.green()).arg(veil.blue()).arg(QString::number(veil.alphaF(), 'f', 3));
@@ -1268,6 +1290,12 @@ void NgInfoView::updateOverlay()
     }
     m_hero->setOverlay(m_kind->text(), m_overlayTint, chips);
     m_size->hide();
+}
+
+void NgInfoView::showEvent(QShowEvent *event)
+{
+    QScrollArea::showEvent(event);
+    restyle(); // (built before the window told the views it is Aurora glass: the captions took the colour without glass)
 }
 
 void NgInfoView::changeEvent(QEvent *event)
@@ -1642,7 +1670,13 @@ void NgInfoView::showTags()
     for (const QString &tag : std::as_const(m_tagList)) {
         // in the tag's colour, as on the cards; the cross takes it away
         const QColor colour = ngTagColour(tag);
-        const QColor text = dark ? colour.lighter(125) : colour.darker(135);
+        QColor text = dark ? colour.lighter(125) : colour.darker(135);
+        // on glass with the text shadow: a solid chip (its colour over the window's), white text; a see-through one was
+        // pastel on whatever lay behind the window
+        const bool solid = ngTextHalo();
+        if (solid) {
+            text = QColor(255, 255, 255);
+        }
         auto *chip = new QToolButton(m_tags);
         chip->setText(tag + QStringLiteral("  ×"));
         chip->setToolButtonStyle(Qt::ToolButtonTextOnly);
@@ -1654,7 +1688,7 @@ void NgInfoView::showTags()
                                 .arg(colour.red())
                                 .arg(colour.green())
                                 .arg(colour.blue())
-                                .arg(dark ? QStringLiteral("0.14") : QStringLiteral("0.16"))
+                                .arg(solid ? QStringLiteral("0.78") : dark ? QStringLiteral("0.14") : QStringLiteral("0.16"))
                                 .arg(text.name()));
         connect(chip, &QToolButton::clicked, this, [this, tag] {
             QStringList tags = m_tagList;

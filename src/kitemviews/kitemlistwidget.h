@@ -266,6 +266,10 @@ DOLPHIN_EXPORT bool ngTextShadowSetting(); // not "never"
 DOLPHIN_EXPORT bool ngLowContrastOnGlass(qreal opacity);
 DOLPHIN_EXPORT bool ngTextHalo();
 // the shadow around a text in @p textColour: @p draw paints the text at the offset it is given, in the pen set here
+// dolphin-ng: a dimmed text colour for glass with the text shadow on: solid and nearly as strong as the text's, instead of
+// see-through (a see-through grey took the colour of whatever lay behind the window, and over a white window light
+// grey text vanished); the colour itself otherwise
+DOLPHIN_EXPORT QColor ngHaloInk(const QColor &ink, const QPalette &palette);
 DOLPHIN_EXPORT void ngPaintTextHalo(QPainter *painter, const QColor &textColour, const std::function<void(const QPointF &)> &draw, qreal strength = 1.0);
 // the sidebar's text gets the shadow now (decided by the main window, see DolphinMainWindow::ngApplyTextHalo)
 DOLPHIN_EXPORT bool ngSidebarHalo();

@@ -1787,6 +1787,16 @@ void DolphinMainWindow::ngApplyTextHalo()
     if (m_ngFilterAction) {
         if (QWidget *field = toolBar(QStringLiteral("mainToolBar"))->widgetForAction(m_ngFilterAction)) {
             shade(field, 4);
+            // its placeholder ("Search in the folder") solid on glass: see-through, it vanished over a white window
+            const auto edits = field->findChildren<QLineEdit *>() << qobject_cast<QLineEdit *>(field);
+            for (QLineEdit *edit : edits) {
+                if (edit) {
+                    QPalette own = edit->palette();
+                    const QColor stock = QApplication::palette().color(QPalette::Active, QPalette::PlaceholderText);
+                    own.setColor(QPalette::PlaceholderText, ngHaloInk(stock, QApplication::palette()));
+                    edit->setPalette(own);
+                }
+            }
         }
     }
 }

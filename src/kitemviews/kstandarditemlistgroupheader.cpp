@@ -10,6 +10,7 @@
 #include "kstandarditemlistgroupheader.h"
 
 #include <KRatingPainter>
+#include <QGuiApplication>
 #include <QPainter>
 
 KStandardItemListGroupHeader::KStandardItemListGroupHeader(QGraphicsWidget *parent)
@@ -33,7 +34,14 @@ void KStandardItemListGroupHeader::paint(QPainter *painter, const QStyleOptionGr
 void KStandardItemListGroupHeader::paintRole(QPainter *painter, const QRectF &roleBounds, const QColor &color)
 {
     if (m_pixmap.isNull()) {
-        painter->setPen(color);
+        // dolphin-ng: on glass with the text shadow, the group's title solid and shaded as the items' names
+        const QColor ink = ngHaloInk(color, QGuiApplication::palette());
+        if (ngTextHalo()) {
+            ngPaintTextHalo(painter, ink, [&](const QPointF &offset) {
+                painter->drawText(roleBounds.translated(offset), 0, m_text);
+            });
+        }
+        painter->setPen(ink);
         painter->drawText(roleBounds, 0, m_text);
     } else {
         painter->drawPixmap(roleBounds.topLeft(), m_pixmap);
