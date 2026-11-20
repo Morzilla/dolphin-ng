@@ -14,6 +14,7 @@
 
 #include <functional>
 
+class QProcess;
 class MediaWidget;
 class NgInfoHero;
 class NgInfoFacts;
@@ -88,11 +89,14 @@ private:
     void layoutActions();
     void updateOverlay();
     void updatePinTip();
+    void renderSharper(int side);
 
     KFileItem m_item;
     KFileItemList m_items;
     std::function<bool(const KFileItemList &)> m_pinnedQuery;
     QPointer<KIO::PreviewJob> m_previewJob;
+    int m_sharpSide = 0; // the size the zoomed preview was last drawn again at
+    QPointer<QProcess> m_sharpProcess;
     QPointer<KIO::DirectorySizeJob> m_sizeJob; // a folder's size, counted in the background
 
     QWidget *m_body = nullptr;

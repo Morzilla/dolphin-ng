@@ -30,6 +30,11 @@
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenu>
+#include <QImageReader>
+#include <QPointer>
+#include <QProcess>
+#include <QStandardPaths>
+#include <QtConcurrentRun>
 #include <cmath>
 #include <functional>
 #include <optional>
@@ -138,13 +143,26 @@ public:
         m_canOpen = false;
         m_zoom = 1.0;
         showButtons(false);
-        m_sharperAsked = false;
         update();
     }
-    // asked once the picture is zoomed in: a larger preview, so that it stays sharp
-    void setSharperWanted(std::function<void()> wanted)
+    // asked, a moment after the zoom settles, when the picture shown has fewer pixels than the zoom needs: the longest
+    // side wanted, in device pixels (the owner renders the file again at that size)
+    void setSharperWanted(std::function<void(int)> wanted)
     {
         m_sharperWanted = std::move(wanted);
+        m_sharpTimer = new QTimer(this);
+        m_sharpTimer->setSingleShot(true);
+        m_sharpTimer->setInterval(180);
+        connect(m_sharpTimer, &QTimer::timeout, this, [this] {
+            if (!zoomed()) {
+                return;
+            }
+            const QSizeF shown = fitRect().size() * m_zoom * devicePixelRatioF();
+            const int needed = qRound(qMax(shown.width(), shown.height()));
+            if (needed > qMax(m_pixmap.width(), m_pixmap.height()) * 1.1) {
+                m_sharperWanted(needed);
+            }
+        });
     }
     void setIcon(const QString &icon, const QColor &tint)
     {
@@ -350,9 +368,8 @@ protected:
         if (!m_zoomIn->underMouse() && !m_zoomOut->underMouse()) {
             setCursor(zoomed() ? Qt::OpenHandCursor : Qt::ArrowCursor);
         }
-        if (m_zoom > 1.5 && !m_sharperAsked && m_sharperWanted) {
-            m_sharperAsked = true;
-            m_sharperWanted();
+        if (zoomed() && m_sharpTimer) {
+            m_sharpTimer->start();
         }
         showButtons(underMouse());
         update();
@@ -557,8 +574,8 @@ private:
     QToolButton *m_zoomIn = nullptr;
     QToolButton *m_zoomOut = nullptr;
     std::optional<QPointF> m_panFrom;
-    bool m_sharperAsked = false;
-    std::function<void()> m_sharperWanted;
+    std::function<void(int)> m_sharperWanted;
+    QTimer *m_sharpTimer = nullptr;
 };
 
 // ---- the three facts of the Dossier: a value large, its word under it
@@ -859,10 +876,8 @@ void NgInfoView::build()
 
     m_hero = new NgInfoHero(m_body);
     m_layout->addWidget(m_hero);
-    m_hero->setSharperWanted([this] {
-        if (!m_item.isNull()) {
-            askPreview({m_item}, 3);
-        }
+    m_hero->setSharperWanted([this](int side) {
+        renderSharper(side);
     });
     connect(m_hero->eye(), &QToolButton::clicked, this, [this] {
         if (!m_item.isNull()) {
@@ -1215,6 +1230,83 @@ void NgInfoView::showItems(const KFileItemList &items)
     showMany();
 }
 
+// The preview zoomed in: the file itself drawn again at the size the zoom needs (a thumbnail enlarged is grainy). A
+// picture is read from the file, in the background; a PDF's first page is rendered by pdftoppm (poppler-utils, as the
+// lightbox does); anything else gets a larger thumbnail, once.
+void NgInfoView::renderSharper(int side)
+{
+    if (m_item.isNull()) {
+        return;
+    }
+    side = qMin(side, 6000); // enough to read a page, without eating memory
+    if (side <= m_sharpSide) {
+        return; // (asked already, or the file has no more to give)
+    }
+    m_sharpSide = side;
+    const QUrl url = m_item.url();
+    const QString path = m_item.isLocalFile() ? m_item.localPath() : QString();
+    const QString mime = m_item.mimetype();
+    if (!path.isEmpty() && mime.startsWith(QLatin1String("image/")) && m_item.size() < 120 * 1024 * 1024) {
+        QPointer<NgInfoView> self(this);
+        (void)QtConcurrent::run([self, url, path, side] {
+            QImageReader reader(path);
+            reader.setAutoTransform(true);
+            QSize original = reader.size();
+            if (original.isValid() && (reader.transformation() & QImageIOHandler::TransformationRotate90)) {
+                original.transpose();
+            }
+            if (original.isValid() && qMax(original.width(), original.height()) > side) {
+                QSize scaled = original.scaled(side, side, Qt::KeepAspectRatio);
+                if (reader.transformation() & QImageIOHandler::TransformationRotate90) {
+                    scaled.transpose(); // (the reader scales before it turns the picture)
+                }
+                reader.setScaledSize(scaled);
+            }
+            const QImage image = reader.read();
+            QMetaObject::invokeMethod(qApp, [self, url, image] {
+                if (self && !image.isNull() && self->m_item.url() == url) {
+                    self->m_hero->setPixmap(QPixmap::fromImage(image));
+                }
+            });
+        });
+        if (m_item.size() > 0) {
+            // (the file has no more pixels than its own: not asked again past them)
+            QImageReader header(path);
+            const QSize original = header.size();
+            if (original.isValid() && qMax(original.width(), original.height()) <= side) {
+                m_sharpSide = 1 << 30;
+            }
+        }
+        return;
+    }
+    static const QString pdftoppm = QStandardPaths::findExecutable(QStringLiteral("pdftoppm"));
+    if (!path.isEmpty() && mime == QLatin1String("application/pdf") && !pdftoppm.isEmpty()) {
+        if (m_sharpProcess) {
+            m_sharpProcess->kill();
+            m_sharpProcess->deleteLater();
+        }
+        auto *process = new QProcess(this);
+        m_sharpProcess = process;
+        connect(process, &QProcess::finished, this, [this, process, url](int exitCode, QProcess::ExitStatus status) {
+            if (status == QProcess::NormalExit && exitCode == 0 && m_item.url() == url) {
+                QImage page;
+                if (page.loadFromData(process->readAllStandardOutput(), "PNG")) {
+                    m_hero->setPixmap(QPixmap::fromImage(page));
+                }
+            }
+            process->deleteLater();
+        });
+        // (no output name: the page comes on stdout)
+        process->start(pdftoppm, {QStringLiteral("-png"), QStringLiteral("-f"), QStringLiteral("1"), QStringLiteral("-l"), QStringLiteral("1"),
+                                  QStringLiteral("-singlefile"), QStringLiteral("-scale-to"), QString::number(side), path});
+        return;
+    }
+    if (m_sharpSide < (1 << 30)) {
+        m_sharpSide = 1 << 30; // a thumbnail is asked larger only once
+        askPreview({m_item}, 3);
+    }
+}
+
 void NgInfoView::askPreview(const KFileItemList &items, int sharper)
 {
     if (m_previewJob) {
@@ -1257,6 +1349,10 @@ void NgInfoView::showOne()
 {
     const KFileItem &item = m_item;
     m_hero->clear();
+    m_sharpSide = 0;
+    if (m_sharpProcess) {
+        m_sharpProcess->kill();
+    }
     m_media->clearUrl();
     m_media->hide();
     m_facts->setFacts({});
