@@ -146,7 +146,9 @@ set_package_properties(KF6Baloo PROPERTIES DESCRIPTION "Baloo Core libraries"
                        PURPOSE "For adding desktop-wide search and tagging support to dolphin"
                       )
 
-find_package(KF6BalooWidgets ${RELEASE_SERVICE_VERSION})
+# dolphin-ng: any Baloo Widgets of KF6, not only the one of this release: the distributions that ship an older KDE Gear
+# (Kubuntu 26.04 has 25.12) otherwise build Dolphin NG without its Information panel, search and tags
+find_package(KF6BalooWidgets 25.04)
 set_package_properties(KF6BalooWidgets PROPERTIES DESCRIPTION "Baloos Widgets"
                        URL "https://www.kde.org"
                        TYPE OPTIONAL
