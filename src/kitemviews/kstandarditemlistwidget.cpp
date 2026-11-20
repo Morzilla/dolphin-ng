@@ -3307,13 +3307,16 @@ void ngPaintInsideSheets(QPainter *painter, qreal right, qreal top, qreal room, 
 // its name and the slope of a folder's tab on its right, within @p room. Where they do not fit the last ones narrow to
 // their colour alone, the first keeps its name (shortened if it must); @p open names them all (the pointer on the card).
 // The tabs reach @p depth * 1.8 down: the folder drawn after them covers their lower part, the names stay in @p depth.
-qreal ngPaintIndexTabs(QPainter *painter, qreal left, qreal top, qreal room, qreal depth, qreal radius, const QStringList &tags, bool open, const QFont &font)
+qreal ngPaintIndexTabs(QPainter *painter, qreal left, qreal top, qreal room, qreal depth, qreal radius, const QStringList &tags, bool open, const QFont &font,
+                       QStringList *unfolded = nullptr)
 {
     if (tags.isEmpty()) {
         return left;
     }
     const QFontMetricsF fm(font);
     const qreal pad = 7, step = depth * 0.7, narrow = depth * 1.3;
+    static const bool testOpen = qEnvironmentVariableIsSet("DOLPHIN_NG_TEST_TABS_OPEN"); // (for tests: drawn as under the pointer)
+    open = open || testOpen;
     QList<qreal> widths;
     qreal total = 0;
     for (const QString &tag : tags) {
@@ -3322,20 +3325,43 @@ qreal ngPaintIndexTabs(QPainter *painter, qreal left, qreal top, qreal room, qre
     }
     QList<bool> named(tags.size(), true);
     int shown = tags.size();
-    for (int i = tags.size() - 1; i >= 1 && !open && total > room; --i) {
-        total -= widths[i] - narrow;
-        widths[i] = narrow;
-        named[i] = false;
+    // the pointer on the card: all of them named side by side when the room lets each be read; else the tabs as at rest
+    // and the whole list unfolded over the folder's front, inside it (see below)
+    bool unfold = false;
+    if (open && total > room) {
+        const qreal names = room - tags.size() * step * 0.5;
+        qreal full = 0;
+        for (const qreal w : std::as_const(widths)) {
+            full += w;
+        }
+        const qreal readable = fm.horizontalAdvance(QStringLiteral("Abcde…")) + 2 * pad;
+        bool fits = true;
+        for (const qreal w : std::as_const(widths)) {
+            fits = fits && w * names / full >= qMin(w, readable);
+        }
+        if (fits) {
+            for (qreal &w : widths) {
+                w = qMax(narrow, w * names / full);
+            }
+            total = room;
+        } else {
+            unfold = true;
+        }
     }
-    // still too wide: the last narrow tabs go (they come back with the pointer) before the first name is cut below a
-    // few letters; then the first is shortened, its name elided
-    const qreal readable = qMin(widths[0], fm.horizontalAdvance(tags.first().left(4)) + fm.horizontalAdvance(QStringLiteral("…")) + 2 * pad);
-    while (!open && shown > 1 && total > room && widths[0] - (total - room) < readable) {
-        --shown;
-        total -= widths[shown] + step * 0.5;
-    }
-    if (!open && total > room) {
-        widths[0] = qMax(narrow, widths[0] - (total - room));
+    if (total > room) {
+        // at rest: the first name whole when it fits by itself; the others narrow to their colour, then go
+        for (int i = tags.size() - 1; i >= 1 && total > room; --i) {
+            total -= widths[i] - narrow;
+            widths[i] = narrow;
+            named[i] = false;
+        }
+        while (shown > 1 && total > room) {
+            --shown;
+            total -= widths[shown] + step * 0.5;
+        }
+        if (total > room) {
+            widths[0] = qMax(narrow, widths[0] - (total - room)); // (the first alone does not fit: its name elided)
+        }
     }
     widths.resize(shown);
     QList<qreal> xs;
@@ -3366,8 +3392,39 @@ qreal ngPaintIndexTabs(QPainter *painter, qreal left, qreal top, qreal room, qre
             painter->drawText(label, Qt::AlignLeft | Qt::AlignVCenter, fm.elidedText(tags.at(i), Qt::ElideRight, label.width()));
         }
     }
+    if (unfolded && unfold) {
+        // (what the tabs do not let be read: the ones narrowed to their colour, gone, or with the name cut)
+        for (int i = 0; i < tags.size(); ++i) {
+            const bool whole = i < shown && named.at(i) && widths.at(i) >= fm.horizontalAdvance(tags.at(i)) + 2 * pad - 0.5;
+            if (!whole) {
+                unfolded->append(tags.at(i));
+            }
+        }
+    }
     painter->restore();
     return xs.isEmpty() ? left : xs.last() + widths.last() + step; // (where the last tab's slope ends)
+}
+
+// the tags of a folder whose tabs could not all be named, unfolded with the pointer on the card: a pill each, one
+// under the other from @p top, over the folder's front (drawn after it)
+void ngPaintTagList(QPainter *painter, qreal left, qreal top, qreal room, const QStringList &tags, const QFont &font)
+{
+    const QFontMetricsF fm(font);
+    const qreal pad = 7, h = fm.height() + 4;
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing);
+    painter->setFont(font);
+    qreal y = top;
+    for (const QString &tag : tags) {
+        const qreal w = qMin(fm.horizontalAdvance(tag) + 2 * pad, room);
+        painter->setPen(QPen(QColor(0, 0, 0, 60), 1));
+        painter->setBrush(ngTagColour(tag));
+        painter->drawRoundedRect(QRectF(left, y, w, h), h / 2, h / 2);
+        painter->setPen(Qt::white);
+        painter->drawText(QRectF(left + pad, y, w - 2 * pad, h), Qt::AlignLeft | Qt::AlignVCenter, fm.elidedText(tag, Qt::ElideRight, w - 2 * pad));
+        y += h + 2;
+    }
+    painter->restore();
 }
 
 QFont ngIndexTabFont(const QFont *base)
@@ -3480,12 +3537,13 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
         painter->setBrush(back);
         painter->drawPath(backShape);
         qreal tabsRight = body.left() + body.width() * 0.43;
+        QStringList unfolded;
         if (tags.isEmpty()) {
             painter->drawPath(tab);
             painter->drawPolygon(slope);
         } else {
             // (along the whole band, not only the folder: a name has room to be read)
-            tabsRight = ngPaintIndexTabs(painter, body.left(), body.top(), band.right() - body.left() - 4, tabDepth, radius * 0.8, tags, openTabs, tabFont);
+            tabsRight = ngPaintIndexTabs(painter, body.left(), body.top(), band.right() - body.left() - 4, tabDepth, radius * 0.8, tags, openTabs, tabFont, &unfolded);
         }
         painter->setBrush(back);
         const QRectF cover(body.left(), body.top() + tabDepth, body.width(), body.height() - tabDepth);
@@ -3497,6 +3555,9 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
         shine.setColorAt(1.0, front);
         painter->setBrush(shine);
         painter->drawRoundedRect(cover, radius, radius);
+        if (!unfolded.isEmpty()) {
+            ngPaintTagList(painter, cover.left() + 4, cover.top() + 4, band.right() - cover.left() - 8, unfolded, tabFont);
+        }
         if (special > 0) {
             const qreal side = qMin(cover.height() * 0.36, 30 * u);
             const QRectF box(cover.right() - side - cover.width() * 0.07, cover.top() + cover.height() * 0.11, side, side);
@@ -5493,10 +5554,11 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
             painter->setPen(Qt::NoPen);
             painter->setBrush(back);
             qreal tabsRight = backPanel.left() + backPanel.width() * 0.30;
+            QStringList unfoldedTabs;
             if (m_ngCardTags.isEmpty()) {
                 painter->drawRoundedRect(QRectF(backPanel.left(), b.top() + 4, backPanel.width() * 0.30, 20), 5, 5);
             } else {
-                tabsRight = ngPaintIndexTabs(painter, backPanel.left(), b.top() + 4, backPanel.width(), tabStrip, 5, m_ngCardTags, isHovered(), tabFont);
+                tabsRight = ngPaintIndexTabs(painter, backPanel.left(), b.top() + 4, backPanel.width(), tabStrip, 5, m_ngCardTags, isHovered(), tabFont, &unfoldedTabs);
                 painter->setPen(Qt::NoPen);
                 painter->setBrush(back);
             }
@@ -5551,6 +5613,9 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
                     const QRectF line(flap.left() + 11, flap.top(), flap.width() - 22, flapHeight);
                     painter->drawText(line, Qt::AlignLeft | Qt::AlignVCenter, QFontMetricsF(flapFont).elidedText(words, Qt::ElideRight, line.width()));
                 }
+            }
+            if (!unfoldedTabs.isEmpty()) {
+                ngPaintTagList(painter, backPanel.left() + 4, backPanel.top() + 4, backPanel.width() - 8, unfoldedTabs, tabFont); // (over the pictures)
             }
             painter->restore();
         } else if (m_ngCategory == int(NgKind::Folder) || !m_ngCardPreview) {
