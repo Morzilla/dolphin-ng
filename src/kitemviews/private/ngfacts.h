@@ -15,6 +15,7 @@
 #include <QObject>
 #include <QStringList>
 #include <QThreadPool>
+#include <QVariantMap>
 
 /**
  * dolphin-ng: what the Dossier card tells about a file beyond its name and dates — what is inside it (pages and
@@ -45,6 +46,18 @@ struct NgFileFacts {
     QString who; // "Pixel 8", "Artist · Album (2025)", "Finance team"
     QStringList tags;
     int rating = 0; // 0..10, as in Baloo
+    // what the Information panel's preview draws in its bar, by kind: the values as read, not yet worded (keys in
+    // ngfacts.cpp: fnumber, shutter, iso, focal, width, height, taken; pages, words, minutes; duration, fps, bitrate;
+    // sampleRate, channels, artist, title; lines, encoding, eol, indent, language; files, folders, unpacked, packed)
+    enum Bar { NoBar, Photo, Pages, Video, Audio, Code, Archive };
+    Bar bar = NoBar;
+    QVariantMap detail;
+    struct Entry {
+        QString name;
+        qint64 size = 0;
+        int count = 0; // a folder: the files under it (0: a file)
+    };
+    QList<Entry> entries; // archives: the top level, folders first, at most eight
 };
 
 /**

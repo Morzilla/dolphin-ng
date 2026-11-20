@@ -25,6 +25,7 @@
 #include <QStringDecoder>
 #include <QUrl>
 
+#include <algorithm>
 #include <cmath>
 #include <numeric>
 
@@ -51,6 +52,38 @@ QString duration(double seconds)
         return QStringLiteral("%1:%2:%3").arg(h).arg(m, 2, 10, QLatin1Char('0')).arg(s, 2, 10, QLatin1Char('0'));
     }
     return QStringLiteral("%1:%2").arg(m).arg(s, 2, 10, QLatin1Char('0'));
+}
+
+// the name of a text file's language, for the editor's status line in the preview
+QString ngLanguageName(const QString &name, const QString &mime)
+{
+    static const QHash<QString, QString> bySuffix{
+        {QStringLiteral("py"), QStringLiteral("Python")},      {QStringLiteral("cpp"), QStringLiteral("C++")},       {QStringLiteral("cc"), QStringLiteral("C++")},
+        {QStringLiteral("cxx"), QStringLiteral("C++")},        {QStringLiteral("h"), QStringLiteral("C/C++")},       {QStringLiteral("hpp"), QStringLiteral("C++")},
+        {QStringLiteral("c"), QStringLiteral("C")},            {QStringLiteral("rs"), QStringLiteral("Rust")},       {QStringLiteral("go"), QStringLiteral("Go")},
+        {QStringLiteral("js"), QStringLiteral("JavaScript")},  {QStringLiteral("mjs"), QStringLiteral("JavaScript")}, {QStringLiteral("ts"), QStringLiteral("TypeScript")},
+        {QStringLiteral("tsx"), QStringLiteral("TypeScript")}, {QStringLiteral("jsx"), QStringLiteral("JavaScript")}, {QStringLiteral("java"), QStringLiteral("Java")},
+        {QStringLiteral("kt"), QStringLiteral("Kotlin")},      {QStringLiteral("rb"), QStringLiteral("Ruby")},       {QStringLiteral("php"), QStringLiteral("PHP")},
+        {QStringLiteral("sh"), QStringLiteral("Shell")},       {QStringLiteral("bash"), QStringLiteral("Shell")},    {QStringLiteral("zsh"), QStringLiteral("Shell")},
+        {QStringLiteral("qml"), QStringLiteral("QML")},        {QStringLiteral("cmake"), QStringLiteral("CMake")},   {QStringLiteral("md"), QStringLiteral("Markdown")},
+        {QStringLiteral("json"), QStringLiteral("JSON")},      {QStringLiteral("yaml"), QStringLiteral("YAML")},     {QStringLiteral("yml"), QStringLiteral("YAML")},
+        {QStringLiteral("toml"), QStringLiteral("TOML")},      {QStringLiteral("xml"), QStringLiteral("XML")},       {QStringLiteral("html"), QStringLiteral("HTML")},
+        {QStringLiteral("css"), QStringLiteral("CSS")},        {QStringLiteral("sql"), QStringLiteral("SQL")},       {QStringLiteral("lua"), QStringLiteral("Lua")},
+        {QStringLiteral("ini"), QStringLiteral("INI")},        {QStringLiteral("conf"), QStringLiteral("Config")},   {QStringLiteral("txt"), QStringLiteral("Text")},
+        {QStringLiteral("log"), QStringLiteral("Log")},        {QStringLiteral("csv"), QStringLiteral("CSV")},       {QStringLiteral("spec"), QStringLiteral("RPM spec")},
+    };
+    const QString suffix = QFileInfo(name).suffix().toLower();
+    if (const auto it = bySuffix.constFind(suffix); it != bySuffix.constEnd()) {
+        return *it;
+    }
+    if (name == QLatin1String("CMakeLists.txt")) {
+        return QStringLiteral("CMake");
+    }
+    if (name == QLatin1String("Makefile")) {
+        return QStringLiteral("Make");
+    }
+    const QString comment = QMimeDatabase().mimeTypeForName(mime).comment();
+    return comment.isEmpty() ? QStringLiteral("Text") : comment;
 }
 
 QString aspect(int width, int height)
@@ -89,7 +122,8 @@ qint64 countWords(QStringView text)
 }
 
 // the entries of a ZIP archive, from its central directory (ZIP64 included): no decompression, a few reads
-bool zipContents(const QString &path, qint64 fileSize, qint64 *files, qint64 *folders, qint64 *unpacked, const QString &prefix = QString(), int *matching = nullptr)
+bool zipContents(const QString &path, qint64 fileSize, qint64 *files, qint64 *folders, qint64 *unpacked, const QString &prefix = QString(), int *matching = nullptr,
+                 QList<NgFileFacts::Entry> *top = nullptr)
 {
     QFile file(path);
     if (fileSize < 22 || !file.open(QIODevice::ReadOnly)) {
@@ -153,6 +187,25 @@ bool zipContents(const QString &path, qint64 fileSize, qint64 *files, qint64 *fo
             }
         }
         const bool folder = nameLength > 0 && cd.at(pos + 46 + nameLength - 1) == '/';
+        if (top) {
+            // the first part of the path: a folder at the top (with what is under it), or a file there
+            const QString name = QString::fromUtf8(cd.constData() + pos + 46, nameLength);
+            const int slash = name.indexOf(QLatin1Char('/'));
+            const QString head = slash < 0 ? name : name.left(slash + 1);
+            auto it = std::find_if(top->begin(), top->end(), [&head](const NgFileFacts::Entry &e) {
+                return e.name == head;
+            });
+            if (it == top->end() && top->size() < 400) {
+                top->append({head, 0, 0});
+                it = top->end() - 1;
+            }
+            if (it != top->end() && !folder) {
+                it->size += qint64(size);
+                if (slash >= 0) {
+                    ++it->count;
+                }
+            }
+        }
         if (matching && !folder && QLatin1String(cd.constData() + pos + 46, nameLength).startsWith(prefix)) {
             ++*matching;
         }
@@ -337,6 +390,25 @@ NgFileFacts readFacts(const QString &path, const QString &mime, bool isDir, qint
             add(QStringLiteral("f/%1").arg(QLocale().toString(fNumber, 'g', 2)), exposure.isEmpty() ? ngTr("aperture", "apertura") : exposure.join(QStringLiteral(" · ")));
         }
         add(aspect(width, height), ngTr("aspect ratio", "proporzioni"));
+        out.bar = NgFileFacts::Photo;
+        out.detail.insert(QStringLiteral("width"), width);
+        out.detail.insert(QStringLiteral("height"), height);
+        if (taken.isValid()) {
+            out.detail.insert(QStringLiteral("taken"), taken);
+        }
+        if (fNumber > 0) {
+            out.detail.insert(QStringLiteral("fnumber"), QStringLiteral("f/%1").arg(QLocale().toString(fNumber, 'g', 2)));
+            const double time = prop(Property::PhotoExposureTime).toDouble();
+            if (time > 0) {
+                out.detail.insert(QStringLiteral("shutter"), time < 1 ? QStringLiteral("1/%1").arg(qRound(1 / time)) : QStringLiteral("%1\"").arg(QLocale().toString(time, 'g', 3)));
+            }
+            if (prop(Property::PhotoISOSpeedRatings).toInt() > 0) {
+                out.detail.insert(QStringLiteral("iso"), prop(Property::PhotoISOSpeedRatings).toInt());
+            }
+        }
+        if (const double focal = prop(Property::PhotoFocalLength).toDouble(); focal > 0) {
+            out.detail.insert(QStringLiteral("focal"), QStringLiteral("%1 mm").arg(QLocale().toString(focal, 'g', 3)));
+        }
         const QString make = prop(Property::Manufacturer).toString().trimmed();
         QString model = prop(Property::Model).toString().trimmed();
         if (!make.isEmpty() && !model.startsWith(make.section(QLatin1Char(' '), 0, 0), Qt::CaseInsensitive)) {
@@ -351,9 +423,21 @@ NgFileFacts readFacts(const QString &path, const QString &mime, bool isDir, qint
         if (seconds > 0) {
             add(duration(seconds), ngTr("duration", "durata"));
         }
+        out.bar = video ? NgFileFacts::Video : NgFileFacts::Audio;
+        if (seconds > 0) {
+            out.detail.insert(QStringLiteral("duration"), seconds);
+        }
         if (video) {
             const int width = prop(Property::Width).toInt(), height = prop(Property::Height).toInt();
             const double fps = prop(Property::FrameRate).toDouble();
+            out.detail.insert(QStringLiteral("width"), width);
+            out.detail.insert(QStringLiteral("height"), height);
+            if (fps > 0) {
+                out.detail.insert(QStringLiteral("fps"), fps);
+            }
+            if (prop(Property::BitRate).toLongLong() > 0) {
+                out.detail.insert(QStringLiteral("bitrate"), prop(Property::BitRate).toLongLong());
+            }
             if (height > 0) {
                 const bool common = width * 9 == height * 16 && (height == 480 || height == 720 || height == 1080 || height == 1440 || height == 2160);
                 add(common ? (height == 2160 ? QStringLiteral("4K") : QStringLiteral("%1p").arg(height)) : QStringLiteral("%1×%2").arg(width).arg(height),
@@ -368,6 +452,10 @@ NgFileFacts readFacts(const QString &path, const QString &mime, bool isDir, qint
             const int sampleRate = prop(Property::SampleRate).toInt();
             const int bitRate = prop(Property::BitRate).toInt();
             const int channels = prop(Property::Channels).toInt();
+            out.detail.insert(QStringLiteral("sampleRate"), sampleRate);
+            out.detail.insert(QStringLiteral("bitrate"), bitRate);
+            out.detail.insert(QStringLiteral("channels"), channels);
+            out.detail.insert(QStringLiteral("title"), prop(Property::Title).toString().trimmed());
             const QString channelWord = channels == 1 ? ngTr("mono", "mono") : channels == 2 ? ngTr("stereo", "stereo") : channels > 2 ? ngTr("%1 channels", "%1 canali").arg(channels) : QString();
             if (sampleRate > 0) {
                 const QString kHz = QStringLiteral("%1 kHz").arg(QLocale().toString(sampleRate / 1000.0, 'g', 3));
@@ -386,6 +474,8 @@ NgFileFacts readFacts(const QString &path, const QString &mime, bool isDir, qint
                 artist = prop(Property::AlbumArtist).toString();
             }
             const QString album = prop(Property::Album).toString();
+            out.detail.insert(QStringLiteral("artist"), artist.trimmed());
+            out.detail.insert(QStringLiteral("album"), album.trimmed());
             QStringList who;
             if (!artist.isEmpty()) {
                 who << artist;
@@ -409,6 +499,8 @@ NgFileFacts readFacts(const QString &path, const QString &mime, bool isDir, qint
         if (pages > 0) {
             add(number(pages), plural(pages, "page", "pages", "pagina", "pagine"));
         }
+        out.bar = NgFileFacts::Pages;
+        out.detail.insert(QStringLiteral("pages"), pages);
         qint64 words = prop(Property::WordCount).toLongLong();
         if (words <= 0 && !plain.isEmpty()) {
             words = countWords(plain);
@@ -418,6 +510,8 @@ NgFileFacts readFacts(const QString &path, const QString &mime, bool isDir, qint
             if (kind.category == NgKind::Document) {
                 add(QStringLiteral("%1 min").arg(qMax<qint64>(1, qRound64(words / 230.0))), ngTr("to read", "di lettura"));
             }
+            out.detail.insert(QStringLiteral("words"), words);
+            out.detail.insert(QStringLiteral("minutes"), qMax<qint64>(1, qRound64(words / 230.0)));
         }
         const qint64 lines = prop(Property::LineCount).toLongLong();
         if (lines > 0) {
@@ -454,11 +548,41 @@ NgFileFacts readFacts(const QString &path, const QString &mime, bool isDir, qint
                     }
                 }
                 add(decoder.hasError() ? QStringLiteral("8-bit") : ascii ? QStringLiteral("ASCII") : QStringLiteral("UTF-8"), ngTr("encoding", "codifica"));
+                // the editor's status line: language, lines, encoding, line ends, indentation
+                out.bar = NgFileFacts::Code;
+                out.detail.insert(QStringLiteral("lines"), lines);
+                out.detail.insert(QStringLiteral("encoding"), decoder.hasError() ? QStringLiteral("8-bit") : QStringLiteral("UTF-8"));
+                out.detail.insert(QStringLiteral("eol"), data.contains("\r\n") ? QStringLiteral("CRLF") : QStringLiteral("LF"));
+                int tabs = 0, two = 0, four = 0;
+                for (const QByteArray &line : data.left(64 * 1024).split('\n')) {
+                    if (line.startsWith('\t')) {
+                        ++tabs;
+                    } else if (line.startsWith("    ")) {
+                        ++four;
+                    } else if (line.startsWith("  ") && !line.startsWith("   ")) {
+                        ++two;
+                    }
+                }
+                if (tabs + two + four > 0) {
+                    out.detail.insert(QStringLiteral("indent"), tabs >= two && tabs >= four ? ngTr("tabs", "tabulazioni") : four >= two ? ngTr("4 spaces", "4 spazi") : ngTr("2 spaces", "2 spazi"));
+                }
+                out.detail.insert(QStringLiteral("language"), ngLanguageName(name, mime));
             }
         }
     } else if (kind.category == NgKind::Archive || kind.category == NgKind::Package) {
         qint64 files = 0, folders = 0, unpacked = 0;
-        if (zipContents(path, size, &files, &folders, &unpacked)) {
+        QList<NgFileFacts::Entry> top;
+        if (zipContents(path, size, &files, &folders, &unpacked, QString(), nullptr, &top)) {
+            out.bar = NgFileFacts::Archive;
+            out.detail.insert(QStringLiteral("files"), files);
+            out.detail.insert(QStringLiteral("folders"), folders);
+            out.detail.insert(QStringLiteral("unpacked"), unpacked);
+            out.detail.insert(QStringLiteral("packed"), size);
+            std::sort(top.begin(), top.end(), [](const NgFileFacts::Entry &a, const NgFileFacts::Entry &b) {
+                const bool fa = a.name.endsWith(QLatin1Char('/')), fb = b.name.endsWith(QLatin1Char('/'));
+                return fa != fb ? fa : a.size > b.size;
+            });
+            out.entries = top.mid(0, 8);
             add(number(files), plural(files, "file", "files", "file", "file"));
             if (unpacked > 0) {
                 add(KIO::convertSize(KIO::filesize_t(unpacked)), ngTr("unpacked", "scompattato"));

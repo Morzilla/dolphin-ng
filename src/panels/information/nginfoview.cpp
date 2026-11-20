@@ -30,6 +30,7 @@
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenu>
+#include <QMimeDatabase>
 #include <QCursor>
 #include <QToolTip>
 #include <QImageReader>
@@ -240,6 +241,13 @@ public:
         m_icon.clear();
         m_canOpen = false;
         m_zoom = 1.0;
+        m_bar = NgFileFacts::NoBar;
+        m_detail.clear();
+        m_entries.clear();
+        m_camera.clear();
+        m_sizeText.clear();
+        m_pageable = false;
+        m_page = 1;
         showButtons(false);
         update();
     }
@@ -304,6 +312,43 @@ public:
         m_chips = chips;
         resizeEvent(nullptr);
         update();
+    }
+    // the band at the foot of the preview, in the manner of the file's kind (see paintOverlay)
+    void setBar(NgFileFacts::Bar bar, const QVariantMap &detail, const QList<NgFileFacts::Entry> &entries, const QString &camera, const QString &sizeText)
+    {
+        m_bar = bar;
+        m_detail = detail;
+        m_entries = entries;
+        m_camera = camera;
+        m_sizeText = sizeText;
+        update();
+    }
+    void setSizeText(const QString &sizeText)
+    {
+        m_sizeText = sizeText;
+        update();
+    }
+    // a PDF: the bar turns its pages; @p wanted is asked for the page to show
+    void setPageable(bool pageable, std::function<void(int)> wanted = {})
+    {
+        m_pageable = pageable;
+        m_page = 1;
+        m_pageWanted = std::move(wanted);
+        update();
+        // for tests: DOLPHIN_NG_TEST_PAGE=n turns a PDF to page n a moment after it shows (no input sent)
+        if (const int page = qEnvironmentVariableIntValue("DOLPHIN_NG_TEST_PAGE"); pageable && page > 1) {
+            QTimer::singleShot(1500, this, [this, page] {
+                if (m_pageable && m_pageWanted) {
+                    m_page = page;
+                    m_pageWanted(page);
+                    update();
+                }
+            });
+        }
+    }
+    int page() const
+    {
+        return m_page;
     }
     void setCanOpen(bool canOpen)
     {
@@ -384,6 +429,19 @@ protected:
             event->accept();
             return;
         }
+        if (event->button() == Qt::LeftButton && (m_pagerPrev.contains(event->position()) || m_pagerNext.contains(event->position()))) {
+            const int pages = m_detail.value(QStringLiteral("pages")).toInt();
+            const int page = qBound(1, m_page + (m_pagerNext.contains(event->position()) ? 1 : -1), qMax(1, pages));
+            if (page != m_page) {
+                m_page = page;
+                m_zoom = 1.0;
+                if (m_pageWanted) {
+                    m_pageWanted(page);
+                }
+                update();
+            }
+            return;
+        }
         if (event->button() == Qt::LeftButton && zoomed()) {
             m_panFrom = event->position();
             setCursor(Qt::ClosedHandCursor);
@@ -407,7 +465,10 @@ protected:
             update();
             return;
         }
-        setCursor(onGrip(event->position()) ? Qt::SizeVerCursor : zoomed() ? Qt::OpenHandCursor : Qt::ArrowCursor);
+        setCursor(onGrip(event->position()) ? Qt::SizeVerCursor
+                      : (m_pagerPrev.contains(event->position()) || m_pagerNext.contains(event->position())) ? Qt::PointingHandCursor
+                      : zoomed() ? Qt::OpenHandCursor
+                                 : Qt::ArrowCursor);
         QWidget::mouseMoveEvent(event);
     }
     void mouseReleaseEvent(QMouseEvent *event) override
@@ -528,22 +589,59 @@ protected:
                 painter.restore();
             }
         } else if (!m_lines.isEmpty()) {
-            // a text: its first lines, as the preview card shows them
-            painter.fillRect(rect(), dark ? QColor(16, 19, 28, 230) : QColor(250, 249, 246, 235));
+            // a text: its first lines, as an editor shows them: numbered in a gutter, under the badge
+            painter.fillRect(rect(), dark ? QColor(20, 24, 33, 240) : QColor(250, 249, 246, 240));
             QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-            mono.setPointSizeF(mono.pointSizeF() * 0.85);
+            mono.setPointSizeF(mono.pointSizeF() * 0.82);
             painter.setFont(mono);
             const QFontMetricsF metrics(mono);
-            QColor ink = palette().color(QPalette::WindowText);
-            ink.setAlphaF(0.85);
-            painter.setPen(dark ? QColor(205, 212, 228) : QColor(40, 44, 52));
-            qreal y = 14 + metrics.ascent();
+            const qreal gutter = metrics.horizontalAdvance(QStringLiteral("000")) + 12;
+            qreal y = 42 + metrics.ascent();
+            int number = 1;
             for (const QString &line : std::as_const(m_lines)) {
                 if (y > height() - 8) {
                     break;
                 }
-                painter.drawText(QPointF(14, y), metrics.elidedText(line, Qt::ElideRight, width() - 28));
+                painter.setPen(dark ? QColor(255, 255, 255, 64) : QColor(0, 0, 0, 70));
+                painter.drawText(QRectF(0, y - metrics.ascent(), gutter - 8, metrics.height()), Qt::AlignRight | Qt::AlignVCenter, QString::number(number++));
+                painter.setPen(dark ? QColor(205, 212, 228) : QColor(40, 44, 52));
+                painter.drawText(QPointF(gutter, y), metrics.elidedText(line, Qt::ElideRight, width() - gutter - 12));
                 y += metrics.height() + 1;
+            }
+        } else if (m_bar == NgFileFacts::Archive && !m_entries.isEmpty() && m_pixmap.isNull()) {
+            // an archive: what is inside, its top level (folders with how many files, then the files), each with its size
+            painter.fillRect(rect(), dark ? QColor(22, 25, 34, 235) : QColor(246, 247, 250, 240));
+            QFont row = font();
+            row.setPointSizeF(row.pointSizeF() * 0.86);
+            painter.setFont(row);
+            const QFontMetricsF fm(row);
+            const qreal rowHeight = fm.height() + 8;
+            qreal y = 44;
+            const qreal bottom = height() - fm.height() - 34;
+            for (const NgFileFacts::Entry &entry : std::as_const(m_entries)) {
+                if (y + rowHeight > bottom) {
+                    break;
+                }
+                const QRectF box(12, y, width() - 24, rowHeight - 3);
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(dark ? QColor(255, 255, 255, 10) : QColor(0, 0, 0, 8));
+                painter.drawRoundedRect(box, 6, 6);
+                const bool folder = entry.name.endsWith(QLatin1Char('/'));
+                const NgKind kind = ngKindFor(folder ? entry.name.chopped(1) : entry.name, folder);
+                const int side = qRound(fm.height() * 0.85);
+                QIcon::fromTheme(folder ? QStringLiteral("folder") : QMimeDatabase().mimeTypeForFile(entry.name, QMimeDatabase::MatchExtension).iconName(),
+                                 QIcon::fromTheme(QStringLiteral("unknown")))
+                    .paint(&painter, QRect(qRound(box.left() + 8), qRound(box.center().y() - side / 2.0), side, side));
+                Q_UNUSED(kind)
+                const QString right = folder ? (entry.count == 1 ? ngTr("1 file", "1 file") : ngTr("%1 files", "%1 file").arg(entry.count))
+                                             : KIO::convertSize(KIO::filesize_t(entry.size));
+                const qreal rightWidth = fm.horizontalAdvance(right);
+                painter.setPen(dark ? QColor(255, 255, 255, 120) : QColor(0, 0, 0, 120));
+                painter.drawText(box.adjusted(0, 0, -10, 0), Qt::AlignRight | Qt::AlignVCenter, right);
+                painter.setPen(dark ? QColor(230, 234, 242) : QColor(30, 32, 38));
+                painter.drawText(box.adjusted(side + 16, 0, -rightWidth - 18, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                                 fm.elidedText(entry.name, Qt::ElideMiddle, box.width() - side - rightWidth - 34));
+                y += rowHeight;
             }
         } else if (!m_pixmap.isNull()) {
             // the picture whole, as large as it fits (or zoomed in with the wheel)
@@ -587,73 +685,508 @@ protected:
         }
         painter.setClipPath(shape);
         QFont bold = font();
-        bold.setPointSizeF(bold.pointSizeF() * 0.92);
+        bold.setPointSizeF(bold.pointSizeF() * 0.9);
         bold.setWeight(QFont::Bold);
         QFont small = font();
-        small.setPointSizeF(small.pointSizeF() * 0.82);
+        small.setPointSizeF(small.pointSizeF() * 0.78);
         const QFontMetricsF boldFm(bold), smallFm(small);
-        // the kind, top left
+        // the kind and the size, top left: one badge, a dot of the kind's colour
         if (!m_badge.isEmpty()) {
-            const QRectF badge(10, 10, boldFm.horizontalAdvance(m_badge) + 16, boldFm.height() + 6);
+            const QString size = m_sizeText.isEmpty() ? QString() : QStringLiteral(" · ") + m_sizeText;
+            const qreal w = 26 + boldFm.horizontalAdvance(m_badge) + smallFm.horizontalAdvance(size) + 10;
+            const QRectF badge(10, 10, w, boldFm.height() + 8);
             painter.setPen(Qt::NoPen);
-            painter.setBrush(m_badgeTint);
+            painter.setBrush(QColor(10, 12, 18, 168));
             painter.drawRoundedRect(badge, badge.height() / 2, badge.height() / 2);
+            painter.setBrush(m_badgeTint.isValid() ? m_badgeTint : QColor(140, 150, 170));
+            painter.drawEllipse(QPointF(badge.left() + 13, badge.center().y()), 4, 4);
             painter.setFont(bold);
             painter.setPen(Qt::white);
-            painter.drawText(badge, Qt::AlignCenter, m_badge);
+            const QRectF text = badge.adjusted(22, 0, -8, 0);
+            painter.drawText(text, Qt::AlignLeft | Qt::AlignVCenter, m_badge);
+            painter.setFont(small);
+            painter.setPen(QColor(255, 255, 255, 185));
+            painter.drawText(text.adjusted(boldFm.horizontalAdvance(m_badge), 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter, size);
         }
+        m_pagerPrev = m_pagerNext = QRectF();
+        switch (m_bar) {
+        case NgFileFacts::Photo:
+            paintPhotoBar(painter);
+            break;
+        case NgFileFacts::Pages:
+            paintPagesBar(painter);
+            break;
+        case NgFileFacts::Video:
+        case NgFileFacts::Audio:
+            paintPlayerBar(painter);
+            break;
+        case NgFileFacts::Code:
+            paintCodeBar(painter);
+            break;
+        case NgFileFacts::Archive:
+            paintArchiveBar(painter);
+            break;
+        default:
+            paintGenericBar(painter);
+            break;
+        }
+    }
+
+    // ---- the bars: one band fused to the foot of the preview, in segments divided by hairlines, each in the manner of
+    // its kind of file (a camera's display, the foot of a page, a player, an editor's status line, a gauge)
+    struct Segment {
+        QString value;
+        QString word; // under the value (empty: the value alone)
+        int keep = 0; // the lowest goes first when the band is too narrow
+        bool grow = false; // takes the room left
+        int icon = 0; // 1 aperture, 2 shutter
+    };
+    QString detailText(const char *key) const
+    {
+        return m_detail.value(QLatin1String(key)).toString();
+    }
+    static QString clock(double seconds)
+    {
+        const int total = qRound(seconds), h = total / 3600, m = total / 60 % 60, sec = total % 60;
+        return h > 0 ? QStringLiteral("%1:%2:%3").arg(h).arg(m, 2, 10, QLatin1Char('0')).arg(sec, 2, 10, QLatin1Char('0'))
+                     : QStringLiteral("%1:%2").arg(m).arg(sec, 2, 10, QLatin1Char('0'));
+    }
+    void drawBand(QPainter &painter, const QRectF &band, bool paper) const
+    {
+        QLinearGradient ground(0, band.top(), 0, band.bottom());
+        if (paper) {
+            ground.setColorAt(0, QColor(246, 244, 238, 230));
+            ground.setColorAt(1, QColor(246, 244, 238, 245));
+        } else {
+            ground.setColorAt(0, QColor(8, 10, 16, 178));
+            ground.setColorAt(1, QColor(8, 10, 16, 220));
+        }
+        painter.fillRect(band, ground);
+        painter.fillRect(QRectF(band.left(), band.top(), band.width(), 1), paper ? QColor(0, 0, 0, 22) : QColor(255, 255, 255, 26));
+    }
+    // the segments laid left to right in @p band; the ones that do not fit go, lowest keep first
+    void drawSegments(QPainter &painter, const QRectF &band, QList<Segment> segments, const QFont &valueFont, const QFont &wordFont, const QColor &ink,
+                      const QColor &dim, const QColor &hair) const
+    {
+        const QFontMetricsF vfm(valueFont), wfm(wordFont);
+        const qreal pad = 10, iconRoom = 17;
+        auto widthOf = [&](const Segment &segment) {
+            return 2 * pad + qMax(vfm.horizontalAdvance(segment.value) + (segment.icon ? iconRoom : 0), segment.word.isEmpty() ? 0.0 : wfm.horizontalAdvance(segment.word));
+        };
+        auto total = [&] {
+            qreal sum = 0;
+            for (const Segment &segment : std::as_const(segments)) {
+                sum += widthOf(segment);
+            }
+            return sum;
+        };
+        while (segments.size() > 1 && total() > band.width()) {
+            auto lowest = std::min_element(segments.begin(), segments.end(), [](const Segment &a, const Segment &b) {
+                return a.keep < b.keep;
+            });
+            segments.erase(lowest);
+        }
+        qreal spare = qMax(0.0, band.width() - total());
+        int growers = int(std::count_if(segments.cbegin(), segments.cend(), [](const Segment &segment) {
+            return segment.grow;
+        }));
+        qreal x = band.left();
+        for (int i = 0; i < segments.size(); ++i) {
+            const Segment &segment = segments.at(i);
+            qreal w = widthOf(segment);
+            if (segment.grow && growers > 0) {
+                w += spare / growers;
+            } else if (growers == 0 && i == segments.size() - 1) {
+                w += spare;
+            }
+            const QRectF cell(x, band.top(), qMin(w, band.right() - x), band.height());
+            if (i > 0) {
+                painter.fillRect(QRectF(x, band.top() + 7, 1, band.height() - 14), hair);
+            }
+            QRectF text = cell.adjusted(pad, 0, -pad, 0);
+            if (segment.icon) {
+                drawIcon(painter, segment.icon, QPointF(text.left() + 6, segment.word.isEmpty() ? cell.center().y() : cell.top() + cell.height() * 0.36), ink);
+                text.adjust(iconRoom, 0, 0, 0);
+            }
+            painter.setFont(valueFont);
+            painter.setPen(ink);
+            if (segment.word.isEmpty()) {
+                painter.drawText(text, Qt::AlignLeft | Qt::AlignVCenter, vfm.elidedText(segment.value, Qt::ElideRight, text.width()));
+            } else {
+                const qreal block = vfm.height() + wfm.height() - 2;
+                const qreal top = cell.center().y() - block / 2;
+                painter.drawText(QRectF(text.left(), top, text.width(), vfm.height()), Qt::AlignLeft | Qt::AlignVCenter, vfm.elidedText(segment.value, Qt::ElideRight, text.width()));
+                painter.setFont(wordFont);
+                painter.setPen(dim);
+                painter.drawText(QRectF(cell.left() + pad, top + vfm.height() - 2, cell.width() - 2 * pad, wfm.height()), Qt::AlignLeft | Qt::AlignVCenter,
+                                 wfm.elidedText(segment.word, Qt::ElideRight, cell.width() - 2 * pad));
+            }
+            x += w;
+        }
+    }
+    static void drawIcon(QPainter &painter, int icon, const QPointF &centre, const QColor &ink)
+    {
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing);
+        QColor line = ink;
+        line.setAlphaF(0.8);
+        painter.setPen(QPen(line, 1.3));
+        painter.setBrush(Qt::NoBrush);
+        if (icon == 1) { // aperture: a ring with blades
+            painter.drawEllipse(centre, 5.5, 5.5);
+            for (int i = 0; i < 4; ++i) {
+                const qreal a = i * M_PI / 2 + 0.5;
+                painter.drawLine(centre + QPointF(std::cos(a) * 5.5, std::sin(a) * 5.5), centre + QPointF(std::cos(a + 1.9) * 2.2, std::sin(a + 1.9) * 2.2));
+            }
+        } else if (icon == 2) { // shutter time: a stopwatch
+            painter.drawEllipse(centre + QPointF(0, 0.8), 5, 5);
+            painter.drawLine(centre + QPointF(0, 0.8), centre + QPointF(0, -2.2));
+            painter.drawLine(centre + QPointF(-1.6, -5.6), centre + QPointF(1.6, -5.6));
+        }
+        painter.restore();
+    }
+    QFont monoFont(qreal scale) const
+    {
+        QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+        mono.setPointSizeF(font().pointSizeF() * scale);
+        return mono;
+    }
+
+    void paintPhotoBar(QPainter &painter)
+    {
+        // a camera's display: aperture, time, ISO, pixels in one band of fixed-width type; the camera and the date written
+        // on the picture just above, as a print's stamp; a small histogram of the picture at the end
+        QFont mono = monoFont(0.86);
+        mono.setWeight(QFont::DemiBold);
+        const qreal h = QFontMetricsF(mono).height() + 18;
+        const QRectF band(0, height() - h, width(), h);
+        QList<Segment> segments;
+        if (const QString f = detailText("fnumber"); !f.isEmpty()) {
+            segments.append({f, QString(), 6, false, 1});
+        }
+        if (const QString t = detailText("shutter"); !t.isEmpty()) {
+            segments.append({t, QString(), 5, false, 2});
+        }
+        if (const int iso = m_detail.value(QStringLiteral("iso")).toInt(); iso > 0) {
+            segments.append({QStringLiteral("ISO %1").arg(iso), QString(), 4});
+        }
+        const int w = m_detail.value(QStringLiteral("width")).toInt(), hh = m_detail.value(QStringLiteral("height")).toInt();
+        if (w > 0 && hh > 0) {
+            segments.append({QStringLiteral("%1×%2").arg(w).arg(hh), QString(), 3, true});
+        }
+        const QImage histogram = histogramImage();
+        const qreal histogramWidth = !histogram.isNull() && width() > 300 ? 62 : 0;
+        drawBand(painter, band, false);
+        drawSegments(painter, band.adjusted(0, 0, -histogramWidth, 0), segments, mono, mono, Qt::white, QColor(255, 255, 255, 150), QColor(255, 255, 255, 34));
+        if (histogramWidth > 0) {
+            painter.fillRect(QRectF(band.right() - histogramWidth, band.top() + 7, 1, band.height() - 14), QColor(255, 255, 255, 34));
+            painter.drawImage(QRectF(band.right() - histogramWidth + 8, band.top() + 7, histogramWidth - 16, band.height() - 14), histogram);
+        }
+        // the stamp: camera and lens on the left, when it was taken on the right
+        QStringList left;
+        if (!m_camera.isEmpty()) {
+            left << m_camera;
+        }
+        if (const QString focal = detailText("focal"); !focal.isEmpty()) {
+            left << focal;
+        }
+        const QDateTime taken = m_detail.value(QStringLiteral("taken")).toDateTime();
+        const QString right = taken.isValid() ? QLocale().toString(taken.date(), QLocale::ShortFormat) + QStringLiteral(" · ") + taken.time().toString(QStringLiteral("HH:mm")) : QString();
+        if (!left.isEmpty() || !right.isEmpty()) {
+            QFont stamp = font();
+            stamp.setPointSizeF(stamp.pointSizeF() * 0.8);
+            painter.setFont(stamp);
+            const QFontMetricsF fm(stamp);
+            const QRectF line(12, band.top() - fm.height() - 5, width() - 24, fm.height());
+            QLinearGradient veil(0, line.top() - 14, 0, band.top());
+            veil.setColorAt(0, QColor(0, 0, 0, 0));
+            veil.setColorAt(1, QColor(0, 0, 0, 120));
+            painter.fillRect(QRectF(0, line.top() - 14, width(), band.top() - line.top() + 14), veil);
+            const QString l = left.join(QStringLiteral(" · "));
+            for (int pass = 0; pass < 2; ++pass) {
+                painter.setPen(pass == 0 ? QColor(0, 0, 0, 150) : QColor(255, 255, 255, 225));
+                const QRectF at = line.translated(0, pass == 0 ? 1 : 0);
+                painter.drawText(at, Qt::AlignLeft | Qt::AlignVCenter, fm.elidedText(l, Qt::ElideRight, line.width() - fm.horizontalAdvance(right) - 12));
+                painter.drawText(at, Qt::AlignRight | Qt::AlignVCenter, right);
+            }
+        }
+    }
+    // a small luminance histogram of the picture shown, kept for that picture
+    QImage histogramImage()
+    {
+        if (m_pixmap.isNull()) {
+            return QImage();
+        }
+        if (m_histogramKey == m_pixmap.cacheKey() && !m_histogram.isNull()) {
+            return m_histogram;
+        }
+        const QImage small = m_pixmap.toImage().scaled(96, 96, Qt::KeepAspectRatio, Qt::FastTransformation).convertToFormat(QImage::Format_RGB32);
+        int bins[48] = {};
+        for (int y = 0; y < small.height(); ++y) {
+            const QRgb *line = reinterpret_cast<const QRgb *>(small.constScanLine(y));
+            for (int x = 0; x < small.width(); ++x) {
+                const int l = (qRed(line[x]) * 299 + qGreen(line[x]) * 587 + qBlue(line[x]) * 114) / 1000;
+                ++bins[qBound(0, l * 48 / 256, 47)];
+            }
+        }
+        const int top = *std::max_element(std::begin(bins), std::end(bins));
+        QImage out(48 * 2, 48, QImage::Format_ARGB32_Premultiplied);
+        out.fill(Qt::transparent);
+        QPainter p(&out);
+        p.setRenderHint(QPainter::Antialiasing);
+        QPainterPath path;
+        path.moveTo(0, 48);
+        for (int i = 0; i < 48; ++i) {
+            path.lineTo(i * 2 + 1, 48 - (top > 0 ? 46.0 * std::sqrt(double(bins[i]) / top) : 0));
+        }
+        path.lineTo(96, 48);
+        path.closeSubpath();
+        p.fillPath(path, QColor(255, 255, 255, 150));
+        p.end();
+        m_histogram = out;
+        m_histogramKey = m_pixmap.cacheKey();
+        return m_histogram;
+    }
+
+    void paintPagesBar(QPainter &painter)
+    {
+        // the foot of a page: a band the colour of paper, the pages turned from it (a PDF), the words and the reading
+        QFont value = font();
+        value.setPointSizeF(value.pointSizeF() * 0.9);
+        value.setWeight(QFont::Bold);
+        QFont word = font();
+        word.setPointSizeF(word.pointSizeF() * 0.74);
+        const qreal h = QFontMetricsF(value).height() + QFontMetricsF(word).height() + 10;
+        const QRectF band(0, height() - h, width(), h);
+        drawBand(painter, band, true);
+        const QColor ink(42, 42, 48), dim(42, 42, 48, 140), hair(0, 0, 0, 28);
+        const int pages = m_detail.value(QStringLiteral("pages")).toInt();
+        qreal left = 0;
+        if (m_pageable && pages > 1) {
+            // ‹ 3 / 12 ›
+            const QFontMetricsF fm(value);
+            const QString label = QStringLiteral("%1 / %2").arg(m_page).arg(pages);
+            const qreal arrow = 24, labelWidth = fm.horizontalAdvance(QStringLiteral("%1 / %2").arg(pages).arg(pages)) + 8;
+            m_pagerPrev = QRectF(6, band.center().y() - arrow / 2, arrow, arrow);
+            const QRectF labelRect(m_pagerPrev.right(), band.top(), labelWidth, band.height());
+            m_pagerNext = QRectF(labelRect.right(), m_pagerPrev.top(), arrow, arrow);
+            painter.setFont(value);
+            painter.setPen(m_page > 1 ? ink : QColor(42, 42, 48, 70));
+            painter.drawText(m_pagerPrev, Qt::AlignCenter, QStringLiteral("‹"));
+            painter.setPen(m_page < pages ? ink : QColor(42, 42, 48, 70));
+            painter.drawText(m_pagerNext, Qt::AlignCenter, QStringLiteral("›"));
+            painter.setPen(ink);
+            painter.drawText(labelRect, Qt::AlignCenter, label);
+            left = m_pagerNext.right() + 6;
+            painter.fillRect(QRectF(left, band.top() + 7, 1, band.height() - 14), hair);
+        }
+        QList<Segment> segments;
+        if (pages > 0 && left == 0) {
+            segments.append({QLocale().toString(pages), pages == 1 ? ngTr("page", "pagina") : ngTr("pages", "pagine"), 5});
+        }
+        if (const qint64 words = m_detail.value(QStringLiteral("words")).toLongLong(); words > 0) {
+            segments.append({QLocale().toString(words), ngTr("words", "parole"), 4, true});
+        }
+        if (const qint64 minutes = m_detail.value(QStringLiteral("minutes")).toLongLong(); minutes > 0) {
+            segments.append({QStringLiteral("%1 min").arg(minutes), ngTr("to read", "di lettura"), 3});
+        }
+        if (segments.isEmpty() && !m_sizeText.isEmpty()) {
+            segments.append({m_sizeText, ngTr("size", "dimensione"), 1, true});
+        }
+        drawSegments(painter, band.adjusted(left, 0, 0, 0), segments, value, word, ink, dim, hair);
+    }
+
+    void paintPlayerBar(QPainter &painter)
+    {
+        // a player's bar: the line of time across, under it what the file is on the left and how long it lasts on the right
+        const bool video = m_bar == NgFileFacts::Video;
+        QFont value = font();
+        value.setPointSizeF(value.pointSizeF() * 0.9);
+        value.setWeight(QFont::Bold);
+        QFont word = font();
+        word.setPointSizeF(word.pointSizeF() * 0.8);
+        const QFontMetricsF vfm(value), wfm(word);
+        const qreal h = vfm.height() + 22;
+        const QRectF band(0, height() - h, width(), h);
+        drawBand(painter, band, false);
+        const QRectF track(12, band.top() + 9, width() - 24, 3);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(255, 255, 255, 60));
+        painter.drawRoundedRect(track, 1.5, 1.5);
+        painter.setBrush(m_badgeTint.isValid() ? m_badgeTint : QColor(240, 160, 64));
+        painter.drawEllipse(QPointF(track.left() + 1.5, track.center().y()), 4, 4);
+        const double seconds = m_detail.value(QStringLiteral("duration")).toDouble();
+        const QString length = seconds > 0 ? clock(seconds) : QString();
+        QStringList what;
+        if (video) {
+            const int w = m_detail.value(QStringLiteral("width")).toInt(), hh = m_detail.value(QStringLiteral("height")).toInt();
+            if (hh >= 2160) {
+                what << QStringLiteral("4K");
+            } else if (hh > 0) {
+                what << (w * 9 == hh * 16 ? QStringLiteral("%1p").arg(hh) : QStringLiteral("%1×%2").arg(w).arg(hh));
+            }
+            if (const double fps = m_detail.value(QStringLiteral("fps")).toDouble(); fps > 0) {
+                what << QStringLiteral("%1 fps").arg(QLocale().toString(fps, 'g', 3));
+            }
+            if (const qint64 bitrate = m_detail.value(QStringLiteral("bitrate")).toLongLong(); bitrate > 0) {
+                what << QStringLiteral("%1 Mbit/s").arg(QLocale().toString(bitrate / 1e6, 'f', 1));
+            }
+        } else {
+            const QString artist = detailText("artist"), title = detailText("title");
+            if (!artist.isEmpty() || !title.isEmpty()) {
+                what << (artist.isEmpty() ? title : title.isEmpty() ? artist : artist + QStringLiteral(" · ") + title);
+            }
+        }
+        QStringList quality;
+        if (!video) {
+            if (const int rate = m_detail.value(QStringLiteral("sampleRate")).toInt(); rate > 0) {
+                quality << QStringLiteral("%1 kHz").arg(QLocale().toString(rate / 1000.0, 'g', 3));
+            }
+            const int channels = m_detail.value(QStringLiteral("channels")).toInt();
+            if (channels > 0) {
+                quality << (channels == 1 ? ngTr("mono", "mono") : channels == 2 ? ngTr("stereo", "stereo") : QStringLiteral("%1 ch").arg(channels));
+            }
+        }
+        const QRectF row(12, track.bottom() + 2, width() - 24, band.bottom() - track.bottom() - 4);
+        painter.setFont(value);
+        painter.setPen(Qt::white);
+        const qreal lengthWidth = vfm.horizontalAdvance(length);
+        painter.drawText(row, Qt::AlignRight | Qt::AlignVCenter, length);
+        const QString q = quality.join(QStringLiteral(" · "));
+        painter.setFont(word);
+        painter.setPen(QColor(255, 255, 255, 170));
+        const qreal qWidth = q.isEmpty() ? 0 : qMin(wfm.horizontalAdvance(q), row.width() * 0.4);
+        if (!q.isEmpty()) {
+            painter.drawText(row.adjusted(0, 0, -lengthWidth - 10, 0), Qt::AlignRight | Qt::AlignVCenter, wfm.elidedText(q, Qt::ElideRight, qWidth));
+        }
+        painter.setPen(QColor(255, 255, 255, 215));
+        painter.drawText(row.adjusted(0, 0, -lengthWidth - qWidth - 20, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                         wfm.elidedText(what.join(QStringLiteral(" · ")), Qt::ElideRight, row.width() - lengthWidth - qWidth - 20));
+    }
+
+    void paintCodeBar(QPainter &painter)
+    {
+        // an editor's status line: the language in its colour, then lines, encoding and line ends, indentation
+        QFont mono = monoFont(0.8);
+        const qreal h = QFontMetricsF(mono).height() + 10;
+        const QRectF band(0, height() - h, width(), h);
+        painter.fillRect(band, QColor(27, 31, 42, 240));
+        QList<Segment> segments;
+        const QString language = detailText("language");
+        if (const qint64 lines = m_detail.value(QStringLiteral("lines")).toLongLong(); lines > 0) {
+            segments.append({lines == 1 ? ngTr("1 line", "1 riga") : ngTr("%1 lines", "%1 righe").arg(QLocale().toString(lines)), QString(), 4});
+        }
+        QStringList encoding;
+        if (const QString e = detailText("encoding"); !e.isEmpty()) {
+            encoding << e;
+        }
+        if (const QString e = detailText("eol"); !e.isEmpty()) {
+            encoding << e;
+        }
+        if (!encoding.isEmpty()) {
+            segments.append({encoding.join(QStringLiteral(" · ")), QString(), 3, true});
+        }
+        if (const QString indent = detailText("indent"); !indent.isEmpty()) {
+            segments.append({indent, QString(), 2});
+        }
+        qreal left = 0;
+        if (!language.isEmpty()) {
+            const QFontMetricsF fm(mono);
+            const QString label = QStringLiteral("● ") + language;
+            const QRectF chip(0, band.top(), qMin(fm.horizontalAdvance(label) + 20, width() * 0.45), band.height());
+            painter.fillRect(chip, m_badgeTint.isValid() ? m_badgeTint : QColor(76, 195, 138));
+            painter.setFont(mono);
+            painter.setPen(QColor(13, 26, 18));
+            painter.drawText(chip.adjusted(10, 0, -6, 0), Qt::AlignLeft | Qt::AlignVCenter, fm.elidedText(label, Qt::ElideRight, chip.width() - 16));
+            left = chip.width();
+        }
+        drawSegments(painter, band.adjusted(left, 0, 0, 0), segments, mono, mono, QColor(220, 226, 236), QColor(220, 226, 236, 150), QColor(255, 255, 255, 22));
+    }
+
+    void paintArchiveBar(QPainter &painter)
+    {
+        // a gauge of the squeeze: how much it weighed, how much it weighs; how many files and folders
+        QFont value = font();
+        value.setPointSizeF(value.pointSizeF() * 0.86);
+        QFont strong = value;
+        strong.setWeight(QFont::Bold);
+        const QFontMetricsF fm(value);
+        const qreal h = fm.height() + 24;
+        const QRectF band(0, height() - h, width(), h);
+        drawBand(painter, band, false);
+        const qint64 unpacked = m_detail.value(QStringLiteral("unpacked")).toLongLong(), packed = m_detail.value(QStringLiteral("packed")).toLongLong();
+        const QRectF meter(12, band.top() + 9, width() - 24, 5);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(255, 255, 255, 40));
+        painter.drawRoundedRect(meter, 2.5, 2.5);
+        if (unpacked > 0 && packed > 0) {
+            painter.setBrush(m_badgeTint.isValid() ? m_badgeTint : QColor(217, 179, 74));
+            painter.drawRoundedRect(QRectF(meter.left(), meter.top(), meter.width() * qBound(0.03, double(packed) / unpacked, 1.0), meter.height()), 2.5, 2.5);
+        }
+        const QRectF row(12, meter.bottom() + 2, width() - 24, band.bottom() - meter.bottom() - 4);
+        const qint64 files = m_detail.value(QStringLiteral("files")).toLongLong(), folders = m_detail.value(QStringLiteral("folders")).toLongLong();
+        QString count = files == 1 ? ngTr("1 file", "1 file") : ngTr("%1 files", "%1 file").arg(QLocale().toString(files));
+        if (folders > 0) {
+            count += QStringLiteral(" · ") + (folders == 1 ? ngTr("1 folder", "1 cartella") : ngTr("%1 folders", "%1 cartelle").arg(QLocale().toString(folders)));
+        }
+        painter.setFont(value);
+        painter.setPen(QColor(255, 255, 255, 190));
+        const qreal countWidth = fm.horizontalAdvance(count);
+        painter.drawText(row, Qt::AlignRight | Qt::AlignVCenter, count);
+        if (unpacked > 0) {
+            QString squeeze = KIO::convertSize(KIO::filesize_t(unpacked)) + QStringLiteral(" → ") + KIO::convertSize(KIO::filesize_t(packed));
+            if (const int saved = unpacked > packed ? qRound(100.0 * (unpacked - packed) / unpacked) : 0; saved >= 1) {
+                squeeze += ngTr(" · %1% less", " · %1% in meno").arg(saved); // (pictures do not shrink: nothing said)
+            }
+            painter.setFont(strong);
+            painter.setPen(Qt::white);
+            painter.drawText(row.adjusted(0, 0, -countWidth - 12, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                             QFontMetricsF(strong).elidedText(squeeze, Qt::ElideRight, row.width() - countWidth - 12));
+        }
+    }
+
+    void paintGenericBar(QPainter &painter)
+    {
+        // anything else (a folder, several items): the facts given, in the same band
         if (m_chips.isEmpty()) {
             return;
         }
-        // the pills, laid from the bottom left, on as many rows as they need
-        const qreal pad = 10, gap = 6, chipHeight = boldFm.height() + 8;
-        struct Placed {
-            QRectF rect;
-            int index;
-        };
-        QList<Placed> placed;
-        qreal x = pad;
-        int row = 0;
-        for (int i = 0; i < m_chips.count(); ++i) {
-            const qreal w = qMin(width() - 2 * pad, boldFm.horizontalAdvance(m_chips.at(i).first) + (m_chips.at(i).second.isEmpty() ? 0 : 5 + smallFm.horizontalAdvance(m_chips.at(i).second)) + 18);
-            if (x > pad && x + w > width() - pad) {
-                x = pad;
-                ++row;
-            }
-            placed.append({QRectF(x, 0, w, chipHeight), row});
-            x += w + gap;
+        QFont value = font();
+        value.setPointSizeF(value.pointSizeF() * 0.9);
+        value.setWeight(QFont::Bold);
+        QFont word = font();
+        word.setPointSizeF(word.pointSizeF() * 0.74);
+        bool words = false;
+        for (const auto &chip : std::as_const(m_chips)) {
+            words = words || !chip.second.isEmpty();
         }
-        const int rows = row + 1;
-        // a dark veil from the bottom up, under the pills
-        const qreal veilTop = height() - pad - rows * (chipHeight + gap) - 26;
-        QLinearGradient veil(0, veilTop, 0, height());
-        veil.setColorAt(0, QColor(0, 0, 0, 0));
-        veil.setColorAt(1, QColor(0, 0, 0, 150));
-        painter.fillRect(QRectF(0, veilTop, width(), height() - veilTop), veil);
-        for (int i = 0; i < placed.count(); ++i) {
-            QRectF rect = placed.at(i).rect;
-            rect.moveTop(height() - pad - (rows - placed.at(i).index) * (chipHeight + gap) + gap);
-            painter.setPen(QPen(QColor(255, 255, 255, 40), 1));
-            painter.setBrush(QColor(10, 12, 20, 140));
-            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), rect.height() / 2, rect.height() / 2);
-            const QRectF text = rect.adjusted(9, 0, -9, 0);
-            painter.setFont(bold);
-            painter.setPen(Qt::white);
-            const QString value = boldFm.elidedText(m_chips.at(i).first, Qt::ElideRight, text.width());
-            painter.drawText(text, Qt::AlignLeft | Qt::AlignVCenter, value);
-            if (!m_chips.at(i).second.isEmpty()) {
-                const qreal used = boldFm.horizontalAdvance(value) + 5;
-                painter.setFont(small);
-                painter.setPen(QColor(255, 255, 255, 190));
-                painter.drawText(text.adjusted(used, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter, smallFm.elidedText(m_chips.at(i).second, Qt::ElideRight, text.width() - used));
-            }
+        const qreal h = QFontMetricsF(value).height() + (words ? QFontMetricsF(word).height() + 6 : 16);
+        const QRectF band(0, height() - h, width(), h);
+        drawBand(painter, band, false);
+        QList<Segment> segments;
+        int keep = m_chips.size();
+        for (const auto &chip : std::as_const(m_chips)) {
+            segments.append({chip.first, chip.second, keep--, false});
         }
+        segments.first().grow = true;
+        drawSegments(painter, band, segments, value, word, Qt::white, QColor(255, 255, 255, 150), QColor(255, 255, 255, 34));
     }
 
 private:
     QString m_badge;
     QColor m_badgeTint;
     QList<std::pair<QString, QString>> m_chips;
+    QString m_sizeText;
+    NgFileFacts::Bar m_bar = NgFileFacts::NoBar;
+    QVariantMap m_detail;
+    QList<NgFileFacts::Entry> m_entries;
+    QString m_camera;
+    bool m_pageable = false; // a PDF: its pages turned from the bar
+    int m_page = 1;
+    QRectF m_pagerPrev, m_pagerNext;
+    std::function<void(int)> m_pageWanted;
+    QImage m_histogram;
+    qint64 m_histogramKey = 0;
     QPixmap m_pixmap;
     QList<QPixmap> m_stack;
     QStringList m_lines;
@@ -1281,7 +1814,11 @@ void NgInfoView::updateOverlay()
     }
     QList<std::pair<QString, QString>> chips;
     const QString size = m_size->text();
-    chips.append({size, QString()});
+    if (m_item.isDir()) {
+        chips.append({size, QString()}); // (a folder: its size with what it holds is the band's first fact)
+    } else {
+        m_hero->setSizeText(size); // (a file: its size beside its kind, in the badge)
+    }
     static const QStringList repeated{QStringLiteral("size"), QStringLiteral("dimensione"), QStringLiteral("format"), QStringLiteral("formato")};
     for (const auto &fact : std::as_const(m_overlayFacts)) {
         if (!repeated.contains(fact.second.toLower())) {
@@ -1419,7 +1956,8 @@ void NgInfoView::renderSharper(int side)
             process->deleteLater();
         });
         // (no output name: the page comes on stdout)
-        process->start(pdftoppm, {QStringLiteral("-png"), QStringLiteral("-f"), QStringLiteral("1"), QStringLiteral("-l"), QStringLiteral("1"),
+        const QString page = QString::number(m_hero->page());
+        process->start(pdftoppm, {QStringLiteral("-png"), QStringLiteral("-f"), page, QStringLiteral("-l"), page,
                                   QStringLiteral("-singlefile"), QStringLiteral("-scale-to"), QString::number(side), path});
         return;
     }
@@ -1427,6 +1965,36 @@ void NgInfoView::renderSharper(int side)
         m_sharpSide = 1 << 30; // a thumbnail is asked larger only once
         askPreview({m_item}, 3);
     }
+}
+
+// a page of a PDF in the preview, at about the preview's size (its first is the thumbnail; zooming in draws it again
+// larger, see renderSharper)
+void NgInfoView::renderPage(int page)
+{
+    static const QString pdftoppm = QStandardPaths::findExecutable(QStringLiteral("pdftoppm"));
+    if (m_item.isNull() || !m_item.isLocalFile() || pdftoppm.isEmpty()) {
+        return;
+    }
+    m_sharpSide = 0;
+    if (m_sharpProcess) {
+        m_sharpProcess->kill();
+        m_sharpProcess->deleteLater();
+    }
+    const QUrl url = m_item.url();
+    const int side = qBound(256, qRound(qMax(m_hero->width(), m_hero->height()) * devicePixelRatioF() * 1.2), 2048);
+    auto *process = new QProcess(this);
+    m_sharpProcess = process;
+    connect(process, &QProcess::finished, this, [this, process, url](int exitCode, QProcess::ExitStatus status) {
+        if (status == QProcess::NormalExit && exitCode == 0 && m_item.url() == url) {
+            QImage image;
+            if (image.loadFromData(process->readAllStandardOutput(), "PNG")) {
+                m_hero->setPixmap(QPixmap::fromImage(image));
+            }
+        }
+        process->deleteLater();
+    });
+    process->start(pdftoppm, {QStringLiteral("-png"), QStringLiteral("-f"), QString::number(page), QStringLiteral("-l"), QString::number(page), QStringLiteral("-singlefile"),
+                              QStringLiteral("-scale-to"), QString::number(side), m_item.localPath()});
 }
 
 void NgInfoView::askPreview(const KFileItemList &items, int sharper)
@@ -1510,6 +2078,12 @@ void NgInfoView::showOne()
         askPreview({item});
     }
     m_hero->setCanOpen(image && item.isLocalFile());
+    // a PDF: its pages turned from the band at the foot of the preview, each drawn by pdftoppm (poppler-utils)
+    if (mime == QLatin1String("application/pdf") && item.isLocalFile() && !QStandardPaths::findExecutable(QStringLiteral("pdftoppm")).isEmpty()) {
+        m_hero->setPageable(true, [this](int page) {
+            renderPage(page);
+        });
+    }
     if ((audio || video) && item.isLocalFile()) {
         m_media->setUrl(item.url(), video ? MediaWidget::Video : MediaWidget::Audio);
         m_media->show();
@@ -1622,6 +2196,7 @@ void NgInfoView::showFacts()
     }
     m_facts->setFacts({}); // (the facts are told over the preview, see updateOverlay)
     m_overlayFacts = shown;
+    m_hero->setBar(facts->bar, facts->detail, facts->entries, facts->whoKind == NgFileFacts::Camera ? facts->who : QString(), m_item.isDir() ? QString() : m_size->text());
     updateOverlay();
     QList<NgInfoMix::Part> parts;
     for (const NgMixPart &part : facts->mix) {

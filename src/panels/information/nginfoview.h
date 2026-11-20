@@ -92,6 +92,7 @@ private:
     void updateOverlay();
     void updatePinTip();
     void renderSharper(int side);
+    void renderPage(int page);
 
     KFileItem m_item;
     KFileItemList m_items;
