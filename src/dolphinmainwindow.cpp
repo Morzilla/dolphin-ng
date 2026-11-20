@@ -571,6 +571,9 @@ private:
     bool m_queued = false;
 };
 
+// dolphin-ng: no window state saved yet when this process started (a first start): the sidebar gets a comfortable width
+static bool ngNoSavedState = false;
+
 DolphinMainWindow::DolphinMainWindow()
     : KXmlGuiWindow(nullptr)
     , m_newFileMenu(nullptr)
@@ -628,6 +631,8 @@ DolphinMainWindow::DolphinMainWindow()
             shared.copyTo(&own);
             own.sync();
         }
+        // read now: the window saves its state on its own while it is being built, before it first shows
+        ngNoSavedState = !own.hasKey("State");
     }
     setStateConfigGroup(QStringLiteral("NG State"));
     // dolphin-ng: does the compositor blur behind windows? Known only once the application runs (asked now, KWin says
@@ -863,9 +868,9 @@ DolphinMainWindow::DolphinMainWindow()
             settings->save(); // Otherwise the RenameInline setting is not picked up for the first time Dolphin is used.
         } else if (auto *placesDock = qobject_cast<QDockWidget *>(m_placesPanel->parentWidget())) {
             // dolphin-ng: the glass sidebar took its narrow size hint on a first start (entries cut short, disk boxes
-            // without their names): it starts about 15 em wide, never more than a third of the window
+            // without their names): it starts about 18 em wide, never more than a third of the window
             QTimer::singleShot(0, this, [this, placesDock] {
-                const int wanted = qMin(fontMetrics().averageCharWidth() * 30, width() / 3);
+                const int wanted = qMin(fontMetrics().averageCharWidth() * 36, width() / 3);
                 if (placesDock->isVisible() && placesDock->width() < wanted) {
                     resizeDocks({placesDock}, {wanted}, Qt::Horizontal);
                 }
@@ -1366,9 +1371,20 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
     if (!ngStateApplied) {
         ngStateApplied = true;
         const QByteArray state = QByteArray::fromBase64(KConfigGroup(KSharedConfig::openStateConfig(), QStringLiteral("NG State")).readEntry("State", QByteArray()));
-        if (!state.isEmpty()) {
+        if (!ngNoSavedState && !state.isEmpty()) {
             QTimer::singleShot(0, this, [this, state] {
                 restoreState(state);
+            });
+        } else {
+            // nothing saved yet (a first start): the sidebar a comfortable width, about 17 em, never more than a third
+            // of the window (it came up at its narrow size hint, the places cut short)
+            QTimer::singleShot(0, this, [this] {
+                if (auto *places = findChild<QDockWidget *>(QStringLiteral("placesDock")); places && places->isVisible()) {
+                    const int wanted = qMin(fontMetrics().averageCharWidth() * 36, width() / 3);
+                    if (places->width() < wanted) {
+                        resizeDocks({places}, {wanted}, Qt::Horizontal);
+                    }
+                }
             });
         }
     }
