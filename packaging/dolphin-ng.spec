@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      c0d9301e21ed57422ab480d32e7fdd41595cc760
+%global commit      dfe1cdd006e3e602d1799a5a9912aff527cab6d1
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611201541
+%global snapdate    202611221342
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -130,6 +130,12 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Sun Nov 22 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611221342gitdfe1cdd-1
+- Fix a crash after saving the tool bar configuration (#10)
+- Information panel: a band per kind of file over the preview, videos play inside it, PDF pages turn, folders list their first items
+- Tags: ribbons on folders, pills on files, tags inside folders
+- NG settings: what a start shows, without last time's selection
+
 * Fri Nov 20 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611201541gitc0d9301-1
 - Information panel redrawn: facts over the preview, zoom with the wheel, tags and rating editable
 - Tags shown on the cards in their colours
