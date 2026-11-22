@@ -1,0 +1,48 @@
+# CodeRabbit: automatic review of pull requests (https://docs.coderabbit.ai/reference/configuration)
+language: en-US
+tone_instructions: "Plain, direct English. Point at real defects first; skip praise and style nits that do not matter."
+reviews:
+  profile: chill
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "ng"
+  path_filters:
+    - "!po/**"
+    - "!doc/**"
+    - "!LICENSES/**"
+    - "!**/*.png"
+    - "!**/*.svg"
+    - "!**/*.jpg"
+    - "!build*/**"
+  path_instructions:
+    - path: "src/**"
+      instructions: |
+        Dolphin NG is a fork of KDE Dolphin (Qt 6, KDE Frameworks 6, mostly Wayland). Code added by the fork is marked
+        with "dolphin-ng:" comments and NG settings are read with ngSetting()/ngSettingInt() from dolphinrc [DolphinNG].
+        Look first for:
+        - object lifetime: widgets and actions handed to a QToolBar, QDockWidget or layout change owner and can be
+          deleted when the tool bar is rebuilt (saveNewToolbarConfig) or the view is recreated; raw pointers kept to
+          them must be QPointer or reset (see issue #10). Lambdas connected to signals that capture `this` or raw
+          pointers of shorter-lived objects.
+        - paint() and layout code of KItemListWidget subclasses runs for every visible item on every repaint: no file
+          or xattr reads, no D-Bus calls, no heavy allocations there; results belong in a cache or in NgFacts (read in
+          the background).
+        - user-visible strings go through ngTr("English", "Italiano"): both texts present and saying the same thing.
+        - nothing that assumes X11 only; native window creation (winId(), setAttribute after create) on translucent
+          windows breaks Wayland subsurfaces.
+        Do not comment on unchanged upstream Dolphin code.
+    - path: "ng/**"
+      instructions: |
+        Shell scripts that build, install and launch Dolphin NG for users on several distributions (Fedora, Arch,
+        openSUSE, Debian/Ubuntu). Check quoting, `set -e` pitfalls, behaviour when a command or package manager is
+        missing, and that nothing destructive (removing files, upgrading the system) happens without the user's
+        consent.
+    - path: "packaging/**"
+      instructions: |
+        Fedora spec (COPR), Debian packaging (Launchpad PPA) and AUR PKGBUILD. Dolphin NG installs under
+        /opt/ng/dolphin-ng next to the distribution's Dolphin and must not conflict with it (file names, desktop
+        files, libraries). Check that the three packagings stay consistent with each other.
