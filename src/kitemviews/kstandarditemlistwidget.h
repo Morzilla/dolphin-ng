@@ -240,6 +240,7 @@ private:
     void paintNgPin(QPainter *painter); // CARDS_BADGE=fold: the folded glass corner with the type and size
     void paintNgPreviewObject(QPainter *painter, const QRectF &band, const QPixmap &pixmap, bool whole = false);
     void paintNgCardTags(QPainter *painter);
+    void paintNgHangingRibbons(QPainter *painter, const QList<QRectF> &anchors, const QStringList &tags, const QStringList &labels);
     qreal ngLayoutActionPill(const QList<NgQuickAction> &quickActions, qreal x, qreal y, qreal right, qreal actionHeight, const QFontMetricsF &chipFm, bool alignRight,
                              const QList<int> &origin = {});
     void paintNgActionPill(QPainter *painter, const QColor &text, bool dark);
@@ -395,7 +396,10 @@ private:
     bool m_ngCardFolderCover = false; // m_ngCardFolderPictures is the folder's own cover (folder.jpg, cover.png...)
     QString m_ngCardFolderPath; // Tessera, folders: the folder whose pictures are shown in the band
     QStringList m_ngCardTags; // the file's tags, drawn over its picture (paintNgCardTags)
-    QStringList m_ngCardInnerTags; // a folder: the tags of what is inside, the most used first (sheets peeking out of it)
+    QStringList m_ngCardInnerLabels; // their names with how many items inside carry each ("Lavoro · 3"), unfolded on hover
+    QStringList m_ngCardInnerTags;
+    QList<QRectF> m_ngFileRibbons; // a file's tag ribbons on its picture (the card's coordinates), for their names on hover
+    QList<QRectF> m_ngInsideSheets; // where their sheets were drawn (the card's coordinates), for the ribbons on hover // a folder: the tags of what is inside, the most used first (sheets peeking out of it)
     QStringList m_ngCardPeek; // Tessera, folders: the first entries of the folder; a trailing "/" marks a folder
     int m_ngCardPeekMore = 0; // how many more there are (-1: many, not counted)
     bool m_ngCardEyeInPill = false; // Tessera: the preview eye is the last button of the pill

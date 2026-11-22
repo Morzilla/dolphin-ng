@@ -168,6 +168,9 @@ public:
     KFileItemList selectedItems() const;
     /** dolphin-ng: pin the items to the top of the folder (or unpin them) */
     void ngSetPinned(const KFileItemList &items, bool pinned);
+    // dolphin-ng: select that item alone and bring it into view; an item not shown yet (a folder being opened) is
+    // selected once it is loaded
+    void ngSelectUrl(const QUrl &url);
     /** dolphin-ng: run quick action \a action of \a item, as its chip on a card does (the NG Information panel) */
     void ngQuickAction(const KFileItem &item, int action)
     {

@@ -45,6 +45,7 @@ Q_SIGNALS:
     void ngQuickActionRequested(const KFileItem &item, int action);
     void ngPinRequested(const KFileItemList &items, bool pinned);
     void ngLightboxRequested(const KFileItem &item);
+    void ngSelectRequested(const QUrl &url);
 
     void urlActivated(const QUrl &url);
 

@@ -68,6 +68,7 @@ Q_SIGNALS:
     void quickActionRequested(const KFileItem &item, int action);
     void pinRequested(const KFileItemList &items, bool pinned);
     void lightboxRequested(const KFileItem &item);
+    void selectRequested(const QUrl &url); // an item to select in the view ("Changed last")
     void urlActivated(const QUrl &url);
 
 protected:
@@ -93,6 +94,7 @@ private:
     void updatePinTip();
     void renderSharper(int side);
     void renderPage(int page);
+    int stableWidth() const;
 
     KFileItem m_item;
     KFileItemList m_items;
@@ -125,9 +127,13 @@ private:
     QLabel *m_originLabel = nullptr;
     QLabel *m_who = nullptr;
     QLabel *m_whoLabel = nullptr;
+    QToolButton *m_lastButton = nullptr;
+    QLabel *m_lastArrow = nullptr; // its arrow (a file)
+    QToolButton *m_lastOpen = nullptr; // "Open" (a folder) // a folder's "Changed last": a card that selects the item
     QWidget *m_stars = nullptr;
     QList<QToolButton *> m_starButtons;
     QWidget *m_tags = nullptr;
+    QUrl m_lastChanged; // a folder: the item changed last in it, which a click on its name selects
     QLabel *m_insideLabel = nullptr; // a folder: "Tagged inside"
     QWidget *m_insideTags = nullptr; // a folder: the tags of what is inside, with their counts
     QLayout *m_tagsLayout = nullptr;

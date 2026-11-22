@@ -382,7 +382,12 @@ void PlacesPanel::ngPaintPills()
     // or grey veil vanished on the light sidebar card
     // (the window's own accent: the panel's palette has a clear highlight, see ngApplyPalette)
     const QColor accent = m_ngPalette.color(QPalette::Active, QPalette::Highlight);
-    const QColor onAccent = ngAurora() ? ngAuroraSelectionText(palette()) : ngOnAccent(accent);
+    // (another widget style than Breeze NG, stock Breeze: a soft selection, a tint of the accent with a hairline of it and
+    // the entry in a deep tone of the accent, in place of the full accent with white on it)
+    const bool softSelection = !ngAurora() && !ngWidgetStyleIsNg();
+    const qreal accentHue = accent.hslHueF() < 0 ? 0.58 : accent.hslHueF();
+    const QColor deepAccent = QColor::fromHslF(accentHue, qMin(1.0, accent.hslSaturationF() * 1.05), dark ? 0.80 : 0.34);
+    const QColor onAccent = ngAurora() ? ngAuroraSelectionText(palette()) : softSelection ? deepAccent : ngSelectionText(m_ngPalette); // (the scheme's selection text, as the style's own lists)
     auto drawPill = [&](QPainter &painter, const QRectF &rect, qreal strength) {
         painter.setRenderHint(QPainter::Antialiasing);
         const QRectF pill = rect.adjusted(0.5, 2.5, -0.5, -2.5);
@@ -390,6 +395,12 @@ void PlacesPanel::ngPaintPills()
         if (ngAurora()) {
             painter.setPen(Qt::NoPen);
             painter.setBrush(strength >= 1.0 ? ngAuroraSelection(palette()) : ngAuroraVeil(dark, true));
+        } else if (softSelection) {
+            QColor tint = accent, edge = accent;
+            tint.setAlphaF(strength >= 1.0 ? (dark ? 0.30 : 0.20) : (dark ? 0.14 : 0.09));
+            edge.setAlphaF(dark ? 0.55 : 0.45);
+            painter.setPen(strength >= 1.0 ? QPen(edge, 1) : Qt::NoPen);
+            painter.setBrush(tint);
         } else {
             painter.setPen(Qt::NoPen);
             QColor tint = accent;
@@ -408,6 +419,9 @@ void PlacesPanel::ngPaintPills()
             const QColor onSelection = onAccent;
             for (QPalette::ColorRole role : {QPalette::Text, QPalette::WindowText, QPalette::HighlightedText}) {
                 option.palette.setColor(role, onSelection);
+            }
+            if (softSelection) {
+                option.font.setWeight(QFont::DemiBold); // (the selected entry a little heavier, as it no longer has a full fill)
             }
         }
         const bool onPill = index == m_ngPillIndex;

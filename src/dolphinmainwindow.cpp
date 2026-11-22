@@ -402,6 +402,75 @@ public:
     }
 };
 
+// dolphin-ng: with another widget style than Breeze NG, the one look of every element of the location row (back/forward/
+// up, Root, the location bar, the filter field): the field colour nearly solid, a hairline of ink, slightly rounded corners (ngFieldRadius).
+// @p state: 0 at rest, 1 hovered, 2 pressed or focused
+static void ngFieldColours(QColor *fill, QColor *edge, int state)
+{
+    const QPalette palette = QApplication::palette();
+    const bool dark = ngIsDark(palette);
+    *fill = palette.color(QPalette::Active, QPalette::Base);
+    fill->setAlphaF(dark ? (state == 0 ? 0.55 : state == 1 ? 0.70 : 0.80) : (state == 0 ? 0.85 : state == 1 ? 0.95 : 1.0));
+    *edge = dark ? QColor(255, 255, 255) : QColor(0, 0, 0);
+    edge->setAlphaF(state == 2 ? 0.28 : state == 1 ? 0.18 : 0.11);
+}
+
+// (the corners of those elements: a little rounded, rectangles more than pills)
+static constexpr int ngFieldRadius = 7;
+
+static QString ngRgba(const QColor &colour)
+{
+    return QStringLiteral("rgba(%1, %2, %3, %4)").arg(colour.red()).arg(colour.green()).arg(colour.blue()).arg(QString::number(colour.alphaF(), 'f', 3));
+}
+
+// dolphin-ng: the location bar and the folder's filter field when the widget style is not Breeze NG: the soft rounded
+// field of the sort bar (a faint veil, a hairline of ink) in place of the style's own frame. Stock Breeze drew a hard
+// dark rectangle there, out of place among the bar's pills. Set on those widgets alone (a style does not pass to
+// their children): KUrlNavigator and QLineEdit draw their frame themselves through it
+class NgFieldStyle : public QProxyStyle
+{
+public:
+    explicit NgFieldStyle(const QString &base)
+        : QProxyStyle(base)
+    {
+    }
+    void drawPrimitive(PrimitiveElement element, const QStyleOption *option, QPainter *painter, const QWidget *widget) const override
+    {
+        if (element != PE_FrameLineEdit && element != PE_PanelLineEdit) {
+            QProxyStyle::drawPrimitive(element, option, painter, widget);
+            return;
+        }
+        if (element == PE_FrameLineEdit && qobject_cast<const QLineEdit *>(widget)) {
+            return; // (a line edit's panel draws the frame too)
+        }
+        const bool focus = option->state & State_HasFocus;
+        const bool hover = option->state & State_MouseOver;
+        // the field's own colour (white on a light scheme), nearly solid, and a hairline: it reads as a field on the
+        // window's grey, where a veil of ink alone was lost
+        // (the same fill, rim and round ends as the pill of back/forward/up and Root beside them: ngFieldColours)
+        QColor fill, edge;
+        ngFieldColours(&fill, &edge, focus ? 2 : hover ? 1 : 0);
+        const QRectF frame = QRectF(option->rect).adjusted(0.5, 0.5, -0.5, -0.5);
+        const qreal radius = qMin<qreal>(ngFieldRadius, frame.height() / 2);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setPen(QPen(edge, 1));
+        painter->setBrush(fill);
+        painter->drawRoundedRect(frame, radius, radius);
+        painter->restore();
+    }
+};
+
+static NgFieldStyle *ngFieldStyle()
+{
+    static QPointer<NgFieldStyle> style;
+    if (!style) {
+        style = new NgFieldStyle(QApplication::style()->name());
+        style->setParent(qApp);
+    }
+    return style;
+}
+
 // dolphin-ng: the track of the title row's tabs when the widget style is not Breeze NG: one pill behind them all, as
 // the sort pill of the bar holds its buttons (the tabs themselves are drawn by a style sheet, see ngStyleTitleRow)
 class NgTabTrack : public QObject
@@ -1624,6 +1693,19 @@ void DolphinMainWindow::paintEvent(QPaintEvent *event)
             QStyleOption option;
             option.initFrom(this);
             style()->drawPrimitive(QStyle::PE_Widget, &option, &painter, this);
+        } else if (!ngWidgetStyleIsNg()) {
+            // another widget style (stock Breeze...): one grey gradient for the whole window, the panels on it
+            painter.setClipRegion(event->region());
+            ngPaintWindowGradient(&painter, QRectF(rect()), palette());
+            if (const int radius = property("_breeze_ng_radius").toInt(); radius > 0) {
+                QPainterPath outside; // without a frame the window rounds its own corners
+                outside.addRect(QRectF(rect()));
+                QPainterPath shape;
+                shape.addRoundedRect(QRectF(rect()), radius, radius);
+                painter.setRenderHint(QPainter::Antialiasing);
+                painter.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+                painter.fillPath(outside.subtracted(shape), Qt::black);
+            }
         } else {
             painter.fillRect(event->rect(), palette().color(QPalette::Window)); // the docks cut their glass out of this
             if (const int radius = property("_breeze_ng_radius").toInt(); radius > 0) {
@@ -1676,7 +1758,7 @@ void DolphinMainWindow::ngStyleTitleRow()
         fill.setAlphaF(0.05);
         edge.setAlphaF(0.09);
         on = app.color(QPalette::Active, QPalette::Highlight);
-        onText = ngOnAccent(on);
+        onText = ngSelectionText(app);
         hover = QStringLiteral("rgba(%1, 0.08)").arg(inkRgb);
     }
     track->setColours(fill, edge);
@@ -1831,6 +1913,18 @@ void DolphinMainWindow::ngApplyTextHalo()
                     edit->setPalette(own);
                 }
             }
+        }
+    }
+    // with a widget style other than Breeze NG: the location bar and the filter field as the sort bar's soft fields
+    if (!ngWidgetStyleIsNg()) {
+        for (KUrlNavigator *navigator : findChildren<KUrlNavigator *>()) {
+            if (navigator->style() != ngFieldStyle()) {
+                navigator->setStyle(ngFieldStyle());
+            }
+        }
+        KToolBar *mainBar = toolBar(QStringLiteral("mainToolBar"));
+        if (QWidget *field = mainBar && m_ngFilterAction ? mainBar->widgetForAction(m_ngFilterAction) : nullptr; field && field->style() != ngFieldStyle()) {
+            field->setStyle(ngFieldStyle());
         }
     }
 }
@@ -3619,6 +3713,25 @@ void DolphinMainWindow::setupDockWidgets()
             m_activeViewContainer->view()->ngSetPinned(items, pinned);
         }
     });
+    connect(infoPanel, &InformationPanel::ngSelectRequested, this, [this](const QUrl &url) {
+        if (!m_activeViewContainer) {
+            return;
+        }
+        // the item in the folder shown: selected there; in another (a subfolder selected in the view): that one is
+        // opened, the item selected once it has loaded
+        const QUrl folder = url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
+        DolphinView *view = m_activeViewContainer->view();
+        const bool here = view->url().adjusted(QUrl::StripTrailingSlash).matches(folder, QUrl::StripTrailingSlash);
+        if (here) {
+            view->ngSelectUrl(url);
+        } else {
+            // (as "Open Path" does: the folder first, then the marks, which the view applies once it has loaded; marked
+            // before, the change of folder cleared them)
+            changeUrl(folder);
+            m_activeViewContainer->view()->markUrlsAsSelected({url});
+            m_activeViewContainer->view()->markUrlAsCurrent(url);
+        }
+    });
     connect(infoPanel, &InformationPanel::ngLightboxRequested, this, [this](const KFileItem &item) {
         if (m_activeViewContainer) {
             m_activeViewContainer->ngShowLightbox(item);
@@ -4595,6 +4708,9 @@ void DolphinMainWindow::ngMoveToolbarButtons()
                 gap->setFixedWidth(12);
                 bar->setProperty("_ng_filter_gap", QVariant::fromValue<QObject *>(bar->addWidget(gap)));
                 field->setFixedWidth(240);
+                if (!ngWidgetStyleIsNg()) {
+                    field->setStyle(ngFieldStyle()); // (the sort bar's soft field, see NgFieldStyle)
+                }
                 m_ngFilterAction = bar->addWidget(field);
             }
         }
@@ -4693,7 +4809,8 @@ void DolphinMainWindow::ngMoveToolbarButtons()
         }
         // Glass (not Aurora): the pill is a field like the location bar and the search field beside it, the window's
         // field colour at the glass' strength with the same faint rim (it was a grey veil of ink, a third kind of thing)
-        const bool glassField = glassLook && !ngAurora();
+        const bool otherStyle = !ngWidgetStyleIsNg(); // (stock Breeze...: the pill takes the fields' look, ngFieldColours)
+        const bool glassField = (glassLook && !ngAurora()) || otherStyle;
         const QColor base = palette().color(QPalette::Base);
         // (the fields' colour in Glass: the field colour on a dark scheme, a grey veil of ink on a light one)
         const QString fieldRgb = dark ? QStringLiteral("%1, %2, %3").arg(base.red()).arg(base.green()).arg(base.blue()) : QStringLiteral("0, 0, 0");
@@ -4703,9 +4820,31 @@ void DolphinMainWindow::ngMoveToolbarButtons()
         for (int i = 0; i < pill.size(); ++i) {
             // round ends, half the height: a pill like every other control of the bars (9 px corners read as a box
             // beside the round pills below)
-            const QString round = QStringLiteral("%1px").arg(height / 2);
+            const QString round = QStringLiteral("%1px").arg(otherStyle ? ngFieldRadius : height / 2);
             const QString left = i == 0 ? round : QStringLiteral("0");
             const QString right = i == pill.size() - 1 ? round : QStringLiteral("0");
+            if (otherStyle) {
+                QColor rest, restEdge, over, overEdge, down, downEdge;
+                ngFieldColours(&rest, &restEdge, 0);
+                ngFieldColours(&over, &overEdge, 1);
+                ngFieldColours(&down, &downEdge, 2);
+                const QString sheet = QStringLiteral("QToolButton { background: %1; border: 1px solid %2; border-left-width: %3; border-right-width: %4;"
+                                                     " padding: 0 8px; min-height: 0; max-height: %5px; margin: 0 %6px 0 0;"
+                                                     " border-top-left-radius: %7; border-bottom-left-radius: %7; border-top-right-radius: %8; border-bottom-right-radius: %8; }"
+                                                     "QToolButton:hover { background: %9; }"
+                                                     "QToolButton:pressed { background: %10; }"
+                                                     "QToolButton::menu-indicator { image: none; }")
+                                          .arg(ngRgba(rest), ngRgba(restEdge), i == 0 ? QStringLiteral("1px") : QStringLiteral("0"), i == pill.size() - 1 ? QStringLiteral("1px") : QStringLiteral("0"))
+                                          .arg(height)
+                                          .arg(i == pill.size() - 1 ? 8 : 0)
+                                          .arg(left, right)
+                                          .arg(ngRgba(over), ngRgba(down));
+                if (pill.at(i)->styleSheet() != sheet) {
+                    pill.at(i)->setStyleSheet(sheet);
+                }
+                pill.at(i)->setFixedHeight(height);
+                continue;
+            }
             if (glassField) {
                 // one outline around the whole pill: each button draws the sides that are the pill's
                 const QString sheet = QStringLiteral("QToolButton { background: rgba(%1, %9); border: 1px solid %2; border-left-width: %3; border-right-width: %4;"
@@ -4737,6 +4876,41 @@ void DolphinMainWindow::ngMoveToolbarButtons()
                 pill.at(i)->setStyleSheet(sheet);
             }
             pill.at(i)->setFixedHeight(height); // (the style sheet's own height came out taller than the location bar)
+        }
+        // with another widget style than Breeze NG: Root (and any other button before the location bar) as a pill of its
+        // own beside back/forward/up, its name in the text colour; stock Breeze drew it faint on the window's ground
+        if (!ngWidgetStyleIsNg()) {
+            if (QAction *root = actionCollection()->action(QStringLiteral("go_root"))) {
+                if (auto *button = qobject_cast<QToolButton *>(bar->widgetForAction(root))) {
+                    QColor rest, restEdge, over, overEdge, down, downEdge;
+                    ngFieldColours(&rest, &restEdge, 0);
+                    ngFieldColours(&over, &overEdge, 1);
+                    ngFieldColours(&down, &downEdge, 2);
+                    const QString sheet = QStringLiteral("QToolButton { background: %1; border: 1px solid %2; border-radius: %3px; padding: 0 12px 0 9px; min-height: 0; max-height: %4px;"
+                                                         " margin: 0 8px 0 0; color: %5; }"
+                                                         "QToolButton:hover { background: %6; }"
+                                                         "QToolButton:pressed { background: %7; }")
+                                              .arg(ngRgba(rest), ngRgba(restEdge))
+                                              .arg(ngFieldRadius)
+                                              .arg(height)
+                                              .arg(palette().color(QPalette::WindowText).name(), ngRgba(over), ngRgba(down));
+                    if (button->styleSheet() != sheet) {
+                        button->setStyleSheet(sheet);
+                    }
+                    button->setFixedHeight(height);
+                    // (its icon in the text colour too: a monochrome icon theme drew it in a pale grey there)
+                    const QIcon themed = QIcon::fromTheme(QStringLiteral("folder-root"));
+                    const QSize side = button->iconSize().isValid() ? button->iconSize() : QSize(16, 16);
+                    QPixmap glyph = themed.pixmap(side, devicePixelRatioF());
+                    if (!glyph.isNull()) {
+                        QPainter tint(&glyph);
+                        tint.setCompositionMode(QPainter::CompositionMode_SourceIn);
+                        tint.fillRect(glyph.rect(), palette().color(QPalette::WindowText));
+                        tint.end();
+                        button->setIcon(QIcon(glyph));
+                    }
+                }
+            }
         }
     }
 }

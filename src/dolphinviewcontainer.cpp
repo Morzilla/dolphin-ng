@@ -839,8 +839,9 @@ private:
         // the outline of a menu in Breeze NG: 10 % of ink (Soft), 16 % (Glass); the open button continues it
         const bool glass = KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2")).readEntry("theme", QString()).contains(QLatin1String("Glass"));
         const QString menuEdge = glass ? QStringLiteral("0.16") : QStringLiteral("0.10");
-        // Breeze NG Aurora: glass without rims
-        const bool aurora = KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2")).readEntry("theme", QString()).contains(QLatin1String("Aurora"));
+        // Breeze NG Aurora: glass without rims. (The window's own look, which needs Breeze NG as the widget style too: with
+        // the Aurora decoration and stock Breeze the open button was left see-through, the desktop showing through it)
+        const bool aurora = ngAurora();
         QString sheet = QStringLiteral("QToolButton { border: 1px solid transparent; border-radius: 6px; padding: 3px 7px; background: transparent; color: %4; }"
                                      "QToolButton:hover { background: rgba(%1, 0.08); }"
                                      "QToolButton:pressed { background: rgba(%1, 0.14); }"
@@ -877,7 +878,7 @@ private:
             // what is on wears the accent, with the accent's own text colour (as a selection): not a grey of ink
             const QColor accent = palette.color(QPalette::Highlight);
             const QColor accentHover = accent.lighter(110);
-            const QString on = QStringLiteral("background: %1; border-color: %1; color: %2;").arg(accent.name(), ngOnAccent(accent).name());
+            const QString on = QStringLiteral("background: %1; border-color: %1; color: %2;").arg(accent.name(), ngSelectionText(palette).name());
             sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked { %1 }").arg(on));
             sheet.replace(QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked:hover { background: %1; border-color: %1; }").arg(accentHover.name()));
             sheet.replace(QStringLiteral("QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton[ngPill=\"true\"]:checked { %1 }").arg(on));
@@ -948,7 +949,7 @@ private:
                 button->setProperty("_ng_on_icon", true);
                 new NgOnIcon(button, [] {
                     const QPalette palette = QApplication::palette();
-                    return ngAurora() ? ngAuroraSelectionText(palette) : ngOnAccent(palette.color(QPalette::Active, QPalette::Highlight));
+                    return ngAurora() ? ngAuroraSelectionText(palette) : ngSelectionText(palette); // (the text's colour on the fill: icon and text alike)
                 });
             }
         }

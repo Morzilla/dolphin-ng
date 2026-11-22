@@ -1837,6 +1837,38 @@ QColor ngAuroraSelection(const QPalette &palette, qreal more)
     return ngAuroraAccent(palette, qMin(1.0, (dark ? 0.34 : 0.22) + more));
 }
 
+bool ngWidgetStyleIsNg()
+{
+    return QApplication::style()->name().compare(QLatin1String("breezeng"), Qt::CaseInsensitive) == 0;
+}
+
+void ngPaintWindowGradient(QPainter *painter, const QRectF &windowRect, const QPalette &palette)
+{
+    // the tone of the glass sidebar's card on the window colour: lighter at the top, the window colour at the foot
+    const QColor window = palette.color(QPalette::Active, QPalette::Window);
+    const bool dark = ngIsDark(palette);
+    const QColor top = dark ? window.lighter(118) : QColor::fromRgbF(window.redF() * 0.55 + 0.45, window.greenF() * 0.55 + 0.45, window.blueF() * 0.55 + 0.45);
+    const QColor bottom = dark ? window.lighter(104) : window.darker(102);
+    QLinearGradient gradient(windowRect.topLeft(), windowRect.bottomLeft());
+    gradient.setColorAt(0.0, top);
+    gradient.setColorAt(1.0, bottom);
+    painter->fillRect(windowRect, gradient);
+}
+
+QColor ngSelectionText(const QPalette &palette)
+{
+    const QColor fill = palette.color(QPalette::Active, QPalette::Highlight);
+    const QColor text = palette.color(QPalette::Active, QPalette::HighlightedText);
+    auto luminance = [](const QColor &c) {
+        auto linear = [](qreal v) {
+            return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * linear(c.redF()) + 0.7152 * linear(c.greenF()) + 0.0722 * linear(c.blueF());
+    };
+    const qreal a = luminance(fill), b = luminance(text);
+    return (qMax(a, b) + 0.05) / (qMin(a, b) + 0.05) >= 2.0 ? text : ngOnAccent(fill); // (Breeze: white on its blue, 2.5:1)
+}
+
 QColor ngOnAccent(const QColor &fill)
 {
     // relative luminance (sRGB weights, without the gamma: close enough to tell light from dark)

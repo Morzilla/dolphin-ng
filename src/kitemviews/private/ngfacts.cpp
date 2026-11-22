@@ -761,7 +761,10 @@ const NgFileFacts *NgFacts::facts(const QString &path, const QString &mime, bool
         return nullptr;
     }
     auto it = m_cache.find(path);
-    if (it != m_cache.end() && it->modified == modified && it->size == size) {
+    // (facts read at a time as recent as the one asked for, or more, still hold: a folder's card asks with the newest
+    // date of what it holds, the Information panel with the folder's own, and with an exact match each asking threw the
+    // other's facts away and read the folder again, in a loop: the panel's "Changed last" flickered)
+    if (it != m_cache.end() && it->modified >= modified && it->size == size) {
         return it->pending ? nullptr : &it->facts;
     }
     if (m_cache.size() > 3000) {

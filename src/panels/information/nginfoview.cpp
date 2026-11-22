@@ -30,6 +30,9 @@
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenu>
+#include <QFileInfo>
+#include <QtMath>
+#include <QScrollBar>
 #include <QDirIterator>
 #include <QDir>
 #include <QElapsedTimer>
@@ -729,7 +732,7 @@ protected:
             painter.setFont(mono);
             const QFontMetricsF metrics(mono);
             const qreal gutter = metrics.horizontalAdvance(QStringLiteral("000")) + 12;
-            qreal y = 42 + metrics.ascent();
+            qreal y = topRoom() + metrics.ascent(); // (under the size's pill, if any)
             int number = 1;
             for (const QString &line : std::as_const(m_lines)) {
                 if (y > height() - 8) {
@@ -749,7 +752,7 @@ protected:
             painter.setFont(row);
             const QFontMetricsF fm(row);
             const qreal rowHeight = fm.height() + 8;
-            qreal y = 44;
+            qreal y = topRoom();
             const qreal bottom = height() - (m_listing ? QFontMetricsF(font()).height() * 0.9 + 26 : fm.height() + 42); // (down to the band)
             for (const NgFileFacts::Entry &entry : std::as_const(m_entries)) {
                 if (y + rowHeight > bottom) {
@@ -837,6 +840,16 @@ protected:
         small.setPointSizeF(small.pointSizeF() * 0.78);
         const QFontMetricsF boldFm(bold), smallFm(small);
         // the kind and the size, top left: one badge, a dot of the kind's colour
+        if (m_badge.isEmpty() && !m_sizeText.isEmpty()) {
+            // (the kind is in the panel's title: the size alone, top left)
+            const QRectF pill(10, 10, smallFm.horizontalAdvance(m_sizeText) + 18, boldFm.height() + 6);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(10, 12, 18, 150));
+            painter.drawRoundedRect(pill, pill.height() / 2, pill.height() / 2);
+            painter.setFont(small);
+            painter.setPen(QColor(255, 255, 255, 230));
+            painter.drawText(pill, Qt::AlignCenter, m_sizeText);
+        }
         if (!m_badge.isEmpty()) {
             const QString size = m_sizeText.isEmpty() ? QString() : QStringLiteral(" · ") + m_sizeText;
             const qreal w = 26 + boldFm.horizontalAdvance(m_badge) + smallFm.horizontalAdvance(size) + 10;
@@ -897,9 +910,33 @@ protected:
         return h > 0 ? QStringLiteral("%1:%2:%3").arg(h).arg(m, 2, 10, QLatin1Char('0')).arg(sec, 2, 10, QLatin1Char('0'))
                      : QStringLiteral("%1:%2").arg(m).arg(sec, 2, 10, QLatin1Char('0'));
     }
+    // a band over a picture (a photo, a video's frames) stays dark, to read over any picture; over anything else it takes
+    // the theme: light with dark words on a light scheme
+    // where what the preview lists or shows of a text starts: under the size's pill at the top left when there is one,
+    // else at the top (the kind's badge moved to the panel's title: no more room kept for it)
+    qreal topRoom() const
+    {
+        return (m_badge.isEmpty() && m_sizeText.isEmpty()) ? 10 : QFontMetricsF(font()).height() + 18;
+    }
+    bool lightBand() const
+    {
+        // (a folder's or an archive's list is not a picture, even with the folder's thumbnail behind it)
+        return !ngIsDark(QApplication::palette()) && ((m_pixmap.isNull() && m_frame.isNull()) || m_listing);
+    }
+    QColor bandInk(int alpha = 255) const
+    {
+        return lightBand() ? QColor(30, 33, 40, alpha) : QColor(255, 255, 255, alpha);
+    }
     void drawBand(QPainter &painter, const QRectF &band, bool paper) const
     {
         QLinearGradient ground(0, band.top(), 0, band.bottom());
+        if (!paper && lightBand()) {
+            ground.setColorAt(0, QColor(252, 252, 253, 225));
+            ground.setColorAt(1, QColor(246, 247, 249, 245));
+            painter.fillRect(band, ground);
+            painter.fillRect(QRectF(band.left(), band.top(), band.width(), 1), QColor(0, 0, 0, 22));
+            return;
+        }
         if (paper) {
             ground.setColorAt(0, QColor(246, 244, 238, 230));
             ground.setColorAt(1, QColor(246, 244, 238, 245));
@@ -1162,9 +1199,9 @@ protected:
         const QColor accent = m_badgeTint.isValid() ? m_badgeTint : QColor(240, 160, 64);
         if (!m_playRect.isNull()) {
             painter.setPen(Qt::NoPen);
-            painter.setBrush(QColor(255, 255, 255, playing() ? 235 : 215));
+            painter.setBrush(bandInk(playing() ? 235 : 215));
             painter.drawEllipse(m_playRect);
-            painter.setBrush(QColor(12, 14, 20));
+            painter.setBrush(lightBand() ? QColor(255, 255, 255) : QColor(12, 14, 20));
             const QPointF c = m_playRect.center();
             if (playing()) {
                 painter.drawRect(QRectF(c.x() - 4.5, c.y() - 5, 3, 10));
@@ -1180,7 +1217,7 @@ protected:
         const double at = m_player ? m_player->position() / 1000.0 : 0;
         const qreal done = seconds > 0 ? qBound(0.0, at / seconds, 1.0) : 0;
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(255, 255, 255, 60));
+        painter.setBrush(bandInk(60));
         painter.drawRoundedRect(track, 2, 2);
         painter.setBrush(accent);
         painter.drawRoundedRect(QRectF(track.left(), track.top(), track.width() * done, track.height()), 2, 2);
@@ -1218,17 +1255,17 @@ protected:
         }
         const QRectF row(lineLeft, track.bottom() + 3, width() - lineLeft - 12, band.bottom() - track.bottom() - 6);
         painter.setFont(value);
-        painter.setPen(Qt::white);
+        painter.setPen(bandInk());
         const qreal lengthWidth = vfm.horizontalAdvance(length);
         painter.drawText(row, Qt::AlignRight | Qt::AlignVCenter, length);
         const QString q = quality.join(QStringLiteral(" · "));
         painter.setFont(word);
-        painter.setPen(QColor(255, 255, 255, 170));
+        painter.setPen(bandInk(170));
         const qreal qWidth = q.isEmpty() ? 0 : qMin(wfm.horizontalAdvance(q), row.width() * 0.4);
         if (!q.isEmpty()) {
             painter.drawText(row.adjusted(0, 0, -lengthWidth - 10, 0), Qt::AlignRight | Qt::AlignVCenter, wfm.elidedText(q, Qt::ElideRight, qWidth));
         }
-        painter.setPen(QColor(255, 255, 255, 215));
+        painter.setPen(bandInk(215));
         painter.drawText(row.adjusted(0, 0, -lengthWidth - qWidth - 20, 0), Qt::AlignLeft | Qt::AlignVCenter,
                          wfm.elidedText(what.join(QStringLiteral(" · ")), Qt::ElideRight, row.width() - lengthWidth - qWidth - 20));
     }
@@ -1286,7 +1323,7 @@ protected:
         const qint64 unpacked = m_detail.value(QStringLiteral("unpacked")).toLongLong(), packed = m_detail.value(QStringLiteral("packed")).toLongLong();
         const QRectF meter(12, band.top() + 12, width() - 24, 5);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(255, 255, 255, 40));
+        painter.setBrush(bandInk(40));
         painter.drawRoundedRect(meter, 2.5, 2.5);
         if (unpacked > 0 && packed > 0) {
             painter.setBrush(m_badgeTint.isValid() ? m_badgeTint : QColor(217, 179, 74));
@@ -1299,7 +1336,7 @@ protected:
             count += QStringLiteral(" · ") + (folders == 1 ? ngTr("1 folder", "1 cartella") : ngTr("%1 folders", "%1 cartelle").arg(QLocale().toString(folders)));
         }
         painter.setFont(value);
-        painter.setPen(QColor(255, 255, 255, 190));
+        painter.setPen(bandInk(190));
         const qreal countWidth = fm.horizontalAdvance(count);
         painter.drawText(row, Qt::AlignRight | Qt::AlignVCenter, count);
         if (unpacked > 0) {
@@ -1308,7 +1345,7 @@ protected:
                 squeeze += ngTr(" · %1% less", " · %1% in meno").arg(saved); // (pictures do not shrink: nothing said)
             }
             painter.setFont(strong);
-            painter.setPen(Qt::white);
+            painter.setPen(bandInk());
             painter.drawText(row.adjusted(0, 0, -countWidth - 12, 0), Qt::AlignLeft | Qt::AlignVCenter,
                              QFontMetricsF(strong).elidedText(squeeze, Qt::ElideRight, row.width() - countWidth - 12));
         }
@@ -1338,7 +1375,7 @@ protected:
             segments.append({chip.first, chip.second, keep--, false});
         }
         segments.first().grow = true;
-        drawSegments(painter, band, segments, value, word, Qt::white, QColor(255, 255, 255, 150), QColor(255, 255, 255, 34));
+        drawSegments(painter, band, segments, value, word, bandInk(), bandInk(150), bandInk(34));
     }
 
 private:
@@ -1472,7 +1509,10 @@ public:
     }
     int heightForWidth(int) const override
     {
-        return m_parts.isEmpty() ? 0 : 18 + rowCount() * (rowHeight() + 3);
+        if (m_parts.isEmpty()) {
+            return 0;
+        }
+        return qMax(kRing, rowCount() * rowHeight()) + 2 * kPad;
     }
     QSize sizeHint() const override
     {
@@ -1480,6 +1520,8 @@ public:
     }
 
 protected:
+    // a ring of the kinds a folder holds, its total in the middle, and beside it the first kinds with how many and what
+    // share; the rest together in a last row. (A bar and a row per kind took some 230 px for little.)
     void paintEvent(QPaintEvent *) override
     {
         if (m_parts.isEmpty()) {
@@ -1491,77 +1533,114 @@ protected:
         for (const Part &part : std::as_const(m_parts)) {
             total += part.count;
         }
-        // the bar
-        qreal x = 0;
+        const QColor ink = palette().color(QPalette::WindowText);
+        // the card
+        QPainterPath card;
+        card.addRoundedRect(QRectF(rect()), 12, 12);
+        painter.fillPath(card, ngVeil(palette()));
+        // the ring: thin, round ends, a little air between the kinds, from the top clockwise
+        const QRectF ringBox(kPad + kStroke / 2.0, (height() - kRing) / 2.0 + kStroke / 2.0, kRing - kStroke, kRing - kStroke);
+        const qreal radius = ringBox.width() / 2.0;
+        const qreal capDegrees = qRadiansToDegrees((kStroke / 2.0) / radius); // (how far a round end reaches)
+        const qreal gap = m_parts.count() > 1 ? 3.0 : 0.0;
+        QColor track = ink;
+        track.setAlphaF(0.07);
+        painter.setPen(QPen(track, kStroke));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(ringBox);
+        qreal start = 90.0;
         for (const Part &part : std::as_const(m_parts)) {
-            const qreal w = (width() - 2.0 * (m_parts.count() - 1)) * part.count / qMax(1, total);
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(part.colour);
-            painter.drawRoundedRect(QRectF(x, 0, qMax(3.0, w), 8), 3, 3);
-            x += w + 2;
+            const qreal share = 360.0 * part.count / qMax(1, total);
+            const qreal arc = share - gap - (m_parts.count() > 1 ? 2 * capDegrees : 0);
+            if (arc > 0.2) {
+                painter.setPen(QPen(part.colour, kStroke, Qt::SolidLine, Qt::RoundCap));
+                painter.drawArc(ringBox, qRound((start - (m_parts.count() > 1 ? capDegrees + gap / 2 : 0)) * 16), -qRound(arc * 16));
+            } else {
+                // (a sliver: a dot of its colour on the ring)
+                const qreal mid = qDegreesToRadians(start - share / 2);
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(part.colour);
+                painter.drawEllipse(ringBox.center() + QPointF(std::cos(mid) * radius, -std::sin(mid) * radius), kStroke / 2.6, kStroke / 2.6);
+            }
+            start -= share;
         }
-        // the rows
+        // the total in the middle
+        QFont big = font();
+        big.setPointSizeF(big.pointSizeF() * 1.15);
+        big.setWeight(QFont::Bold);
+        QFont small = font();
+        small.setPointSizeF(small.pointSizeF() * 0.74);
+        const QFontMetricsF bigFm(big), smallFm(small);
+        const QString totalText = QLocale().toString(total);
+        const qreal block = bigFm.height() + smallFm.height() - 4;
+        painter.setPen(ink);
+        painter.setFont(big);
+        painter.drawText(QRectF(ringBox.left(), ringBox.center().y() - block / 2, ringBox.width(), bigFm.height()), Qt::AlignCenter, totalText);
+        painter.setFont(small);
+        QColor dim = ink;
+        dim.setAlphaF(0.55);
+        painter.setPen(dim);
+        painter.drawText(QRectF(ringBox.left() - 8, ringBox.center().y() - block / 2 + bigFm.height() - 4, ringBox.width() + 16, smallFm.height()), Qt::AlignCenter,
+                         total == 1 ? ngTr("item", "elemento") : ngTr("items", "elementi"));
+        // the first kinds, the rest together
         QList<Part> rows = m_parts.mid(0, kMaxRows);
         if (m_parts.count() > kMaxRows) {
-            // the rest together, in a neutral colour
             rows.removeLast();
             int rest = 0;
             for (int i = kMaxRows - 1; i < m_parts.count(); ++i) {
                 rest += m_parts.at(i).count;
             }
-            QColor grey = palette().color(QPalette::WindowText);
-            grey.setAlphaF(0.45);
+            QColor grey = ink;
+            grey.setAlphaF(0.30);
             const int kinds = int(m_parts.count()) - kMaxRows + 1;
-            rows.append({grey, rest, QStringLiteral("%1 ").arg(rest) + ngTr("in %1 other kinds", "in altri %1 tipi").arg(kinds)});
+            rows.append({grey, rest, QStringLiteral("%1 ").arg(rest) + ngTr("%1 other kinds", "altri %1 tipi").arg(kinds)});
         }
-        const int largest = qMax(1, rows.isEmpty() ? 1 : rows.first().count);
         QFont bold = font();
         bold.setWeight(QFont::DemiBold);
-        bold.setFeature(QFont::Tag("tnum"), 1); // (figures of one width, lined up)
-        const QFontMetricsF boldFm(bold), fm(font());
-        const QColor ink = palette().color(QPalette::WindowText);
-        qreal y = 18;
+        bold.setFeature(QFont::Tag("tnum"), 1);
+        QFont label = font();
+        label.setPointSizeF(label.pointSizeF() * 0.94);
+        const QFontMetricsF boldFm(bold), labelFm(label);
+        const qreal left = kPad + kRing + 16, right = width() - kPad;
+        const qreal percentWidth = smallFm.horizontalAdvance(QStringLiteral("100%")) + 4;
+        qreal y = (height() - rows.count() * rowHeight()) / 2.0;
         for (const Part &part : std::as_const(rows)) {
-            const QRectF row(0, y, width(), rowHeight());
-            QPainterPath shape;
-            shape.addRoundedRect(row, 8, 8);
-            painter.fillPath(shape, ngVeil(palette()));
-            // the band of its share
-            QColor band = part.colour;
-            band.setAlphaF(0.16);
-            painter.save();
-            painter.setClipPath(shape);
-            painter.fillRect(QRectF(row.left(), row.top(), row.width() * part.count / largest, row.height()), band);
-            painter.restore();
-            // its colour, its name, how many
+            const QRectF row(left, y, right - left, rowHeight());
             painter.setPen(Qt::NoPen);
             painter.setBrush(part.colour);
-            painter.drawEllipse(QRectF(row.left() + 10, row.center().y() - 4, 8, 8));
+            painter.drawRoundedRect(QRectF(row.left(), row.center().y() - 4, 8, 8), 2.5, 2.5);
             const QString number = QLocale().toString(part.count);
+            const QString percent = QStringLiteral("%1%").arg(qRound(100.0 * part.count / qMax(1, total)));
             QString word = part.label.section(QLatin1Char(' '), 1);
             if (!word.isEmpty()) {
                 word[0] = word.at(0).toUpper();
             }
+            painter.setFont(small);
+            painter.setPen(dim);
+            painter.drawText(QRectF(row.right() - percentWidth, row.top(), percentWidth, row.height()), Qt::AlignRight | Qt::AlignVCenter, percent);
             const qreal numberWidth = boldFm.horizontalAdvance(number);
             painter.setFont(bold);
             painter.setPen(ink);
-            ngInfoText(painter, QRectF(row.right() - 10 - numberWidth, row.top(), numberWidth, row.height()), Qt::AlignRight | Qt::AlignVCenter, number);
-            painter.setFont(font());
-            const QRectF wordRect(row.left() + 26, row.top(), row.width() - 26 - 18 - numberWidth, row.height());
-            ngInfoText(painter, wordRect, Qt::AlignLeft | Qt::AlignVCenter, fm.elidedText(word, Qt::ElideRight, wordRect.width()));
-            y += rowHeight() + 3;
+            ngInfoText(painter, QRectF(row.right() - percentWidth - 8 - numberWidth, row.top(), numberWidth, row.height()), Qt::AlignRight | Qt::AlignVCenter, number);
+            painter.setFont(label);
+            const QRectF wordRect(row.left() + 15, row.top(), row.width() - 15 - percentWidth - 16 - numberWidth, row.height());
+            ngInfoText(painter, wordRect, Qt::AlignLeft | Qt::AlignVCenter, labelFm.elidedText(word, Qt::ElideRight, wordRect.width()));
+            y += rowHeight();
         }
     }
 
 private:
-    static constexpr int kMaxRows = 6;
+    static constexpr int kMaxRows = 5;
+    static constexpr int kRing = 86;
+    static constexpr int kStroke = 9;
+    static constexpr int kPad = 12;
     int rowCount() const
     {
         return qMin(int(m_parts.count()), kMaxRows);
     }
     int rowHeight() const
     {
-        return fontMetrics().height() + 10;
+        return fontMetrics().height() + 3;
     }
     QList<Part> m_parts;
 };
@@ -1654,8 +1733,13 @@ void NgInfoView::setPinnedQuery(std::function<bool(const KFileItemList &)> query
 
 bool NgInfoView::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == m_who && event->type() == QEvent::MouseButtonRelease && m_lastChanged.isValid()
+        && static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton) {
+        Q_EMIT selectRequested(m_lastChanged);
+        return true;
+    }
     if (watched == viewport() && event->type() == QEvent::Resize && m_body) {
-        m_body->setFixedWidth(viewport()->width());
+        m_body->setFixedWidth(stableWidth());
         layoutActions();
     }
     // the name of the quick action under the pointer, under the pill
@@ -1752,7 +1836,8 @@ void NgInfoView::build()
     m_size->setWordWrap(true);
     m_size->setContentsMargins(2, 0, 0, 0);
     headGroup->addWidget(m_size);
-    m_layout->addLayout(headGroup);
+    // (first in the panel, above the preview: what it is and its buttons, then what it looks like)
+    m_layout->insertLayout(0, headGroup);
     connect(m_pin, &QToolButton::clicked, this, [this](bool on) {
         const KFileItemList items = m_items.isEmpty() ? KFileItemList{m_item} : m_items;
         Q_EMIT pinRequested(items, on);
@@ -1824,6 +1909,7 @@ void NgInfoView::build()
     m_whoLabel = caption(QString());
     m_who = new QLabel(m_lines);
     m_who->setWordWrap(true);
+    m_who->installEventFilter(this); // (a folder's "Changed last": a click selects the item, see eventFilter)
     m_stars = new QWidget(m_lines);
     auto *starsLayout = new QHBoxLayout(m_stars);
     starsLayout->setContentsMargins(0, 0, 0, 0);
@@ -1860,6 +1946,51 @@ void NgInfoView::build()
     m_linesLayout->addWidget(m_origin, 1, 0);
     m_linesLayout->addWidget(above(m_whoLabel, false), 2, 0);
     m_linesLayout->addWidget(m_who, 3, 0);
+    // a folder's "Changed last": a small card, the item's icon, its name and when it changed, a click selects it
+    m_lastButton = new QToolButton(m_lines);
+    m_lastButton->setObjectName(QStringLiteral("ngLastChanged"));
+    m_lastButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_lastButton->setIconSize(QSize(28, 28));
+    m_lastButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_lastButton->setCursor(Qt::PointingHandCursor);
+    m_lastButton->setToolTip(ngTr("Select it in the folder", "Selezionalo nella cartella"));
+    m_lastButton->hide();
+    {
+        // the arrow at its right end: it goes somewhere
+        auto *arrowRow = new QHBoxLayout(m_lastButton);
+        arrowRow->setContentsMargins(0, 0, 10, 0);
+        arrowRow->addStretch();
+        auto *arrow = new QLabel(QStringLiteral("›"), m_lastButton);
+        QFont big = arrow->font();
+        big.setPointSizeF(big.pointSizeF() * 1.5);
+        arrow->setFont(big);
+        arrow->setEnabled(false);
+        arrow->setAttribute(Qt::WA_TransparentForMouseEvents);
+        arrowRow->addWidget(arrow);
+        m_lastArrow = arrow;
+        // a folder: its own button at the end, that goes into it (the card itself selects it, as a file)
+        m_lastOpen = new QToolButton(m_lastButton);
+        m_lastOpen->setText(ngTr("Open", "Apri"));
+        m_lastOpen->setIcon(QIcon::fromTheme(QStringLiteral("go-next")));
+        m_lastOpen->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        m_lastOpen->setLayoutDirection(Qt::RightToLeft); // (the arrow after the word)
+        m_lastOpen->setAutoRaise(true);
+        m_lastOpen->setCursor(Qt::PointingHandCursor);
+        m_lastOpen->setToolTip(ngTr("Open this folder", "Apri questa cartella"));
+        m_lastOpen->hide();
+        connect(m_lastOpen, &QToolButton::clicked, this, [this] {
+            if (m_lastChanged.isValid()) {
+                Q_EMIT urlActivated(m_lastChanged);
+            }
+        });
+        arrowRow->addWidget(m_lastOpen);
+    }
+    connect(m_lastButton, &QToolButton::clicked, this, [this] {
+        if (m_lastChanged.isValid()) {
+            Q_EMIT selectRequested(m_lastChanged);
+        }
+    });
+    m_linesLayout->addWidget(m_lastButton, 3, 0);
     m_linesLayout->addWidget(above(caption(ngTr("Rating", "Voto")), false), 4, 0);
     m_linesLayout->addWidget(m_stars, 5, 0);
     m_linesLayout->addWidget(above(caption(ngTr("Tags", "Etichette")), false), 6, 0);
@@ -1915,10 +2046,35 @@ void NgInfoView::restyle()
                                   .arg(accent.green())
                                   .arg(accent.blue())
                                   .arg(ink, accent.name()));
+    m_lastButton->setStyleSheet(QStringLiteral("QToolButton#ngLastChanged { background: %1; border: 0; border-radius: 10px; padding: 7px 30px 7px 8px; text-align: left; }"
+                                               "QToolButton#ngLastChanged QToolButton { background: transparent; border: 0; padding: 3px 6px; border-radius: 7px; }"
+                                               "QToolButton#ngLastChanged QToolButton:hover { background: rgba(%2, 0.12); }"
+                                               "QToolButton#ngLastChanged:hover { background: rgba(%2, 0.12); }"
+                                               "QToolButton#ngLastChanged:pressed { background: rgba(%2, 0.18); }")
+                                    .arg(veilCss, ink));
     m_pin->setStyleSheet(QStringLiteral("QToolButton { border: 0; border-radius: 12px; padding: 3px; }"
                                         "QToolButton:hover { background: rgba(%1, 0.12); }"
                                         "QToolButton:checked { background: %2; }")
                              .arg(ink, accent.name()));
+    // the pin's glyph: the text colour, and the selection's text colour on the accent while pinned (it stayed dark on
+    // the blue). Both states in one icon, the button picks by its checked state
+    {
+        const QIcon themed = QIcon::fromTheme(QStringLiteral("window-pin"), QIcon::fromTheme(QStringLiteral("pin")));
+        const qreal dpr = devicePixelRatioF();
+        auto tinted = [&](const QColor &colour) {
+            QPixmap glyph = themed.pixmap(QSize(16, 16), dpr);
+            if (!glyph.isNull()) {
+                QPainter tint(&glyph);
+                tint.setCompositionMode(QPainter::CompositionMode_SourceIn);
+                tint.fillRect(glyph.rect(), colour);
+            }
+            return glyph;
+        };
+        QIcon pin;
+        pin.addPixmap(tinted(palette.color(QPalette::WindowText)), QIcon::Normal, QIcon::Off);
+        pin.addPixmap(tinted(ngAurora() ? ngAuroraSelectionText(palette) : ngSelectionText(palette)), QIcon::Normal, QIcon::On);
+        m_pin->setIcon(pin);
+    }
 }
 
 void NgInfoView::updatePinTip()
@@ -1933,7 +2089,7 @@ void NgInfoView::layoutActions()
 {
     // As many quick actions as fit in the panel's width, the rest in a menu at the end of the pill (all of them in a
     // row made the pill, and the whole panel, wider than the panel: nine actions for a video)
-    const int available = qMax(80, viewport()->width() - 32);
+    const int available = qMax(80, stableWidth() - 32);
     if (available == m_actionsWidth) {
         return;
     }
@@ -2028,13 +2184,26 @@ void NgInfoView::changeEvent(QEvent *event)
     }
 }
 
+// the width the content is laid out in: the panel's, less the room of a vertical scroll bar whether it is shown or not.
+// Taken from the viewport, it changed when the scroll bar came and went; at a width where a text was on the edge of
+// being shortened, that changed the content's height, which brought the scroll bar or took it away again: the panel
+// flickered and resized itself without end
+int NgInfoView::stableWidth() const
+{
+    if (style()->styleHint(QStyle::SH_ScrollBar_Transient, nullptr, verticalScrollBar())) {
+        return qMax(60, viewport()->width()); // (a scroll bar over the content takes no room)
+    }
+    // (from the area's own width, which the scroll bar does not change, less the bar's room)
+    return qMax(60, contentsRect().width() - style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, verticalScrollBar()));
+}
+
 void NgInfoView::resizeEvent(QResizeEvent *event)
 {
     QScrollArea::resizeEvent(event);
     // the content as wide as the panel, whatever a part of it asks for: nothing pushes past the edge (a part that cannot
     // be narrower is cut, not the whole panel)
-    m_body->setFixedWidth(viewport()->width());
-    const int width = qMax(120, viewport()->width() - 32);
+    m_body->setFixedWidth(stableWidth());
+    const int width = qMax(120, stableWidth() - 32);
     m_media->setVideoSize(QSize(width, width * 9 / 16));
     layoutActions();
 }
@@ -2282,7 +2451,7 @@ void NgInfoView::showOne()
     m_kind->hide(); // (told over the preview, see updateOverlay)
     m_overlayTint = kind.tint;
     m_overlayFacts.clear();
-    m_kind->setStyleSheet(QStringLiteral("QLabel { color: white; background: %1; border-radius: 8px; padding: 1px 8px; font-weight: bold; }").arg(kind.tint.name()));
+    m_kind->setStyleSheet(QStringLiteral("QLabel { color: white; background: %1; border-radius: 9px; padding: 1px 8px; font-weight: bold; font-size: 9pt; }").arg(kind.tint.name()));
     m_size->setText(item.isDir() ? item.mimeComment() : KIO::convertSize(item.size()));
     if (item.isDir() && item.isLocalFile()) {
         // a folder: its first items as the preview, read in the background (a folder's count is stopped at 9999: a large
@@ -2405,6 +2574,7 @@ void NgInfoView::showFacts()
         m_whoLabel->hide();
         m_insideLabel->hide();
         m_insideTags->hide();
+        m_lastButton->hide();
         return; // being read: NgFacts::ready brings it here again
     }
     QList<std::pair<QString, QString>> shown;
@@ -2429,7 +2599,8 @@ void NgInfoView::showFacts()
         const auto &tag = facts->innerTags.at(i);
         const QColor colour = ngTagColour(tag.first);
         auto *chip = new QLabel(QStringLiteral("%1  <b>%2</b>").arg(tag.first.toHtmlEscaped()).arg(tag.second), m_insideTags);
-        chip->setStyleSheet(QStringLiteral("QLabel { background: rgba(%1, %2, %3, 0.80); color: white; border-radius: 10px; padding: 1px 9px; }")
+        // (with a border of its own colour: without one, some widget styles left the label's background square)
+        chip->setStyleSheet(QStringLiteral("QLabel { background: rgba(%1, %2, %3, 0.80); border: 1px solid rgba(%1, %2, %3, 0.95); color: white; border-radius: 10px; padding: 1px 9px; }")
                                 .arg(colour.red())
                                 .arg(colour.green())
                                 .arg(colour.blue()));
@@ -2452,11 +2623,39 @@ void NgInfoView::showFacts()
     m_who->setText(ngBreakable(facts->who));
     m_who->setVisible(!facts->who.isEmpty());
     m_whoLabel->setVisible(!facts->who.isEmpty());
+    m_lastChanged = QUrl();
+    m_who->setCursor(Qt::ArrowCursor);
+    m_who->setToolTip(QString());
     if (m_item.isDir() && !facts->lastName.isEmpty()) {
         m_whoLabel->setText(ngTr("Changed last", "Cambiato per ultimo"));
         m_who->setText(ngBreakable(facts->lastName));
         m_who->setVisible(true);
         m_whoLabel->setVisible(true);
+        // a click on its name selects it in the view (opening the folder first when it is not the one shown)
+        QUrl url = m_item.url();
+        QString path = url.path();
+        if (!path.endsWith(QLatin1Char('/'))) {
+            path += QLatin1Char('/');
+        }
+        url.setPath(path + facts->lastName);
+        m_lastChanged = url;
+        m_who->hide();
+        // the card: icon of its kind, the name (shortened in its middle), when it changed, an arrow
+        // (a folder too can be what changed last: its icon and words, and a button to go into it)
+        const bool folder = m_lastChanged.isLocalFile() && QFileInfo(m_lastChanged.toLocalFile()).isDir();
+        const QString icon = folder ? QStringLiteral("folder") : QMimeDatabase().mimeTypeForFile(facts->lastName, QMimeDatabase::MatchExtension).iconName();
+        m_lastButton->setIcon(QIcon::fromTheme(icon, QIcon::fromTheme(QStringLiteral("unknown"))));
+        m_lastArrow->setVisible(!folder);
+        m_lastOpen->setVisible(folder);
+        const int room = qMax(80, stableWidth() - 32 - 28 - (folder ? m_lastOpen->sizeHint().width() + 20 : 48));
+        const QString name = fontMetrics().elidedText(facts->lastName, Qt::ElideMiddle, room);
+        const QString ago = facts->lastWhen.isValid() ? ngAgoText(facts->lastWhen) : QString();
+        const QString when = ago.isEmpty() ? (folder ? ngTr("folder", "cartella") : QString())
+                                           : folder ? ngTr("folder · changed %1", "cartella · modificata %1").arg(ago) : ngTr("changed %1", "modificato %1").arg(ago);
+        m_lastButton->setText(when.isEmpty() ? name : name + QLatin1Char('\n') + when);
+        m_lastButton->show();
+    } else {
+        m_lastButton->hide();
     }
 }
 
@@ -2485,7 +2684,7 @@ void NgInfoView::showTags()
         QColor text = dark ? colour.lighter(125) : colour.darker(135);
         // on glass with the text shadow: a solid chip (its colour over the window's), white text; a see-through one was
         // pastel on whatever lay behind the window
-        const bool solid = ngTextHalo();
+        const bool solid = true; // (solid in every look, as on the cards)
         if (solid) {
             text = QColor(255, 255, 255);
         }

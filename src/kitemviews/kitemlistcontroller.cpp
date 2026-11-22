@@ -10,6 +10,7 @@
 #include "kitemlistcontroller.h"
 
 #include "kitemlistselectionmanager.h"
+#include "kitemlistgroupheader.h"
 #include "kitemlistview.h"
 #include "private/kitemlistkeyboardsearchmanager.h"
 #include "private/kitemlistrubberband.h"
@@ -1644,6 +1645,40 @@ bool KItemListController::onPress(const QPointF &pos, const Qt::KeyboardModifier
 
     const QPointF pressedMousePos = m_view->transform().map(pos);
 
+    // dolphin-ng: a click on a group's title selects every item of the group (with Ctrl: adds them to the selection)
+    m_ngGroupPressed = false;
+    if ((buttons & Qt::LeftButton) && !m_pressedIndex.has_value() && m_model) {
+        QHashIterator<KItemListWidget *, KItemListGroupHeader *> it(m_view->m_visibleGroups);
+        while (it.hasNext()) {
+            it.next();
+            KItemListGroupHeader *header = it.value();
+            if (!header || !header->isVisible() || !header->contains(header->mapFromItem(m_view, pressedMousePos))) {
+                continue;
+            }
+            const int first = it.key()->index();
+            int end = m_model->count();
+            const auto groups = m_model->groups();
+            for (const auto &group : groups) {
+                if (group.first > first) {
+                    end = group.first;
+                    break;
+                }
+            }
+            if (end > first) {
+                if (!(modifiers & Qt::ControlModifier)) {
+                    m_selectionManager->clearSelection();
+                }
+                m_selectionManager->setSelected(first, end - first, KItemListSelectionManager::Select);
+                m_selectionManager->setCurrentItem(first);
+                m_selectionManager->beginAnchoredSelection(first);
+                m_keyboardAnchorIndex = first;
+                m_keyboardAnchorPos = keyboardAnchorPos(first);
+                m_ngGroupPressed = true;
+                return true;
+            }
+        }
+    }
+
     if (m_view->isAboveExpansionToggle(m_pressedIndex.value_or(-1), pressedMousePos)) {
         m_selectionManager->endAnchoredSelection();
         m_selectionManager->setCurrentItem(m_pressedIndex.value());
@@ -1860,6 +1895,10 @@ bool KItemListController::onRelease(const QPointF &pos, const Qt::KeyboardModifi
                 Q_EMIT itemContextMenuRequested(index, QPointF(QCursor::pos()));
             }
         }
+        return true;
+    }
+    if (m_ngGroupPressed) {
+        m_ngGroupPressed = false; // (the group was selected on the press: the release on the title leaves it so)
         return true;
     }
     const bool isAboveSelectionToggle = m_view->isAboveSelectionToggle(m_pressedIndex.value_or(-1), pressedMousePos);

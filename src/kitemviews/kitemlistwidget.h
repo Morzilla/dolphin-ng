@@ -270,6 +270,16 @@ DOLPHIN_EXPORT bool ngTextHalo();
 // see-through (a see-through grey took the colour of whatever lay behind the window, and over a white window light
 // grey text vanished); the colour itself otherwise
 DOLPHIN_EXPORT QColor ngHaloInk(const QColor &ink, const QPalette &palette);
+// dolphin-ng: the text colour on the accent: the colour scheme's own selection text (as the style shows a selection),
+// unless it reads badly on the accent (then black or white, whichever reads)
+DOLPHIN_EXPORT QColor ngSelectionText(const QPalette &palette);
+// dolphin-ng: the application's widget style is Breeze NG (else: stock Breeze or another style, which Dolphin NG dresses
+// itself where it must)
+DOLPHIN_EXPORT bool ngWidgetStyleIsNg();
+// dolphin-ng: with another widget style than Breeze NG the window is one grey gradient, top to bottom, and the sidebar
+// and the Information panel stand on it without a card of their own. @p windowRect is the whole window's, in the
+// painter's coordinates
+DOLPHIN_EXPORT void ngPaintWindowGradient(QPainter *painter, const QRectF &windowRect, const QPalette &palette);
 DOLPHIN_EXPORT void ngPaintTextHalo(QPainter *painter, const QColor &textColour, const std::function<void(const QPointF &)> &draw, qreal strength = 1.0);
 // the sidebar's text gets the shadow now (decided by the main window, see DolphinMainWindow::ngApplyTextHalo)
 DOLPHIN_EXPORT bool ngSidebarHalo();

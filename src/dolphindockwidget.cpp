@@ -494,6 +494,11 @@ void DolphinDockWidget::ngPaintWindowGround(QPainter &painter, QWidget *from, co
         QStyleOption option;
         option.initFrom(top);
         top->style()->drawPrimitive(QStyle::PE_Widget, &option, &painter, top);
+    } else if (!ngWidgetStyleIsNg()) {
+        // (the window's gradient, laid where it is in the window)
+        painter.translate(-from->mapTo(top, QPoint(0, 0)));
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+        ngPaintWindowGradient(&painter, QRectF(top->rect()), top->palette());
     } else {
         painter.setCompositionMode(QPainter::CompositionMode_Source);
         painter.fillRect(rect, top->palette().color(QPalette::Window));
@@ -577,9 +582,13 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
     const qreal radius = 12;
 
     painter.setPen(Qt::NoPen);
-    const QScreen *currentScreen = screen();
+    // with another widget style than Breeze NG the panel has no card: it stands on the window's gradient (painted by
+    // the window, and by the panels where they paint their ground again); only the disks are drawn here
+    const bool noCard = !ngWidgetStyleIsNg();
+    const QScreen *currentScreen = noCard ? nullptr : screen();
     const QPixmap backdrop = (ngGlassImageMode() && currentScreen) ? ngBackdrop(currentScreen) : QPixmap();
-    const bool lava = ngGlassImageMode() && ngGlassLavaMode();
+    const bool lava = !noCard && ngGlassImageMode() && ngGlassLavaMode();
+    if (!noCard) { // (the card: closed before the disks)
     if (lava) {
         // animated backdrop: about twelve small frames a second, only while this window is the active one
         if (!m_lavaTimer) {
@@ -799,6 +808,8 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
         painter.setPen(QPen(QBrush(rim), 1));
         painter.drawRoundedRect(edge, radius, radius);
     }
+
+    } // !noCard
 
     // the disks at the foot of the Places card (PlacesPanel leaves the room for them): the home file system, then the
     // other disks and partitions, each a box with its usage; an unmounted one is a dashed box

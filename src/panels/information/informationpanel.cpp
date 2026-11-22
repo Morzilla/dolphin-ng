@@ -475,6 +475,7 @@ void InformationPanel::init()
         connect(m_ngView, &NgInfoView::quickActionRequested, this, &InformationPanel::ngQuickActionRequested);
         connect(m_ngView, &NgInfoView::pinRequested, this, &InformationPanel::ngPinRequested);
         connect(m_ngView, &NgInfoView::lightboxRequested, this, &InformationPanel::ngLightboxRequested);
+        connect(m_ngView, &NgInfoView::selectRequested, this, &InformationPanel::ngSelectRequested);
         if (m_ngPinnedQuery) {
             m_ngView->setPinnedQuery(m_ngPinnedQuery);
         }

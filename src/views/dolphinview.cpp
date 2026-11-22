@@ -2908,6 +2908,20 @@ void DolphinView::ngResetFolderView()
     applyViewProperties(); // the default view again
 }
 
+void DolphinView::ngSelectUrl(const QUrl &url)
+{
+    const int index = m_model->index(url);
+    if (index < 0) {
+        forceUrlsSelection(url, {url}); // (applied when the folder has loaded)
+        return;
+    }
+    KItemListSelectionManager *selectionManager = m_container->controller()->selectionManager();
+    selectionManager->clearSelection();
+    selectionManager->setSelected(index, 1);
+    selectionManager->setCurrentItem(index);
+    m_container->controller()->view()->scrollToItem(index);
+}
+
 void DolphinView::ngSetPinned(const KFileItemList &items, bool pinned)
 {
     m_model->ngSetPinned(items, pinned);
