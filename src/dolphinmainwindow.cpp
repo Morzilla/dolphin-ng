@@ -1432,6 +1432,17 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
             }
         });
     }
+    // for tests: DOLPHIN_NG_TEST_TOOLBAR_SAVE applies the tool bar configuration again, twice, once the window is up, as
+    // saving it from "Configure Toolbars…" does (issue #10: it crashed)
+    static bool ngToolbarSaveDone = false;
+    if (qEnvironmentVariableIsSet("DOLPHIN_NG_TEST_TOOLBAR_SAVE") && !ngToolbarSaveDone) {
+        ngToolbarSaveDone = true;
+        for (int delay : {2000, 3500}) {
+            QTimer::singleShot(delay, this, [this] {
+                saveNewToolbarConfig();
+            });
+        }
+    }
     // for tests: DOLPHIN_NG_TEST_INFO shows the Information panel once the window is up (the panels' actions are not
     // reachable over D-Bus)
     if (qEnvironmentVariableIsSet("DOLPHIN_NG_TEST_INFO")) {
@@ -4742,7 +4753,12 @@ void DolphinMainWindow::saveNewToolbarConfig()
     updateAllowedToolbarAreas();
     updateNavigatorsBackground();
     (static_cast<KHamburgerMenu *>(actionCollection()->action(KStandardAction::name(KStandardAction::HamburgerMenu))))->hideActionsOf(toolBar());
-    m_ngMovedActions.clear(); // the toolbar was built anew
+    // the tool bar was built anew from the new configuration: the buttons moved from it to the sort bar are back in it,
+    // and the folder's filter field went with the old one (issue #10: its action was still used after being deleted)
+    m_ngMovedActions.clear();
+    m_ngMovedTrailing.clear();
+    ngSortBarSetLeadingActions(m_ngSortBar, {});
+    ngSortBarSetTrailingActions(m_ngSortBar, {});
     ngMoveToolbarButtons();
 }
 

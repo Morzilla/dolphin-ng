@@ -679,12 +679,8 @@ public:
         row->addWidget(m_ownView, 0, Qt::AlignTop);
 
         // instant filter of the current folder: what you type narrows the list as you type
-        m_filter = new QLineEdit(this);
-        m_filter->setPlaceholderText(ngTr("Search in folder", "Cerca nella cartella"));
-        m_filter->setClearButtonEnabled(true);
-        m_filter->setFixedWidth(210);
-        m_filter->setToolTip(ngTr("Show only the items whose name contains the text. Esc clears the field.", "Mostra solo gli elementi il cui nome contiene il testo. Esc svuota il campo."));
-        row->addWidget(m_filter, 0, Qt::AlignTop);
+        m_row = row;
+        makeFilter();
         // the buttons that stood after the location bar in the tool bar (split, search, the menu), when the window
         // moves them here and takes the field above next to the location bar (see setTrailingActions)
         m_trailing = new QWidget(this);
@@ -694,6 +690,21 @@ public:
         trailing->setSpacing(2);
         m_trailing->hide();
         row->addWidget(m_trailing, 0, Qt::AlignTop);
+    }
+
+    // the field that filters the folder. Made again when it is gone: the window moves it into the tool bar next to the
+    // location bar, and saving a new tool bar configuration builds the tool bar anew, which deletes it (issue #10)
+    void makeFilter()
+    {
+        m_filter = new QLineEdit(this);
+        m_filter->setPlaceholderText(ngTr("Search in folder", "Cerca nella cartella"));
+        m_filter->setClearButtonEnabled(true);
+        m_filter->setFixedWidth(210);
+        m_filter->setToolTip(ngTr("Show only the items whose name contains the text. Esc clears the field.", "Mostra solo gli elementi il cui nome contiene il testo. Esc svuota il campo."));
+        if (m_row) {
+            const int at = m_trailing ? m_row->indexOf(m_trailing) : -1;
+            m_row->insertWidget(at, m_filter, 0, Qt::AlignTop);
+        }
         connect(m_filter, &QLineEdit::textChanged, this, [this](const QString &text) {
             if (m_view) {
                 m_view->setNameFilter(text);
@@ -713,7 +724,7 @@ public:
         m_view = view;
         m_active = All;
         m_total = 0;
-        if (!m_filter->text().isEmpty()) {
+        if (m_filter && !m_filter->text().isEmpty()) {
             m_filter->clear();
         }
         if (!view) {
@@ -721,7 +732,7 @@ public:
             return;
         }
         connect(view, &DolphinView::urlChanged, this, [this] {
-            if (!m_filter->text().isEmpty()) {
+            if (m_filter && !m_filter->text().isEmpty()) {
                 m_filter->clear(); // a new folder starts unfiltered
             }
         });
@@ -1066,8 +1077,11 @@ private:
     }
 
 public:
-    QLineEdit *filterField() const
+    QLineEdit *filterField()
     {
+        if (!m_filter) {
+            makeFilter();
+        }
         return m_filter;
     }
 
@@ -1912,7 +1926,8 @@ private:
     int m_groupsTextWidth = 0;
     QList<QPointer<QWidget>> m_gaps; // the spaces between the groups of the bar (narrower when the bar is)
     DolphinView::Mode m_modeBeforeCards = DolphinView::DetailsView; // the cards button goes back to this
-    QLineEdit *m_filter;
+    QPointer<QLineEdit> m_filter; // (null once the tool bar that held it was built anew: made again, see makeFilter)
+    QPointer<QHBoxLayout> m_row;
     int m_active = All;
     int m_total = 0;
     int m_counts[NgKind::CategoryCount] = {};

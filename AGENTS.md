@@ -105,6 +105,7 @@ input, Dolphin NG reads these environment variables:
 | `DOLPHIN_NG_TEST_DOCK_WIDTH`| the sidebar widened to (or narrowed step by step down to) that width          |
 | `DOLPHIN_NG_TEST_HIDE_PLACES`| the sidebar button pressed once the window is up                             |
 | `DOLPHIN_NG_TEST_INFO`     | the Information panel shown once the window is up (a number: also its width) |
+| `DOLPHIN_NG_TEST_TOOLBAR_SAVE` | the tool bar configuration applied again twice, as saving it from Configure Toolbars does |
 | `DOLPHIN_NG_TEST_ZOOM`     | the Information panel's preview zoomed in by that factor once it has a picture, its −/+ buttons shown |
 | `DOLPHIN_NG_TEST_PAGE`     | a PDF in the Information panel turned to that page once it shows |
 | `DOLPHIN_NG_TEST_PLAY`     | a video or song in the Information panel played a moment after it shows |
