@@ -5021,15 +5021,19 @@ void DolphinMainWindow::ngFitFilterField()
     const int wanted = fontMetrics().averageCharWidth() * 40; // the room a path needs to be read
     const int swap = field->width() + 12 - lens->sizeHint().width(); // what the location bar gains or gives back
     const bool compact = m_ngFilterCompact ? crumbs->width() - swap < wanted + 40 : crumbs->width() < wanted;
-    if (compact != m_ngFilterCompact || m_ngFilterAction->isVisible() == compact) {
-        m_ngFilterCompact = compact;
+    m_ngFilterCompact = compact;
+    // (both reconciled every time, whatever was shown: back from the classic layout, which hides both, the state could
+    // say "compact" with the lens still hidden, and neither was shown)
+    if (m_ngFilterAction->isVisible() == compact) {
         m_ngFilterAction->setVisible(!compact);
-        if (QObject *gap = bar->property("_ng_filter_gap").value<QObject *>()) {
-            if (auto *gapAction = qobject_cast<QAction *>(gap)) {
-                gapAction->setVisible(!compact);
-            }
-        }
+    }
+    if (m_ngSearchAction->isVisible() != compact) {
         m_ngSearchAction->setVisible(compact);
+    }
+    if (QObject *gap = bar->property("_ng_filter_gap").value<QObject *>()) {
+        if (auto *gapAction = qobject_cast<QAction *>(gap); gapAction && gapAction->isVisible() == compact) {
+            gapAction->setVisible(!compact);
+        }
     }
     // the lens lit while the folder is filtered, the text in its tooltip
     if (auto *edit = qobject_cast<QLineEdit *>(field)) {
@@ -5068,8 +5072,15 @@ void DolphinMainWindow::ngShowFilterPopup()
     layout->addWidget(edit);
     QPointer<QLineEdit> target(field);
     connect(edit, &QLineEdit::textChanged, popup, [target](const QString &text) {
-        if (target) {
+        if (target && target->text() != text) {
             target->setText(text);
+        }
+    });
+    // and back: the tool bar's field cleared by a change of folder (or anything else) is cleared here too, or the next
+    // key typed in the popup would bring the old filter back on the new folder
+    connect(field, &QLineEdit::textChanged, edit, [edit](const QString &text) {
+        if (edit->text() != text) {
+            edit->setText(text);
         }
     });
     // Return closes the popup and keeps the filter; Esc empties the field, a second Esc closes it
@@ -5173,6 +5184,9 @@ void DolphinMainWindow::ngMoveToolbarButtons()
             });
         }
         ngFitFilterField();
+        // (and again once the tool bar has laid out what was just added: the location bar's width read above may be
+        // the one from before the field and its gap took their room)
+        QTimer::singleShot(0, this, &DolphinMainWindow::ngFitFilterField);
     }
     // back and forward stay before the location bar, with "up" beside them; the view settings button, which the
     // sort bar replaces, leaves the tool bar
