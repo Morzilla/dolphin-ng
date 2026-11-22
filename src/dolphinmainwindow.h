@@ -804,6 +804,8 @@ private:
     bool m_ngTitleTabs = false; // dolphin-ng: the row of tabs is the window's title bar (no frame of the window manager's)
     QList<QAction *> m_ngMovedActions; // dolphin-ng: toolbar buttons that were moved to the sort bar
     QList<QAction *> m_ngMovedTrailing; // dolphin-ng: the buttons moved from after the location bar to the sort bar
+    QPointer<QAction> m_ngSearchAction; // the lens that stands for the filter field when the tool bar is too narrow for it
+    bool m_ngFilterCompact = false; // the lens shown instead of the field
     QPointer<QAction> m_ngFilterAction; // the folder filter field, placed next to the location bar (deleted with the tool bar when it is built anew)
     bool m_ngUpPlaced = false; // "up" was put beside back and forward
     QAction *m_ngSidebarToggle = nullptr; // dolphin-ng: shows and hides the places, first in the toolbar
@@ -812,6 +814,8 @@ private:
     QPointer<QHBoxLayout> m_ngMacRowLayout; // dolphin-ng: the title row's own layout with the window's buttons at the left (macOS style)
     bool m_ngMacButtons = false; // dolphin-ng: TITLE_BUTTONS=left, the window's buttons at the left as on macOS
     void ngMoveToolbarButtons();
+    void ngFitFilterField();
+    void ngShowFilterPopup();
     DolphinViewContainer *m_activeViewContainer;
 
     DolphinViewActionHandler *m_actionHandler;

@@ -6,6 +6,7 @@
 */
 
 #include "dolphinnavigatorswidgetaction.h"
+#include "kitemviews/kitemlistwidget.h" // dolphin-ng: ngTwoLineList
 
 #include "trash/dolphintrash.h"
 
@@ -70,6 +71,12 @@ void DolphinNavigatorsWidgetAction::adjustSpacing()
         if (leadingSpacing < 0) {
             leadingSpacing = 0;
         }
+    }
+    if (ngTwoLineList()) {
+        // dolphin-ng: the location bar stands in its own place in the NG layout, not over the view: no spacing to line it
+        // up with the view (it took over 200 px with the sidebar shown, and with the Information panel open as well
+        // the path had no room left at all)
+        leadingSpacing = trailingSpacing = 0;
     }
     spacing(Primary, Leading)->setMinimumWidth(leadingSpacing);
     spacing(Primary, Trailing)->setFixedWidth(trailingSpacing);

@@ -115,6 +115,8 @@
 #include <QTimer>
 #include <QPainterPath>
 #include <QToolButton>
+#include <QFrame>
+#include <QShortcut>
 #include <QtConcurrentRun>
 #include <dolphindebug.h>
 
@@ -774,6 +776,33 @@ private:
     QTimer m_save;
     bool m_grew = false;
     bool m_growing = false;
+};
+
+// dolphin-ng: calls back, once per turn of the event loop, when the watched widget changes size
+class NgResizeWatch : public QObject
+{
+public:
+    NgResizeWatch(QWidget *target, std::function<void()> function)
+        : QObject(target)
+        , m_function(std::move(function))
+    {
+        target->installEventFilter(this);
+    }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() == QEvent::Resize && !m_queued) {
+            m_queued = true;
+            QTimer::singleShot(0, this, [this] {
+                m_queued = false;
+                m_function();
+            });
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    std::function<void()> m_function;
+    bool m_queued = false;
 };
 
 // dolphin-ng: runs a function, once per turn of the event loop, whenever one of some widgets moves, is resized or shown
@@ -1763,6 +1792,20 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
                         QCoreApplication::sendEvent(button, &enter);
                         button->update();
                     }
+                }
+            }
+        });
+    }
+    // for tests: DOLPHIN_NG_TEST_FILTER_POPUP=text opens the lens's popup (when the lens is shown) and types the text
+    static bool ngFilterPopupDone = false;
+    if (const QString text = qEnvironmentVariable("DOLPHIN_NG_TEST_FILTER_POPUP"); !text.isEmpty() && !ngFilterPopupDone) {
+        ngFilterPopupDone = true;
+        QTimer::singleShot(qEnvironmentVariableIntValue("DOLPHIN_NG_TEST_FILTER_POPUP_MS") > 0 ? qEnvironmentVariableIntValue("DOLPHIN_NG_TEST_FILTER_POPUP_MS") : 3000,
+                           this, [this, text] {
+            ngShowFilterPopup();
+            if (auto *popup = findChildren<QFrame *>().value(findChildren<QFrame *>().size() - 1)) {
+                if (auto *edit = popup->findChild<QLineEdit *>()) {
+                    edit->setText(text);
                 }
             }
         });
@@ -4959,6 +5002,96 @@ void DolphinMainWindow::ngPlaceSidebarToggle()
     }
 }
 
+// dolphin-ng: the location bar always keeps room to show where you are. When the tool bar is too narrow for it and the
+// folder's filter field side by side (a narrow window, the Information panel open), the field gives way to a lens that
+// opens it in a popup; the field comes back once there is room again (with a margin, so it does not flicker)
+void DolphinMainWindow::ngFitFilterField()
+{
+    KToolBar *bar = toolBar(QStringLiteral("mainToolBar"));
+    QAction *navigator = actionCollection()->action(QStringLiteral("url_navigators"));
+    QWidget *crumbs = bar && navigator ? bar->widgetForAction(navigator) : nullptr;
+    if (!crumbs || !m_ngFilterAction || !m_ngSearchAction || !ngTwoLineList()) {
+        return;
+    }
+    QWidget *field = bar->widgetForAction(m_ngFilterAction);
+    QWidget *lens = bar->widgetForAction(m_ngSearchAction);
+    if (!field || !lens) {
+        return;
+    }
+    const int wanted = fontMetrics().averageCharWidth() * 40; // the room a path needs to be read
+    const int swap = field->width() + 12 - lens->sizeHint().width(); // what the location bar gains or gives back
+    const bool compact = m_ngFilterCompact ? crumbs->width() - swap < wanted + 40 : crumbs->width() < wanted;
+    if (compact != m_ngFilterCompact || m_ngFilterAction->isVisible() == compact) {
+        m_ngFilterCompact = compact;
+        m_ngFilterAction->setVisible(!compact);
+        if (QObject *gap = bar->property("_ng_filter_gap").value<QObject *>()) {
+            if (auto *gapAction = qobject_cast<QAction *>(gap)) {
+                gapAction->setVisible(!compact);
+            }
+        }
+        m_ngSearchAction->setVisible(compact);
+    }
+    // the lens lit while the folder is filtered, the text in its tooltip
+    if (auto *edit = qobject_cast<QLineEdit *>(field)) {
+        if (!edit->property("_ng_lens_watch").toBool()) {
+            edit->setProperty("_ng_lens_watch", true);
+            connect(edit, &QLineEdit::textChanged, this, [this] {
+                ngFitFilterField();
+            });
+        }
+        if (auto *button = qobject_cast<QToolButton *>(lens)) {
+            button->setChecked(!edit->text().isEmpty());
+            button->setToolTip(edit->text().isEmpty() ? ngTr("Search in folder", "Cerca nella cartella")
+                                                      : ngTr("Search in folder: %1", "Cerca nella cartella: %1").arg(edit->text()));
+        }
+    }
+}
+
+// dolphin-ng: the lens's popup: a field under it, in step with the tool bar's own (which filters the view)
+void DolphinMainWindow::ngShowFilterPopup()
+{
+    KToolBar *bar = toolBar(QStringLiteral("mainToolBar"));
+    QWidget *lens = bar && m_ngSearchAction ? bar->widgetForAction(m_ngSearchAction) : nullptr;
+    auto *field = bar && m_ngFilterAction ? qobject_cast<QLineEdit *>(bar->widgetForAction(m_ngFilterAction)) : nullptr;
+    if (!lens || !field) {
+        return;
+    }
+    auto *popup = new QFrame(this, Qt::Popup);
+    popup->setAttribute(Qt::WA_DeleteOnClose);
+    auto *layout = new QHBoxLayout(popup);
+    layout->setContentsMargins(6, 6, 6, 6);
+    auto *edit = new QLineEdit(popup);
+    edit->setPlaceholderText(field->placeholderText());
+    edit->setClearButtonEnabled(true);
+    edit->setMinimumWidth(qMax(240, fontMetrics().averageCharWidth() * 30));
+    edit->setText(field->text());
+    layout->addWidget(edit);
+    QPointer<QLineEdit> target(field);
+    connect(edit, &QLineEdit::textChanged, popup, [target](const QString &text) {
+        if (target) {
+            target->setText(text);
+        }
+    });
+    // Return closes the popup and keeps the filter; Esc empties the field, a second Esc closes it
+    connect(edit, &QLineEdit::returnPressed, popup, &QWidget::close);
+    auto *escape = new QShortcut(QKeySequence(Qt::Key_Escape), edit);
+    connect(escape, &QShortcut::activated, popup, [edit, popup] {
+        if (edit->text().isEmpty()) {
+            popup->close();
+        } else {
+            edit->clear();
+        }
+    });
+    popup->adjustSize();
+    QPoint at = lens->mapToGlobal(QPoint(lens->width() - popup->width(), lens->height() + 2));
+    popup->move(at);
+    popup->show();
+    edit->setFocus();
+    if (auto *button = qobject_cast<QToolButton *>(lens)) {
+        button->setChecked(!field->text().isEmpty()); // (a click toggles a checkable button: its state is the filter's)
+    }
+}
+
 void DolphinMainWindow::ngMoveToolbarButtons()
 {
     ngPlaceSidebarToggle();
@@ -4981,6 +5114,9 @@ void DolphinMainWindow::ngMoveToolbarButtons()
         if (m_ngFilterAction) {
             m_ngFilterAction->setVisible(false);
         }
+        if (m_ngSearchAction) {
+            m_ngSearchAction->setVisible(false);
+        }
         return;
     }
     {
@@ -4992,7 +5128,7 @@ void DolphinMainWindow::ngMoveToolbarButtons()
         for (QAction *action : all) {
             if (action == navigator) {
                 after = true;
-            } else if (after && action != m_ngFilterAction && action != bar->property("_ng_filter_gap").value<QObject *>()) {
+            } else if (after && action != m_ngFilterAction && action != m_ngSearchAction && action != bar->property("_ng_filter_gap").value<QObject *>()) {
                 // (not the gap before the field: a later pass took it for one of the buttons and moved it away with
                 // them, and the field ended up against the location bar)
                 trailing.append(action);
@@ -5017,9 +5153,26 @@ void DolphinMainWindow::ngMoveToolbarButtons()
                 m_ngFilterAction = bar->addWidget(field);
             }
         }
-        if (m_ngFilterAction) {
-            m_ngFilterAction->setVisible(true);
+        if (m_ngFilterAction && !m_ngSearchAction) {
+            // when the tool bar is too narrow for both, the location bar keeps its room and the field becomes a lens
+            // that opens it in a popup (see ngFitFilterField)
+            auto *lens = new QToolButton(bar);
+            lens->setIcon(QIcon::fromTheme(QStringLiteral("edit-find")));
+            lens->setAutoRaise(true);
+            lens->setCheckable(true);
+            lens->setToolTip(ngTr("Search in folder", "Cerca nella cartella"));
+            connect(lens, &QToolButton::clicked, this, &DolphinMainWindow::ngShowFilterPopup);
+            m_ngSearchAction = bar->addWidget(lens);
+            m_ngSearchAction->setVisible(false);
+            m_ngFilterCompact = false;
         }
+        if (!bar->property("_ng_fit_watch").toBool()) {
+            bar->setProperty("_ng_fit_watch", true);
+            new NgResizeWatch(bar, [this] {
+                ngFitFilterField();
+            });
+        }
+        ngFitFilterField();
     }
     // back and forward stay before the location bar, with "up" beside them; the view settings button, which the
     // sort bar replaces, leaves the tool bar
