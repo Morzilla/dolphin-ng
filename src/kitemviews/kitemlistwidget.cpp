@@ -1817,13 +1817,13 @@ qreal ngAuroraVeilAlpha(bool dark, bool button)
 
 QColor ngAuroraFrost()
 {
-    // white with a tinge of the accent (12 %), as Breeze NG's frost: the fields, pills and cards of a light scheme take
+    // white with a tinge of the accent (7 %), as Breeze NG's frost: the fields, pills and cards of a light scheme take
     // the accent's colour instead of a plain white. A grey accent: white
     const QColor accent = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);
     if (accent.hslSaturationF() < 0.15) {
         return QColor(255, 255, 255);
     }
-    const qreal t = 0.12;
+    const qreal t = 0.07;
     return QColor::fromRgbF(1.0 - t + t * accent.redF(), 1.0 - t + t * accent.greenF(), 1.0 - t + t * accent.blueF());
 }
 
