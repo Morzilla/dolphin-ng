@@ -687,7 +687,7 @@ public:
         m_trailing->setObjectName(QStringLiteral("ngTrailing"));
         auto *trailing = new QHBoxLayout(m_trailing);
         trailing->setContentsMargins(4, 0, 0, 0);
-        trailing->setSpacing(2);
+        trailing->setSpacing(6); // (the same gap between the pills and the flat icons: 2 px set the pills against each other)
         m_trailing->hide();
         row->addWidget(m_trailing, 0, Qt::AlignTop);
     }
@@ -1118,9 +1118,11 @@ public:
             auto *button = new QToolButton(m_trailing);
             button->setDefaultAction(action);
             button->setAutoRaise(true);
-            // the names that the tool bar showed beside the icon stay (Split), the others are icons
-            button->setToolButtonStyle(action->priority() == QAction::LowPriority || action->iconText().isEmpty() ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextBesideIcon);
-            button->setProperty("ngPill", button->toolButtonStyle() == Qt::ToolButtonTextBesideIcon); // (Split: a pill; the icons stay flat)
+            // icons, the names in the tooltips (room for the sorting); with BAR_NAMES=on those the tool bar showed with a
+            // name (new folder, split) show it again. Either way they keep their pill, the others stay flat
+            const bool named = action->priority() != QAction::LowPriority && !action->iconText().isEmpty();
+            button->setToolButtonStyle(named && ngSetting("BAR_NAMES").toLower() == QLatin1String("on") ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
+            button->setProperty("ngPill", named);
             button->setIconSize(QSize(20, 20));
             if (action->menu()) {
                 button->setPopupMode(QToolButton::InstantPopup);

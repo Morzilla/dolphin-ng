@@ -21,6 +21,8 @@
 #include <KAboutData>
 #include <KConfigGui>
 #include <KCrash>
+#include <KSharedConfig>
+#include <KConfigGroup>
 #include <KDBusService>
 #include <KIO/PreviewJob>
 #include <KIconTheme>
@@ -39,6 +41,9 @@
 #include <cstdio>
 #include <QCommandLineParser>
 #include <QDBusConnection>
+#include <QStandardPaths>
+#include <QRegularExpression>
+#include <QFile>
 #include <QDBusConnectionInterface>
 #include <QSessionManager>
 #include <QTimer>
@@ -267,6 +272,32 @@ int main(int argc, char **argv)
     if (splitView && urls.size() < 2) {
         // Split view does only make sense if we have at least 2 URLs
         urls.append(urls.last());
+    }
+
+    // dolphin-ng: Stash left the default tool bar on 2026-11-18, but a tool bar saved before (the installer copies the
+    // default the first time) still had it: taken off once. Added again by hand afterwards, it stays.
+    {
+        KConfigGroup ng(KSharedConfig::openConfig(), QStringLiteral("DolphinNG"));
+        if (!ng.readEntry("StashOffToolbar", false)) {
+            QFile file(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/kxmlgui5/dolphin/dolphinui.rc"));
+            if (file.open(QIODevice::ReadOnly)) {
+                const QString text = QString::fromUtf8(file.readAll());
+                file.close();
+                const int start = text.indexOf(QRegularExpression(QStringLiteral("<ToolBar[^>]*name=[\"']mainToolBar[\"']")));
+                const int end = start < 0 ? -1 : text.indexOf(QStringLiteral("</ToolBar>"), start);
+                if (end > start) {
+                    QString bar = text.mid(start, end - start);
+                    const int before = bar.size();
+                    bar.remove(QRegularExpression(QStringLiteral("\\s*<Action\\s+name=[\"']split_stash[\"']\\s*/>")));
+                    if (bar.size() != before && file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                        file.write((text.left(start) + bar + text.mid(end)).toUtf8());
+                        file.close();
+                    }
+                }
+            }
+            ng.writeEntry("StashOffToolbar", true);
+            ng.sync();
+        }
     }
 
     DolphinMainWindow *mainWindow = new DolphinMainWindow();
