@@ -1147,7 +1147,7 @@ DolphinMainWindow::DolphinMainWindow()
             macRow->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
             macRow->setMinimumHeight(38); // (as tall as the row: its place in it is this layout's to say, not the tool bar's)
             auto *box = new QHBoxLayout(macRow);
-            box->setContentsMargins(0, 4, 0, 0); // (the tabs 8 px under the window's top edge, about as much under them to the panels)
+            box->setContentsMargins(0, 0, 0, 6); // (as much room above the tabs, from the window's top edge, as under them to the panels: 11 px)
             box->setSpacing(0);
             box->addWidget(leftButtons, 0, Qt::AlignVCenter);
             box->addWidget(topBar, 0, Qt::AlignVCenter); // (the sidebar's button goes before it, see ngPlaceSidebarToggle)
@@ -2044,7 +2044,9 @@ void DolphinMainWindow::ngStyleTitleRow()
     track->setColours(fill, edge);
     const QString onRgba = QStringLiteral("rgba(%1, %2, %3, %4)").arg(on.red()).arg(on.green()).arg(on.blue()).arg(QString::number(on.alphaF(), 'f', 3));
     const QString sheet = QStringLiteral("QTabBar { background: transparent; }"
-                                         "QTabBar::tab { background: transparent; border: none; border-radius: 11px; margin: 2px 1px;"
+                                         // (no margin above and below the tab: the track's veil showed round the current tab as a light
+                                         // rim, white on Aurora's light glass)
+                                         "QTabBar::tab { background: transparent; border: none; border-radius: 11px; margin: 0px 1px;"
                                          " padding: 2px 2px 2px 10px; min-height: 18px; color: %1; }"
                                          "QTabBar::tab:first { margin-left: 2px; } QTabBar::tab:last { margin-right: 2px; }"
                                          "QTabBar::tab:hover:!selected { background: %2; }"
