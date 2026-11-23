@@ -573,6 +573,44 @@ private:
     std::function<void()> m_function;
 };
 
+// dolphin-ng: the cross inside a pill button (the filter's): drawn in the text colour the button has now (white on
+// the accent while the filter is on), a soft disc under the pointer
+class NgPillCross : public QAbstractButton
+{
+public:
+    explicit NgPillCross(QWidget *pill)
+        : QAbstractButton(pill)
+        , m_pill(pill)
+    {
+        setAttribute(Qt::WA_Hover);
+        setCursor(Qt::ArrowCursor);
+        setFocusPolicy(Qt::NoFocus);
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        QColor ink = m_pill ? m_pill->palette().color(QPalette::ButtonText) : palette().color(QPalette::ButtonText);
+        if (underMouse() || isDown()) {
+            QColor disc = ink;
+            disc.setAlphaF(isDown() ? 0.30 : 0.20);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(disc);
+            painter.drawEllipse(QRectF(rect()).adjusted(1, 1, -1, -1));
+        }
+        const QPointF c = QRectF(rect()).center();
+        const qreal r = 3.6;
+        painter.setPen(QPen(ink, 1.5, Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(c + QPointF(-r, -r), c + QPointF(r, r));
+        painter.drawLine(c + QPointF(r, -r), c + QPointF(-r, r));
+    }
+
+private:
+    QPointer<QWidget> m_pill;
+};
+
 // dolphin-ng: calls a function whenever the watched widget is resized (a child kept at its edge)
 class NgResizeFollow : public QObject
 {
@@ -1750,17 +1788,10 @@ private:
             // a filter is on: a small cross inside the button, after its arrow, takes it off (back to every item)
             // without opening the menu
             button->setProperty("ngClearable", true);
-            auto *clear = new QToolButton(button);
-            clear->setAutoRaise(true);
-            clear->setToolButtonStyle(Qt::ToolButtonIconOnly);
-            clear->setIcon(QIcon::fromTheme(QStringLiteral("window-close-symbolic"), QIcon::fromTheme(QStringLiteral("dialog-close"))));
-            clear->setIconSize(QSize(12, 12));
-            clear->setCursor(Qt::ArrowCursor);
+            auto *clear = new NgPillCross(button);
             clear->setToolTip(ngTr("Remove the filter: show every item", "Togli il filtro: mostra tutti gli elementi"));
             clear->setAccessibleName(ngTr("Remove the filter", "Togli il filtro"));
-            clear->setStyleSheet(QStringLiteral("QToolButton { border: 0; border-radius: 9px; padding: 0; background: transparent; }"
-                                                "QToolButton:hover { background: rgba(127, 127, 127, 0.28); }"));
-            connect(clear, &QToolButton::clicked, this, [this] {
+            connect(clear, &QAbstractButton::clicked, this, [this] {
                 setActive(All);
             });
             // kept at the button's right end, vertically centred, whatever its size
