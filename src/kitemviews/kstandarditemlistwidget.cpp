@@ -2918,7 +2918,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
                 }
             }
             if (typeText.isEmpty()) {
-                typeText = isDir ? i18nc("@item:intable", "Folder") : values.value("text").toString().section(QLatin1Char('.'), -1).toUpper();
+                typeText = isDir ? ngTr("Folder", "Cartella") : values.value("text").toString().section(QLatin1Char('.'), -1).toUpper();
             }
             chip(typeText, !m_ngObjectRow);
             if (m_ngObjectRow && isDir) {
@@ -4084,7 +4084,7 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
     }
     QString typeText = roleText("type", values);
     if (typeText.isEmpty()) {
-        typeText = isDir ? i18nc("@item:intable", "Folder") : name.section(QLatin1Char('.'), -1).toUpper();
+        typeText = isDir ? ngTr("Folder", "Cartella") : name.section(QLatin1Char('.'), -1).toUpper();
     }
     const QString permissions = roleText("permissions", values); // the role holds a list: the string and the bits
     const QString owner = values.value("owner").toString();
