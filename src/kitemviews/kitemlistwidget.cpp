@@ -1671,6 +1671,7 @@ void ngSetAurora(bool aurora)
 static int s_ngAuroraPanel = 7;
 static int s_ngAuroraButton = 7;
 static bool s_ngAuroraFull = false;
+static bool s_ngAccentTint = true; // Breeze NG's "Text and light surfaces tinged by the accent" (AccentTint)
 
 static int s_ngTextShadow = -1; // -1: not read yet
 static int s_ngAuroraBodyOpacity = 60;
@@ -1808,6 +1809,7 @@ void ngLoadAuroraSettings()
     s_ngAuroraPanel = qBound(0, common.readEntry("AuroraPanelVeil", 7), 40);
     s_ngAuroraButton = qBound(0, common.readEntry("AuroraButtonVeil", 7), 40);
     s_ngAuroraFull = common.readEntry("AuroraFullSelection", false);
+    s_ngAccentTint = common.readEntry("AccentTint", true);
 }
 
 qreal ngAuroraVeilAlpha(bool dark, bool button)
@@ -1820,7 +1822,7 @@ QColor ngAuroraFrost(bool button)
     // white with a tinge of the accent, as Breeze NG's frost: the panels of a light scheme 12 %, the fields, pills and
     // buttons on them 15 % (the panels have the glass darkening them). A grey accent: white
     const QColor accent = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);
-    if (accent.hslSaturationF() < 0.15) {
+    if (accent.hslSaturationF() < 0.15 || !s_ngAccentTint) {
         return QColor(255, 255, 255);
     }
     const qreal t = button ? 0.15 : 0.12;
@@ -1831,7 +1833,7 @@ QColor ngAuroraTinted(const QColor &colour, qreal amount)
 {
     // (Aurora on a light scheme only: elsewhere the colour as it is)
     const QColor accent = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);
-    if (!ngAurora() || ngIsDark(QGuiApplication::palette()) || accent.hslSaturationF() < 0.15) {
+    if (!ngAurora() || ngIsDark(QGuiApplication::palette()) || accent.hslSaturationF() < 0.15 || !s_ngAccentTint) {
         return colour;
     }
     QColor out = QColor::fromRgbF(colour.redF() * (1 - amount) + accent.redF() * amount, colour.greenF() * (1 - amount) + accent.greenF() * amount,
