@@ -1728,7 +1728,7 @@ private:
             clear->setAutoRaise(true);
             clear->setProperty("ngPill", true);
             clear->setToolButtonStyle(Qt::ToolButtonIconOnly);
-            clear->setIcon(QIcon::fromTheme(QStringLiteral("edit-clear-symbolic"), QIcon::fromTheme(QStringLiteral("window-close"))));
+            clear->setIcon(QIcon::fromTheme(QStringLiteral("window-close-symbolic"), QIcon::fromTheme(QStringLiteral("dialog-close"))));
             clear->setIconSize(QSize(14, 14));
             clear->setToolTip(ngTr("Remove the filter: show every item", "Togli il filtro: mostra tutti gli elementi"));
             clear->setAccessibleName(ngTr("Remove the filter", "Togli il filtro"));
