@@ -1207,7 +1207,15 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
         }
     }
 
-    painter->setPen(m_additionalInfoTextColor);
+    // dolphin-ng: the Details view's columns are read across the row, not glanced at under a name: nearly the text's own
+    // tone (the dimmed mix of text and base lost its contrast on the veiled rows of a dark scheme)
+    QColor infoInk = m_additionalInfoTextColor;
+    if (m_ngDetailsRow && !m_customTextColor.isValid() && !isSelected()) {
+        infoInk = styleOption().palette.color(QPalette::Text);
+        infoInk.setAlphaF(0.88);
+        infoInk = ngHaloInk(infoInk, styleOption().palette);
+    }
+    painter->setPen(infoInk);
     painter->setFont(m_customizedFont);
 
     const bool ngActionsShown = ngRow && m_ngActions && m_ngActions->isVisible();
@@ -1219,7 +1227,7 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
         if (ngHalo) {
             ngPaintTextHalo(
                 painter,
-                m_additionalInfoTextColor,
+                infoInk,
                 [&](const QPointF &offset) {
                     painter->drawStaticText(textInfo->pos + offset, textInfo->staticText);
                 },
@@ -1673,7 +1681,10 @@ QColor KStandardItemListWidget::textColor(const QWidget &widget) const
         }
     }
 
-    const QPalette::ColorGroup group = isActiveWindow() && widget.hasFocus() ? QPalette::Active : QPalette::Inactive;
+    // dolphin-ng: the drawn rows keep the active text colour when the view has no focus: the colour scheme's inactive
+    // effect faded the names, and on the veiled rows of a dark scheme they were hard to read
+    const bool ngRows = m_layout == DetailsLayout && ngTwoLineList(this);
+    const QPalette::ColorGroup group = (isActiveWindow() && widget.hasFocus()) || ngRows ? QPalette::Active : QPalette::Inactive;
     const QPalette::ColorRole role = normalTextColorRole();
     return styleOption().palette.color(group, role);
 }

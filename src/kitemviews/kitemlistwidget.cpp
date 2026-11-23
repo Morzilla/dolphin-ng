@@ -2064,8 +2064,13 @@ void KItemListWidget::paint(QPainter *painter, const QStyleOptionGraphicsItem *o
         painter->setPen(Qt::NoPen);
         const bool dark = ngIsDark(m_styleOption.palette);
         if (ngAurora()) {
-            // Breeze NG Aurora: a light veil on the window's glass, no lit edge
-            painter->setBrush(ngAuroraVeil(dark));
+            // Breeze NG Aurora: a light veil on the window's glass, no lit edge (half as dense in the Details view on a
+            // dark scheme: its columns of light text are read on it)
+            QColor veil = ngAuroraVeil(dark);
+            if (dark && ngRowColumns(this)) {
+                veil.setAlphaF(veil.alphaF() * 0.5);
+            }
+            painter->setBrush(veil);
             if (!dark) {
                 painter->setPen(QPen(QColor(255, 255, 255, 140), 1)); // frost has a bright hairline edge
                 painter->drawRoundedRect(card.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8);
