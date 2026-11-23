@@ -2016,7 +2016,7 @@ void NgInfoView::restyle()
     // disabled labels any more: the widget style leaves disabled text without its shadow, and over a white window
     // behind the glass they vanished
     QColor captionInk = palette.color(QPalette::Disabled, QPalette::WindowText);
-    if (ngTextHalo()) {
+    if (ngTextHalo() || ngSidebarHalo()) { // (Aurora's glass, or the panels' own glass on live blur)
         // (on glass that may show white behind: three quarters of the text's colour, solid; the disabled colour was too
         // faint to read even with its shadow)
         captionInk = palette.color(QPalette::Active, QPalette::WindowText);
