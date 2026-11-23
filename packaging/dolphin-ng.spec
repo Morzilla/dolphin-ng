@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      dfe1cdd006e3e602d1799a5a9912aff527cab6d1
+%global commit      d91a1e751171851911b334db4fea544a36a55ba0
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611221342
+%global snapdate    202611231116
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -130,6 +130,12 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Mon Nov 23 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611231116gitd91a1e7-1
+- Title bar: only the window buttons of KWin's Titlebar Buttons layout, in its order (#12)
+- Side panels easier to resize: a wider hold on the edge with the view
+- Sort bar: New Folder and Split as icons (an option shows the names), Stash off old saved tool bars
+- Stock Breeze: window gradient, cardless panels, one style for the location row; tags as ribbons and pills; Information panel with the name on top and a ring for folder contents
+
 * Sun Nov 22 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611221342gitdfe1cdd-1
 - Fix a crash after saving the tool bar configuration (#10)
 - Information panel: a band per kind of file over the preview, videos play inside it, PDF pages turn, folders list their first items
