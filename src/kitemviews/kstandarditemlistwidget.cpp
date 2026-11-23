@@ -3165,6 +3165,76 @@ void KStandardItemListWidget::drawPixmap(QPainter *painter, const QPixmap &pixma
 
 void KStandardItemListWidget::drawSiblingsInformation(QPainter *painter)
 {
+    // dolphin-ng: over the drawn rows the tree is drawn here, softly: nothing at the first level (the style joined every
+    // top-level row with an L of hairline that led nowhere, over the row's card); below it, thin faint lines down from
+    // the parent, a rounded bend into each child, and the expansion arrow as a small chevron
+    if (m_layout == DetailsLayout && ngTwoLineList(this) && layoutDirection() == Qt::LeftToRight) {
+        const QBitArray siblings = siblingsInformation();
+        const int own = siblings.count() - 1; // the item's own level; 0: the first level
+        const qreal h = size().height();
+        const qreal step = h; // one level further in
+        const qreal mid = h / 2.0;
+        const qreal ownX = (m_expansionArea.left() + m_expansionArea.right()) / 2.0; // the expansion arrow
+        // where the tile is (as paint() places it): a level's children hang from under the centre of its tile
+        const bool openRows = ngRowStyle() == NgRowStyle::Open;
+        const QRectF rowRect = openRows ? selectionRectFull() : selectionRectFull().adjusted(3, 3, -3, -3);
+        const qreal tileLeft = rowRect.left() + (openRows ? 16 : 10) + (m_ngDetailsRow ? ngExpansionIndent() : 0) + 3;
+        const qreal side = m_ngCompactRow ? h - 10 : h - 18;
+        const qreal tileOffset = tileLeft + side / 2.0 - ownX; // from the arrow to the tile's centre
+        auto column = [&](int level) { // the line that joins the children of the level above `level`
+            return qRound(ownX - (own - level + 1) * step + tileOffset) + 0.5;
+        };
+        QColor lineColour = styleOption().palette.color(QPalette::Text);
+        lineColour.setAlphaF(0.22);
+        QColor arrowColour = styleOption().palette.color(QPalette::Text);
+        arrowColour.setAlphaF(0.72);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setBrush(Qt::NoBrush);
+        painter->setPen(QPen(lineColour, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        // the parents' lines: through the row while that parent has more children below
+        for (int level = 1; level < own; ++level) {
+            if (siblings.at(level)) {
+                painter->drawLine(QPointF(column(level), 0), QPointF(column(level), h));
+            }
+        }
+        const bool expandable = m_isExpandable;
+        if (own >= 1) {
+            // down from the parent's tile and a rounded bend into this item (to its arrow, for a folder); on, if more
+            // of the parent's children follow
+            const qreal x = column(own);
+            const qreal end = expandable ? ownX - 7 : tileLeft - 2;
+            const qreal r = qMin(qreal(7), qMin(mid - 2, (end - x) / 2));
+            QPainterPath bend;
+            bend.moveTo(x, 0);
+            bend.lineTo(x, mid - r);
+            bend.quadTo(x, mid, x + r, mid);
+            bend.lineTo(end, mid);
+            painter->drawPath(bend);
+            if (siblings.at(own)) {
+                painter->drawLine(QPointF(x, mid - r), QPointF(x, h));
+            }
+        }
+        if (expandable && data().value("isExpanded").toBool()) {
+            // an open folder: its children's line starts under its tile
+            const qreal x = qRound(ownX + tileOffset) + 0.5;
+            painter->drawLine(QPointF(x, mid + side / 2.0 + 2), QPointF(x, h));
+        }
+        if (expandable) {
+            // the chevron: pointing right, down when the folder is open
+            const bool open = data().value("isExpanded").toBool();
+            const qreal a = 3.6;
+            painter->setPen(QPen(arrowColour, 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            const QPointF c(ownX, mid);
+            if (open) {
+                painter->drawPolyline(QPolygonF{c + QPointF(-a, -a / 2), c + QPointF(0, a / 2), c + QPointF(a, -a / 2)});
+            } else {
+                painter->drawPolyline(QPolygonF{c + QPointF(-a / 2, -a), c + QPointF(a / 2, 0), c + QPointF(-a / 2, a)});
+            }
+        }
+        painter->restore();
+        return;
+    }
     const int siblingSize = size().height();
     const int x = (m_expansionArea.left() + m_expansionArea.right() - siblingSize) / 2;
     QRect siblingRect(x, 0, siblingSize, siblingSize);
