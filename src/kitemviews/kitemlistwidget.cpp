@@ -1865,8 +1865,18 @@ QColor ngSelectionText(const QPalette &palette)
         };
         return 0.2126 * linear(c.redF()) + 0.7152 * linear(c.greenF()) + 0.0722 * linear(c.blueF());
     };
-    const qreal a = luminance(fill), b = luminance(text);
-    return (qMax(a, b) + 0.05) / (qMin(a, b) + 0.05) >= 2.0 ? text : ngOnAccent(fill); // (Breeze: white on its blue, 2.5:1)
+    auto contrast = [&](const QColor &c) {
+        const qreal a = luminance(fill), b = luminance(c);
+        return (qMax(a, b) + 0.05) / (qMin(a, b) + 0.05);
+    };
+    // the scheme's own colour when it reads well; otherwise whichever reads better of it and white (or near black on a
+    // pale accent). A plain 2:1 floor kept the dark slate that Breeze NG's light Glass gives the highlighted text: dark
+    // on the blue, 2.3:1, where white gives 4:1. (Breeze: white on its blue, 2.5:1, which white still wins)
+    if (contrast(text) >= 4.5) {
+        return text;
+    }
+    const QColor other = ngOnAccent(fill);
+    return contrast(other) > contrast(text) ? other : text;
 }
 
 QColor ngOnAccent(const QColor &fill)
