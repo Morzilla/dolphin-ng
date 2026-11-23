@@ -5234,6 +5234,10 @@ void DolphinMainWindow::ngMoveToolbarButtons()
         const int height = location && location->sizeHint().height() > 20 ? location->sizeHint().height() : 34;
         if (location) {
             location->setFixedHeight(height);
+            // (it shrinks, never leaves: with its own large minimum the tool bar put the whole location bar into its
+            // overflow menu at a narrow width, and it did not come back)
+            location->setMinimumWidth(fontMetrics().averageCharWidth() * 12);
+            location->setSizePolicy(QSizePolicy::Expanding, location->sizePolicy().verticalPolicy());
         }
         setProperty("_ng_row_height", height);
         // the sort bar's first item ("Sort by") starts under the back arrow, the first thing in the pill above it (at
