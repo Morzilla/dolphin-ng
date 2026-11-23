@@ -2576,6 +2576,10 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
     qreal x = firstColumnInc;
     const qreal standardY = qMax(qreal(option.padding), (widgetHeight - fontHeight) / 2.0);
 
+    // (set again below for the drawn rows: a widget that leaves them keeps no Details look of before)
+    m_ngDetailsRow = false;
+    m_ngCompactRow = false;
+    m_ngPlainRow = false;
     if (ngTwoLineList(this)) {
         // dolphin-ng, with icons:   +------+  Name                                            Date
         //                            | Icon |  Size · Type · other roles
@@ -3181,7 +3185,8 @@ void KStandardItemListWidget::drawSiblingsInformation(QPainter *painter)
     // dolphin-ng: over the drawn rows the tree is drawn here, softly: nothing at the first level (the style joined every
     // top-level row with an L of hairline that led nowhere, over the row's card); below it, thin faint lines down from
     // the parent, a rounded bend into each child, and the expansion arrow as a small chevron
-    if (m_layout == DetailsLayout && ngTwoLineList(this) && layoutDirection() == Qt::LeftToRight) {
+    // (the Details view's rows only: their tile's place is known here; the other drawn rows keep the style's branches)
+    if (m_layout == DetailsLayout && m_ngDetailsRow && ngTwoLineList(this) && layoutDirection() == Qt::LeftToRight) {
         const QBitArray siblings = siblingsInformation();
         const int own = siblings.count() - 1; // the item's own level; 0: the first level
         const qreal h = size().height();
