@@ -39,6 +39,9 @@ public:
      * case it cannot be used to wipe something drawn on top of the card.
      */
     bool paintNgGlass(QPainter &painter);
+    // dolphin-ng: the panel's card in the dock: 6 px in from every side, or (PANELS_EDGE=flush) running past the window's
+    // outer and bottom edges, so that only its inner corners are round
+    QRectF ngCardRect() const;
     /** dolphin-ng: true when the sidebar glass is off (SIDEBAR=plain) / when it shows the static image (not GLASS_MODE=live). */
     /** dolphin-ng: paints over @p rect of @p from (in its coordinates) what the main window paints under the panels: the
      *  window colour, or the style's see-through sheet with its lights under Breeze NG Aurora. Replaces what is there. */

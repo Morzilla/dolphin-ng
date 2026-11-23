@@ -967,6 +967,11 @@ DolphinMainWindow::DolphinMainWindow()
             }
         }
         ngUpdateAurora();
+        setContentsMargins(0, 0, 0, m_ngAurora && !ngPanelsFlush() ? 6 : 0); // (PANELS_EDGE may have changed)
+        for (DolphinDockWidget *dock : findChildren<DolphinDockWidget *>()) {
+            dock->update();
+        }
+        m_ngBlurSet = false;
         ngUpdateBlurRegion(); // the blur follows the look of the sidebar (only the live one asks for it)
     };
     applyNgWindowSettings();
@@ -1660,7 +1665,9 @@ void DolphinMainWindow::ngUpdateBlurRegion()
         const auto docks = findChildren<DolphinDockWidget *>();
         for (const DolphinDockWidget *dock : docks) {
             if (dock->isVisible() && !dock->isFloating()) {
-                region += QRect(dock->mapTo(this, QPoint(6, 6)), dock->size() - QSize(12, 12));
+                // (the card, as the panel paints it: flush with the window's edges with PANELS_EDGE=flush)
+                const QRect card = dock->ngCardRect().toAlignedRect() & dock->rect();
+                region += card.translated(dock->mapTo(this, QPoint(0, 0)));
             }
         }
     }
@@ -2050,7 +2057,7 @@ void DolphinMainWindow::ngUpdateAurora()
     if (aurora != m_ngAurora) {
         m_ngAurora = aurora;
         ngSetAurora(aurora);
-        setContentsMargins(0, 0, 0, aurora ? 6 : 0); // a little air under the sidebar and the view, inside the glass
+        setContentsMargins(0, 0, 0, aurora && !ngPanelsFlush() ? 6 : 0); // a little air under the sidebar and the view, inside the glass
         const auto all = findChildren<QWidget *>();
         for (QWidget *child : all) {
             child->update(); // rims come and go everywhere

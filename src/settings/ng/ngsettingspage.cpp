@@ -1170,6 +1170,7 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
              {{ngTr("None", "Nessuno"), {}}, {ngTr("Diagonal", "Diagonale"), {}}, {ngTr("Thin line", "Linea sottile"), {}}, {ngTr("Bevel", "Smusso"), {}},
               {ngTr("Glow", "Alone"), {}}, {ngTr("Light from above", "Luce dall'alto"), {}}},
              6);
+    m_panelsFlush = toggle(ngTr("The sidebar and the Information panel against the window's edges", "Barra laterale e pannello informazioni attaccati ai bordi della finestra"));
     heading(ngTr("Sections", "Sezioni"));
     note(ngTr("Drag them into their order: what is above the places stays at the top of the panel, what is below at its foot. The check shows or hides a section.",
               "Trascinale nel loro ordine: quello che sta sopra le risorse resta in alto nel pannello, quello sotto in fondo. La spunta mostra o nasconde una sezione."));
@@ -1469,7 +1470,7 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     quickSideRow->setEnabled(m_quickView->isChecked());
 
     connect(m_dialogQuick, &QCheckBox::toggled, this, &NgSettingsPage::changed);
-    for (QCheckBox *box : {m_sectionsFollow, m_glassPanel, m_motion, m_twoLines, m_icons, m_ago, m_tiles, m_hoverPreview, m_folderSizes, m_rowDates, m_float, m_sidebarFilters, m_sidebarPinned, m_rowWash, m_folderContentDate}) {
+    for (QCheckBox *box : {m_panelsFlush, m_sectionsFollow, m_glassPanel, m_motion, m_twoLines, m_icons, m_ago, m_tiles, m_hoverPreview, m_folderSizes, m_rowDates, m_float, m_sidebarFilters, m_sidebarPinned, m_rowWash, m_folderContentDate}) {
         connect(box, &QCheckBox::toggled, this, &NgSettingsPage::changed);
     }
     connect(m_hoverDelay, &QSpinBox::valueChanged, this, &NgSettingsPage::changed);
@@ -1670,6 +1671,7 @@ void NgSettingsPage::loadSettings()
                      ngSetting("SIDEBAR_FILTERS").toLower() != QLatin1String("hide"), ngSetting("SIDEBAR_DISKS").toLower() != QLatin1String("hide"));
     fillDevices();
     m_sidebarFilters->setChecked(ngSetting("SIDEBAR_FILTERS").toLower() != QLatin1String("hide"));
+    m_panelsFlush->setChecked(ngPanelsFlush());
     m_sidebarPinned->setChecked(ngSetting("SIDEBAR_PINNED").toLower() != QLatin1String("hide"));
     m_sectionsFollow->setChecked(ngSetting("SIDEBAR_FOLLOW").toLower() == QLatin1String("list"));
     m_folderContentDate->setChecked(ngSetting("SORT_FOLDERS_BY_CONTENT").toLower() != QLatin1String("off"));
@@ -1781,6 +1783,7 @@ void NgSettingsPage::applySettings()
         }
     }
     setNgSetting("SIDEBAR_FILTERS", m_sidebarFilters->isChecked() ? QString() : QStringLiteral("hide"));
+    setNgSetting("PANELS_EDGE", m_panelsFlush->isChecked() ? QStringLiteral("flush") : QString());
     setNgSetting("SIDEBAR_PINNED", m_sidebarPinned->isChecked() ? QString() : QStringLiteral("hide"));
     setNgSetting("SORT_FOLDERS_BY_CONTENT", m_folderContentDate->isChecked() ? QString() : QStringLiteral("off"));
 
@@ -1865,6 +1868,7 @@ void NgSettingsPage::restoreDefaults()
     m_folderSizes->setChecked(false);
     m_tiles->setChecked(true);
     m_sidebarFilters->setChecked(true);
+    m_panelsFlush->setChecked(false);
     m_sidebarPinned->setChecked(true);
     m_folderContentDate->setChecked(true);
     m_cards->setCurrentIndex(qMax(0, m_cards->findData(QStringLiteral("b"))));

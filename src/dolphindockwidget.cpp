@@ -5,6 +5,7 @@
  */
 
 #include "dolphindockwidget.h"
+#include <QMainWindow>
 #include <KSharedConfig>
 
 #include "dolphinplacesmodelsingleton.h"
@@ -570,6 +571,26 @@ void DolphinDockWidget::paintEvent(QPaintEvent *event)
     paintNgGlass(painter);
 }
 
+QRectF DolphinDockWidget::ngCardRect() const
+{
+    const QRectF inset = QRectF(rect()).adjusted(6, 6, -6, -6);
+    auto *window = qobject_cast<QMainWindow *>(parentWidget());
+    if (!ngPanelsFlush() || !window || isFloating()) {
+        return inset;
+    }
+    // past the edges by more than the corners' radius: the round corners there fall outside the panel, the card meets
+    // the window's side and foot (the window's own rounded corner cuts the last one)
+    const qreal past = 16;
+    switch (window->dockWidgetArea(const_cast<DolphinDockWidget *>(this))) {
+    case Qt::LeftDockWidgetArea:
+        return QRectF(rect()).adjusted(-past, 6, -6, past);
+    case Qt::RightDockWidgetArea:
+        return QRectF(rect()).adjusted(6, 6, past, past);
+    default:
+        return inset;
+    }
+}
+
 bool DolphinDockWidget::paintNgGlass(QPainter &painter)
 {
     if (ngGlassPlain() || isFloating()) {
@@ -578,7 +599,7 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
     bool opaque = true;
     bool frosted = false; // the card shows the wallpaper (a picture of it, or the live blur)
     painter.setRenderHint(QPainter::Antialiasing);
-    const QRectF card = QRectF(rect()).adjusted(6, 6, -6, -6);
+    const QRectF card = ngCardRect();
     const qreal radius = 12;
 
     painter.setPen(Qt::NoPen);

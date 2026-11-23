@@ -71,6 +71,7 @@ private:
     QList<std::pair<QString, QCheckBox *>> m_deviceBoxes; // device udi, its box
     void fillDevices();
     QCheckBox *m_sidebarFilters;
+    QCheckBox *m_panelsFlush = nullptr; // the panels against the window's edges (PANELS_EDGE=flush)
     QCheckBox *m_sidebarPinned;
     QCheckBox *m_sectionsFollow = nullptr; // the sections below the places right after the list (SIDEBAR_FOLLOW)
     QCheckBox *m_folderContentDate;
