@@ -2084,6 +2084,10 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
     if (qEnvironmentVariableIsSet("DOLPHIN_NG_TEST_INFO")) {
         QTimer::singleShot(1200, this, [this] {
             if (auto *dock = findChild<QDockWidget *>(QStringLiteral("infoDock"))) {
+                if (qEnvironmentVariable("DOLPHIN_NG_TEST_INFO") == QLatin1String("0")) {
+                    dock->hide(); // (0: hidden, whatever the saved state says)
+                    return;
+                }
                 dock->show();
                 if (const int width = qEnvironmentVariableIntValue("DOLPHIN_NG_TEST_INFO"); width > 1) {
                     resizeDocks({dock}, {width}, Qt::Horizontal);
@@ -2147,10 +2151,24 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
             if (clicked) {
                 button->click();
             }
-            QTimer::singleShot(700, this, [this, button, item, out, trigger] {
+            // (the bar may build its buttons anew meanwhile: the button is watched, and the menu found among the shown
+            // windows when the button is gone)
+            QPointer<QToolButton> watched(button);
+            QTimer::singleShot(700, this, [this, watched, item, out, trigger] {
+                QToolButton *button = watched.data();
                 auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
-                if (!menu) {
+                if (!menu && button) {
                     menu = button->menu(); // the popup may not be "active" when the window is not focused
+                }
+                if (!menu) {
+                    for (QWidget *top : QApplication::topLevelWidgets()) {
+                        if (auto *shown = qobject_cast<QMenu *>(top); shown && shown->isVisible()) {
+                            menu = shown;
+                        }
+                    }
+                }
+                if (!button) {
+                    button = watched.data();
                 }
                 if (!menu || !menu->isVisible()) {
                     QFile log(out + QStringLiteral(".log"));
@@ -2165,7 +2183,14 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
                         menu->setActiveAction(a);
                     }
                 }
-                QTimer::singleShot(300, this, [this, button, menu, out, trigger] {
+                QPointer<QToolButton> stillThere(button);
+                QPointer<QMenu> shownMenu(menu);
+                QTimer::singleShot(300, this, [this, stillThere, shownMenu, out, trigger] {
+                    QToolButton *button = stillThere.data();
+                    QMenu *menu = shownMenu.data();
+                    if (!menu || !button) {
+                        return;
+                    }
                     menu->grab().save(out);
                     const QRect b(button->mapTo(this, QPoint(0, 0)), button->size());
                     // the button too, as it looks with its menu open (it joins the menu), with a little of the bar around

@@ -104,7 +104,7 @@ input, Dolphin NG reads these environment variables:
 | `DOLPHIN_NG_DEMO_MENU_HOLD`| ms the demo menu stays open                                                   |
 | `DOLPHIN_NG_TEST_DOCK_WIDTH`| the sidebar widened to (or narrowed step by step down to) that width          |
 | `DOLPHIN_NG_TEST_HIDE_PLACES`| the sidebar button pressed once the window is up                             |
-| `DOLPHIN_NG_TEST_INFO`     | the Information panel shown once the window is up (a number: also its width) |
+| `DOLPHIN_NG_TEST_INFO`     | the Information panel shown once the window is up (a number: also its width; 0: hidden) |
 | `DOLPHIN_NG_TEST_TOOLBAR_SAVE` | the tool bar configuration applied again twice, as saving it from Configure Toolbars does |
 | `DOLPHIN_NG_TEST_BUTTONS`  | the title bar's window buttons from "left|right" (KWin's letters: I minimize, A maximize, X close) in place of KWin's layout |
 | `DOLPHIN_NG_THEME_BUTTONS` | `on` or `off`: the title bar's window buttons drawn by the window decoration's theme (KWin's preview module) or by Dolphin NG; by default the theme's, except with Breeze NG |
