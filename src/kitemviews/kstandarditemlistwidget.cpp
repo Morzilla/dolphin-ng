@@ -893,7 +893,8 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
         // the file type as a watermark: large, faint letters at the start of the row, fading out under the name
         const bool openRows = ngRowStyle() == NgRowStyle::Open || m_ngPlainRow;
         const QRectF rowRect = openRows ? selectionRectFull() : selectionRectFull().adjusted(3, 3, -3, -3);
-        qreal x0 = rowRect.left() + (openRows ? 16 : 10) + (m_ngDetailsRow ? ngExpansionIndent() : 0); // (Details: after the tree)
+        // (Details: after the tree; plain, the icon close to the view's edge)
+        qreal x0 = rowRect.left() + (m_ngPlainRow ? 4 : openRows ? 16 : 10) + (m_ngDetailsRow ? ngExpansionIndent() : 0);
         QFont watermarkFont(m_customizedFont);
         watermarkFont.setPixelSize(qMax(12, qRound(size().height() * 0.50)));
         watermarkFont.setWeight(QFont::Black);
@@ -2602,8 +2603,13 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         if (noIcons) {
             switch (rowMark) {
             case NgMark::Tile:
-                // (the Details view: after the expansion arrow and the tree lines of the parents, as the drawing)
-                left = leftPadding() + 13 + (columns ? ngExpansionIndent() : 0) + (compact ? widgetHeight - 10 : widgetHeight - 18) + (compact ? 12 : 16);
+                // (the Details view: after the expansion arrow and the tree lines of the parents, as the drawing; plain,
+                // right after the file's own icon, which stands close to the view's edge: see paint())
+                if (columns && ngDetailsPlain()) {
+                    left = leftPadding() + 7 + ngExpansionIndent() + qMax(16, qRound(widgetHeight * 0.62)) + 12;
+                } else {
+                    left = leftPadding() + 13 + (columns ? ngExpansionIndent() : 0) + (compact ? widgetHeight - 10 : widgetHeight - 18) + (compact ? 12 : 16);
+                }
                 break;
             case NgMark::Pill:
                 left = leftPadding() + 13 + fontHeight * 4.8 + 16;
@@ -3185,7 +3191,7 @@ void KStandardItemListWidget::drawSiblingsInformation(QPainter *painter)
         // where the tile is (as paint() places it): a level's children hang from under the centre of its tile
         const bool openRows = ngRowStyle() == NgRowStyle::Open || m_ngPlainRow;
         const QRectF rowRect = openRows ? selectionRectFull() : selectionRectFull().adjusted(3, 3, -3, -3);
-        const qreal tileLeft = rowRect.left() + (openRows ? 16 : 10) + (m_ngDetailsRow ? ngExpansionIndent() : 0) + 3;
+        const qreal tileLeft = rowRect.left() + (m_ngPlainRow ? 4 : openRows ? 16 : 10) + (m_ngDetailsRow ? ngExpansionIndent() : 0) + 3;
         const qreal side = m_ngPlainRow && !m_ngIcon.isNull() ? m_ngIcon.width() / m_ngIcon.devicePixelRatio() : m_ngCompactRow ? h - 10 : h - 18;
         const qreal tileOffset = tileLeft + side / 2.0 - ownX; // from the arrow to the tile's centre
         auto column = [&](int level) { // the line that joins the children of the level above `level`
