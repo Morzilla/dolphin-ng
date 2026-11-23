@@ -2056,6 +2056,16 @@ private:
                 button->setFixedHeight(m_rowHeight);
             }
         }
+        // (the buttons on the right as tall as the row, centred in it: with only the menu left, in the narrowest
+        // window, the box shrank to the menu's own height at the top of the row and the menu sat higher than the rest)
+        if (m_trailing) {
+            m_trailing->setMinimumHeight(m_rowHeight);
+            m_trailing->layout()->setAlignment(Qt::AlignVCenter);
+            for (int i = 0; i < m_trailing->layout()->count(); ++i) {
+                m_trailing->layout()->itemAt(i)->setAlignment(Qt::AlignVCenter);
+            }
+            m_trailing->layout()->invalidate();
+        }
         if (m_sortPill) {
             m_sortPill->setFixedHeight(m_rowHeight);
             const auto segments = m_sortPill->findChildren<QToolButton *>();
