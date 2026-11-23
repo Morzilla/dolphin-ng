@@ -573,6 +573,28 @@ private:
     std::function<void()> m_function;
 };
 
+// dolphin-ng: calls a function whenever the watched widget is resized (a child kept at its edge)
+class NgResizeFollow : public QObject
+{
+public:
+    NgResizeFollow(QWidget *target, std::function<void()> function)
+        : QObject(target)
+        , m_function(std::move(function))
+    {
+        target->installEventFilter(this);
+    }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() == QEvent::Resize) {
+            m_function();
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    std::function<void()> m_function;
+};
+
 class NgOpenSheet : public QObject
 {
 public:
@@ -869,6 +891,7 @@ private:
                                      // the sort pill, round like it: every control of the bar the same kind of thing
                                      "QToolButton[ngPill=\"true\"] { background: rgba(%1, 0.05); border-color: rgba(%1, 0.09); border-radius: 13px; padding-left: 10px; }"
                                      "QToolButton[ngPill=\"true\"][toolButtonStyle=\"0\"] { padding-left: 7px; padding-right: 7px; }" // (an icon alone: centred)
+                                     "QToolButton[ngPill=\"true\"][ngClearable=\"true\"] { padding-right: 30px; }" // (the filter's cross inside it)
                                      "QToolButton[ngPill=\"true\"]:hover { background: rgba(%1, 0.10); }"
                                      "QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }"
                                      "QWidget#ngTrailing QToolButton::menu-indicator { image: none; width: 0px; }"
@@ -1723,19 +1746,29 @@ private:
         m_filters = button;
         m_flow->addWidget(button);
         if (m_active != All) {
-            // a filter is on: a small cross beside it takes it off (back to every item), without opening the menu
-            auto *clear = new QToolButton(this);
+            // a filter is on: a small cross inside the button, after its arrow, takes it off (back to every item)
+            // without opening the menu
+            button->setProperty("ngClearable", true);
+            auto *clear = new QToolButton(button);
             clear->setAutoRaise(true);
-            clear->setProperty("ngPill", true);
             clear->setToolButtonStyle(Qt::ToolButtonIconOnly);
             clear->setIcon(QIcon::fromTheme(QStringLiteral("window-close-symbolic"), QIcon::fromTheme(QStringLiteral("dialog-close"))));
-            clear->setIconSize(QSize(14, 14));
+            clear->setIconSize(QSize(12, 12));
+            clear->setCursor(Qt::ArrowCursor);
             clear->setToolTip(ngTr("Remove the filter: show every item", "Togli il filtro: mostra tutti gli elementi"));
             clear->setAccessibleName(ngTr("Remove the filter", "Togli il filtro"));
+            clear->setStyleSheet(QStringLiteral("QToolButton { border: 0; border-radius: 9px; padding: 0; background: transparent; }"
+                                                "QToolButton:hover { background: rgba(127, 127, 127, 0.28); }"));
             connect(clear, &QToolButton::clicked, this, [this] {
                 setActive(All);
             });
-            m_flow->addWidget(clear);
+            // kept at the button's right end, vertically centred, whatever its size
+            auto place = [button, clear] {
+                const int side = 18;
+                clear->setGeometry(button->width() - side - 7, (button->height() - side) / 2, side, side);
+            };
+            new NgResizeFollow(button, place);
+            place();
         }
 
 
