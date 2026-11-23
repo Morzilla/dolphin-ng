@@ -679,6 +679,103 @@ private:
     int m_startWidth = 0;
 };
 
+// dolphin-ng: the side panels keep the width the user gave them. Narrowing the window takes room from them too, and
+// when it widens again QMainWindow gives all the new room to the view: the sidebar stayed narrow, its places cut to
+// "…" (and a window closed while narrow came back so). The width a panel is dragged to is remembered (dolphinrc
+// [DolphinNG] DockWidth_<panel>; the sidebar's default is a comfortable 36 characters), and the panel grows back
+// towards it when the window is shown and whenever it widens, never past a third of the window.
+class NgDockMemory : public QObject
+{
+public:
+    NgDockMemory(QMainWindow *window, const QList<QDockWidget *> &docks)
+        : QObject(window)
+        , m_window(window)
+    {
+        window->installEventFilter(this);
+        const KConfigGroup group = KSharedConfig::openConfig()->group(QStringLiteral("DolphinNG"));
+        for (QDockWidget *dock : docks) {
+            dock->installEventFilter(this);
+            m_docks.append(dock);
+            const int fallback = dock->objectName() == QLatin1String("placesDock") ? window->fontMetrics().averageCharWidth() * 36 : 0;
+            m_wanted[dock] = group.readEntry(QStringLiteral("DockWidth_%1").arg(dock->objectName()).toUtf8().constData(), fallback);
+        }
+        m_windowWidth = window->width();
+        // (the panels are resized after the window, inside its resize and again a turn of the event loop later when
+        // QMainWindow lays them out: a short while is let pass after the window's last resize before growing them)
+        m_settle.setSingleShot(true);
+        m_settle.setInterval(300);
+        connect(&m_settle, &QTimer::timeout, this, [this] {
+            if (m_grew) {
+                m_grew = false;
+                grow();
+            }
+        });
+        m_save.setSingleShot(true);
+        m_save.setInterval(600);
+        connect(&m_save, &QTimer::timeout, this, [this] {
+            KConfigGroup group = KSharedConfig::openConfig()->group(QStringLiteral("DolphinNG"));
+            for (auto it = m_wanted.constBegin(); it != m_wanted.constEnd(); ++it) {
+                if (it.key() && it.value() > 0) {
+                    group.writeEntry(QStringLiteral("DockWidth_%1").arg(it.key()->objectName()).toUtf8().constData(), it.value());
+                }
+            }
+            group.sync();
+        });
+    }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == m_window && (event->type() == QEvent::Resize || event->type() == QEvent::Show)) {
+            // shown (with the state of last time, maybe narrow) or wider: the panels grow back once it settles
+            m_grew = m_grew || event->type() == QEvent::Show || m_window->width() > m_windowWidth;
+            m_windowWidth = m_window->width();
+            m_settle.start();
+        } else if (event->type() == QEvent::Resize && !m_growing && !m_settle.isActive() && (QGuiApplication::mouseButtons() & Qt::LeftButton)) {
+            // resized with the button held, the window keeping its size: the panel's edge dragged
+            auto *dock = qobject_cast<QDockWidget *>(watched);
+            if (dock && dock->isVisible() && !dock->isFloating() && dock->width() > 0) {
+                m_wanted[dock] = dock->width();
+                m_save.start();
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    void grow()
+    {
+        QList<QDockWidget *> docks;
+        QList<int> sizes;
+        for (const QPointer<QDockWidget> &dock : std::as_const(m_docks)) {
+            if (!dock || !dock->isVisible() || dock->isFloating()) {
+                continue;
+            }
+            const Qt::DockWidgetArea area = m_window->dockWidgetArea(dock);
+            if (area != Qt::LeftDockWidgetArea && area != Qt::RightDockWidgetArea) {
+                continue;
+            }
+            const int wanted = qMin(m_wanted.value(dock, 0), m_window->width() / 3);
+            if (wanted > dock->width()) {
+                docks.append(dock);
+                sizes.append(wanted);
+            }
+        }
+        if (!docks.isEmpty()) {
+            m_growing = true;
+            m_window->resizeDocks(docks, sizes, Qt::Horizontal);
+            m_growing = false;
+        }
+    }
+
+    QMainWindow *m_window;
+    QList<QPointer<QDockWidget>> m_docks;
+    QHash<QDockWidget *, int> m_wanted;
+    int m_windowWidth = 0;
+    QTimer m_settle; // running while the window's resize is still being laid out
+    QTimer m_save;
+    bool m_grew = false;
+    bool m_growing = false;
+};
+
 // dolphin-ng: runs a function, once per turn of the event loop, whenever one of some widgets moves, is resized or shown
 class NgGeometryWatch : public QObject
 {
@@ -909,6 +1006,7 @@ DolphinMainWindow::DolphinMainWindow()
             grips.append(new NgDockGrip(this, dock));
             watched.append(dock);
         }
+        new NgDockMemory(this, findChildren<QDockWidget *>(Qt::FindDirectChildrenOnly));
         auto *watch = new NgGeometryWatch(this);
         watch->watch(watched, [this, grips] {
             for (NgDockGrip *grip : grips) {
