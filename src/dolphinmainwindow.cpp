@@ -1071,10 +1071,13 @@ DolphinMainWindow::DolphinMainWindow()
                 rightLayout = test.section(QLatin1Char('|'), 1, 1);
             }
             const bool buttonsLeft = leftLayout.contains(QLatin1Char('X'));
-            auto makeGroup = [this](const QString &layout, bool left) {
+            auto makeGroup = [this, macButtons](const QString &layout, bool left) {
                 auto *group = new QWidget(m_ngTabsToolBar);
                 auto *groupLayout = new QHBoxLayout(group);
-                groupLayout->setContentsMargins(left ? 0 : 4, 0, left ? 4 : 0, 5);
+                // (5 px under them, to line up with KWin's buttons of other windows; not as on macOS, at the left: taller
+                // than the row's room, the group made the tool bar drop its top margin and the row sat against the
+                // window's top edge)
+                groupLayout->setContentsMargins(left ? (macButtons ? 8 : 0) : 4, 0, left ? 4 : 0, macButtons ? 0 : 5);
                 groupLayout->setSpacing(2);
                 for (const QChar letter : layout) {
                     NgWindowButton *button = nullptr;
@@ -1136,22 +1139,41 @@ DolphinMainWindow::DolphinMainWindow()
             drag->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
             drag->setMinimumWidth(60);
             // (a side with none of them takes no room)
-            m_ngTabsToolBar->addWidget(leftButtons)->setVisible(leftButtons->layout()->count() > 0);
-            m_ngTitleTabsAction = m_ngTabsToolBar->addWidget(topBar); // (the sidebar's button goes before it, see ngPlaceSidebarToggle)
             m_ngMacButtons = macButtons;
-            m_ngTabsToolBar->addWidget(drag);
-            m_ngTabsToolBar->addWidget(rightButtons)->setVisible(rightButtons->layout()->count() > 0);
+            QWidget *macRow = nullptr;
+            if (macButtons) {
+                // macOS style: the whole row is one widget with a layout of its own, every part on its middle line. In
+                // the tool bar's own layout the window's buttons, the sidebar's button, the tabs and the panel's button
+                // each found a height of its own, the row against the window's top edge
+                macRow = new QWidget(m_ngTabsToolBar);
+                macRow->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+                macRow->setMinimumHeight(42); // (the row's line: its middle where the usual row has it)
+                auto *box = new QHBoxLayout(macRow);
+                box->setContentsMargins(0, 0, 0, 0);
+                box->setSpacing(0);
+                box->addWidget(leftButtons, 0, Qt::AlignVCenter);
+                box->addWidget(topBar, 0, Qt::AlignVCenter); // (the sidebar's button goes before it, see ngPlaceSidebarToggle)
+                box->addWidget(drag, 1);
+                box->addWidget(rightButtons, 0, Qt::AlignVCenter);
+                m_ngMacRowLayout = box;
+                m_ngTabsToolBar->addWidget(macRow);
+            } else {
+                m_ngTabsToolBar->addWidget(leftButtons)->setVisible(leftButtons->layout()->count() > 0);
+                m_ngTitleTabsAction = m_ngTabsToolBar->addWidget(topBar); // (the sidebar's button goes before it, see ngPlaceSidebarToggle)
+                m_ngTabsToolBar->addWidget(drag);
+                m_ngTabsToolBar->addWidget(rightButtons)->setVisible(rightButtons->layout()->count() > 0);
+            }
             // (the buttons where the decoration of every other window has them: measured against KWin's)
             // (no margin under the row, and the row no taller than a title bar: there was a wide empty band between
             // the tabs and the sidebar and location bar below them)
             m_ngTabsToolBar->setContentsMargins(buttonsLeft ? 0 : 8, 2, buttonsLeft ? 4 : 0, 0);
-            m_ngTabsToolBar->setFixedHeight(40);
+            m_ngTabsToolBar->setFixedHeight(44);
             if (QLayout *rowLayout = m_ngTabsToolBar->layout()) {
                 QMargins margins = rowLayout->contentsMargins(); // (the style's own margin of a tool bar pushed the buttons inwards)
                 buttonsLeft ? margins.setLeft(0) : margins.setRight(0);
                 rowLayout->setContentsMargins(margins);
             }
-            new NgFrameless(this, {m_ngTabsToolBar, drag, leftButtons, rightButtons});
+            new NgFrameless(this, {m_ngTabsToolBar, drag, leftButtons, rightButtons, macRow});
             QTimer::singleShot(0, this, &DolphinMainWindow::ngStyleTitleRow);
         } else {
             m_ngTabsToolBar->addWidget(topBar);
@@ -4856,9 +4878,13 @@ void DolphinMainWindow::ngPlaceSidebarToggle()
             holderLayout->setSpacing(0);
             holderLayout->addWidget(button);
             m_ngTitleToggle = button;
-            // first in the row; with the window's buttons at the left (macOS style) after them, before the tabs
-            QAction *before = m_ngMacButtons && m_ngTitleTabsAction ? m_ngTitleTabsAction.data() : m_ngTabsToolBar->actions().value(0);
-            m_ngTabsToolBar->insertWidget(before, holder);
+            // first in the row; with the window's buttons at the left (macOS style) after them, before the tabs, in that
+            // row's own layout
+            if (m_ngMacRowLayout) {
+                m_ngMacRowLayout->insertWidget(1, holder, 0, Qt::AlignVCenter);
+            } else {
+                m_ngTabsToolBar->insertWidget(m_ngTabsToolBar->actions().value(0), holder);
+            }
             auto align = [this, holder, holderLayout, button] {
                 auto *tabs = m_ngTabsToolBar ? m_ngTabsToolBar->findChild<QTabBar *>() : nullptr;
                 if (!tabs || tabs->count() == 0 || tabs->height() <= 0) {
