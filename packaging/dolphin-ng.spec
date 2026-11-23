@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      1fd97a970fb9dcdf17f6ff8fbb4f4a4f472cd8cb
+%global commit      6a80156adc0103b6a248e59daf0e29fb77f024b5
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611231855
+%global snapdate    202611232011
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -132,6 +132,9 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Mon Nov 23 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611232011git6a80156-1
+- Root as an icon inside the location bar: the Root button leaves the tool bar
+
 * Mon Nov 23 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611231855git1fd97a9-1
 - Details view: columns over the drawn rows, per folder, comfortable or compact, plain by default
 - View button: one list of views (cards, list, Details, icons)
