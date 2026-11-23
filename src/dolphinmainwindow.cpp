@@ -184,7 +184,7 @@ public:
     // paints the theme's button into @p rect; false when there is none to paint (then the caller draws its own)
     bool paint(QPainter *painter, const QRectF &rect, Slot slot, bool active)
     {
-        if (!build() || !configure()) {
+        if (m_unsupported || !build() || !configure()) {
             return false;
         }
         QQuickPaintedItem *item = m_items[active ? 1 : 0][slot];
@@ -207,6 +207,31 @@ public:
             imagePainter.setRenderHint(QPainter::Antialiasing);
             item->paint(&imagePainter);
             imagePainter.end();
+            // the item ends by tinting what it drew with its colour at alpha 127 (SourceAtop: meant for System
+            // Settings' lists, it cannot be turned off). Black is used, which only halves each pixel's colour and
+            // keeps its alpha: doubled back here, the theme's own colours return
+            bool painted = false;
+            for (int y = 0; y < image.height(); ++y) {
+                auto *line = reinterpret_cast<QRgb *>(image.scanLine(y));
+                for (int x = 0; x < image.width(); ++x) {
+                    const int alpha = qAlpha(line[x]);
+                    if (alpha == 0) {
+                        continue;
+                    }
+                    painted = true;
+                    auto undo = [alpha](int channel) {
+                        return qMin(alpha, (channel * 255 + 64) / 128);
+                    };
+                    line[x] = qRgba(undo(qRed(line[x])), undo(qGreen(line[x])), undo(qBlue(line[x])), alpha);
+                }
+            }
+            if (!painted) {
+                // a decoration that has no button of its own outside a window (Aurorae themes on some Plasma
+                // versions): nothing was drawn. The title row draws its own buttons instead, all of them
+                qCDebug(DolphinDebug) << "dolphin-ng: the window decoration drew no button outside a window, own ones drawn";
+                m_unsupported = true;
+                return false;
+            }
             cached = m_images.insert(key, image);
         }
         painter->drawImage(rect.topLeft(), *cached);
@@ -217,7 +242,37 @@ private:
     explicit NgThemeButtons(QObject *parent)
         : QObject(parent)
     {
+        // a new colour scheme: the pictures are painted again. The application's palette changes with it, and the
+        // preview clients (which read the scheme on their own) say so too, a moment apart: both lead here
+        qApp->installEventFilter(this);
+        m_refresh.setSingleShot(true);
+        m_refresh.setInterval(50);
+        connect(&m_refresh, &QTimer::timeout, this, [this] {
+            m_images.clear();
+            for (const QPointer<QWidget> &button : std::as_const(m_buttons)) {
+                if (button) {
+                    button->update();
+                }
+            }
+        });
     }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == qApp && event->type() == QEvent::ApplicationPaletteChange) {
+            m_refresh.start();
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+public:
+    // a title row button that shows these pictures: repainted when they are painted again
+    void watch(QWidget *button)
+    {
+        m_buttons.removeAll(nullptr);
+        m_buttons.append(button);
+    }
+
+private:
     // the engine and the eight buttons (inactive and active window, each slot), made once
     bool build()
     {
@@ -233,9 +288,9 @@ private:
         QString buttons;
         for (int active = 0; active < 2; ++active) {
             for (int type : {3, 4, 4, 5}) { // KDecoration3::DecorationButtonType: Minimize, Maximize (twice), Close
-                // (color: the preview tints the whole button with it, for the lists of System Settings: none here)
+                // (color: the preview tints the whole button with it at alpha 127, see paint: black, undone there)
                 buttons += QStringLiteral("    KDecoration.Button { bridge: bridgeItem.bridge; settings: settingsItem; type: %1; width: 24; height: 24; "
-                                          "color: \"transparent\" }\n")
+                                          "color: \"black\" }\n")
                                .arg(type);
             }
         }
@@ -290,6 +345,8 @@ private:
                 if (!client) {
                     return false; // (not made yet: the next paint tries again)
                 }
+                // (its paletteChanged(QPalette) has no typed signature to connect to here: by name, to the timer)
+                connect(client, SIGNAL(paletteChanged(QPalette)), &m_refresh, SLOT(start()));
                 client->setProperty("active", active == 1);
                 client->setProperty("maximizedVertically", slot == Restore);
                 client->setProperty("maximizedHorizontally", slot == Restore);
@@ -303,6 +360,9 @@ private:
     QPointer<QQuickItem> m_root;
     QQuickPaintedItem *m_items[2][Slots] = {};
     QHash<QString, QImage> m_images; // what was painted, by slot, state, size and scale
+    QList<QPointer<QWidget>> m_buttons;
+    QTimer m_refresh; // the pictures painted again (a new colour scheme)
+    bool m_unsupported = false; // the decoration drew nothing: own buttons from then on
     bool m_tried = false;
     bool m_configured = false;
 };
@@ -318,6 +378,9 @@ public:
     {
         // (an 18 px disc every 24 px, as the buttons of Breeze NG's window decoration; the theme's buttons a 24 px square)
         setFixedSize(m_theme ? 24 : 22, 26);
+        if (m_theme) {
+            NgThemeButtons::instance()->watch(this);
+        }
         setFocusPolicy(Qt::NoFocus);
         setAttribute(Qt::WA_Hover);
         setCursor(Qt::ArrowCursor);
