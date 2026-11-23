@@ -636,6 +636,37 @@ private:
     std::function<void()> m_function;
 };
 
+// dolphin-ng: a bar button joining its menu (or leaving it) eases its bottom corners from round to square (or back)
+// over 160 ms, so that the button flows into the menu rather than snapping. The bar's style sheet squares them at once
+// for an open menu (menuOpen); while the animation runs the button carries a rule of its own with the corners' radius
+// of the moment, which wins over the bar's, and drops it at the end
+static void ngAnimateJoin(QToolButton *button, bool open)
+{
+    const qreal radius = button->property("ngPill").toBool() ? 13 : 6; // (as the sheet's rules)
+    auto *animation = button->findChild<QVariantAnimation *>(QStringLiteral("_ng_join_animation"), Qt::FindDirectChildrenOnly);
+    qreal from = open ? radius : 0;
+    if (!animation) {
+        animation = new QVariantAnimation(button);
+        animation->setObjectName(QStringLiteral("_ng_join_animation"));
+        animation->setDuration(160);
+        animation->setEasingCurve(QEasingCurve::OutCubic);
+        QObject::connect(animation, &QVariantAnimation::valueChanged, button, [button](const QVariant &value) {
+            const QString own = button->property("_ng_own_sheet").toString();
+            button->setStyleSheet(own + QStringLiteral("QToolButton { border-bottom-left-radius: %1px; border-bottom-right-radius: %1px; }").arg(value.toReal(), 0, 'f', 1));
+        });
+        QObject::connect(animation, &QVariantAnimation::finished, button, [button] {
+            button->setStyleSheet(button->property("_ng_own_sheet").toString()); // (the bar's rules again)
+        });
+        button->setProperty("_ng_own_sheet", button->styleSheet());
+    } else if (animation->state() == QAbstractAnimation::Running) {
+        from = animation->currentValue().toReal(); // (turned round halfway)
+        animation->stop();
+    }
+    animation->setStartValue(from);
+    animation->setEndValue(open ? qreal(0) : radius);
+    animation->start();
+}
+
 class NgOpenSheet : public QObject
 {
 public:
@@ -652,11 +683,20 @@ public:
             if (button->property("menuOpen").toBool()) {
                 const QRectF rect(button->rect());
                 const qreal radius = button->property("ngPill").toBool() ? 13 : 6; // (as the sheet's rules)
-                QPainterPath path;
-                path.addRoundedRect(rect, radius, radius);
-                QPainterPath bottom;
-                bottom.addRect(rect.adjusted(0, radius, 0, 0)); // (square at the bottom, where the menu goes on)
-                path = path.united(bottom);
+                // square at the bottom, where the menu goes on; while the join eases in, the corners' radius of the moment
+                qreal bottomRadius = 0;
+                if (auto *animation = button->findChild<QVariantAnimation *>(QStringLiteral("_ng_join_animation"), Qt::FindDirectChildrenOnly);
+                    animation && animation->state() == QAbstractAnimation::Running) {
+                    bottomRadius = animation->currentValue().toReal();
+                }
+                const QRectF upper(rect.left(), rect.top(), rect.width(), rect.height() / 2);
+                const QRectF lower(rect.left(), rect.center().y(), rect.width(), rect.height() / 2);
+                QPainterPath top, bottom, upperClip, lowerClip;
+                top.addRoundedRect(rect, radius, radius);
+                upperClip.addRect(upper);
+                bottom.addRoundedRect(rect, bottomRadius, bottomRadius);
+                lowerClip.addRect(lower);
+                QPainterPath path = top.intersected(upperClip).united(bottom.intersected(lowerClip));
                 QPainter painter(button);
                 painter.setRenderHint(QPainter::Antialiasing, true);
                 painter.setCompositionMode(QPainter::CompositionMode_Clear);
@@ -1089,6 +1129,7 @@ private:
             button->setProperty("menuOpen", open);
             button->style()->unpolish(button);
             button->style()->polish(button);
+            ngAnimateJoin(button, open); // (the corners ease into the menu, or back)
             button->update();
         };
         connect(menu, &QMenu::aboutToShow, button, [repolish] {
@@ -1112,6 +1153,7 @@ private:
             button->setProperty("menuOpen", open);
             button->style()->unpolish(button);
             button->style()->polish(button);
+            ngAnimateJoin(button, open); // (the corners ease into the menu, or back)
             button->update();
         };
         auto watch = [button, repolish] {
