@@ -1246,6 +1246,7 @@ public:
         m_trailing->setVisible(layout->count() > 0);
         applyRowHeight();
         m_trailingIconsOnly = false; // new buttons, with their names
+        m_trailingOverflow = false; // (and all shown)
         QTimer::singleShot(0, this, [this] {
             fitSorting(); // the room left for the sorting changed
         });
@@ -1368,6 +1369,29 @@ public:
                     m_trailingTextWidth = before - m_trailing->sizeHint().width(); // what the names took
                 }
                 m_trailingIconsOnly = trailingIcons;
+            }
+            // narrowest: the buttons on the right go but the last (the menu, where their actions are still found),
+            // so that the bar stays one row and does not wrap into a jumble of buttons
+            const bool overflow = trailingIcons && (m_trailingOverflow ? compactNeeded + m_trailingHiddenWidth + 20 > room : compactNeeded > room);
+            if (overflow != m_trailingOverflow) {
+                const int before = m_trailing->sizeHint().width();
+                const auto buttons = m_trailing->findChildren<QToolButton *>(Qt::FindDirectChildrenOnly);
+                for (int i = 0; i < buttons.size(); ++i) {
+                    QToolButton *button = buttons.at(i);
+                    const bool last = i == buttons.size() - 1;
+                    if (overflow && !last && button->isVisibleTo(m_trailing)) {
+                        button->setProperty("_ng_overflow", true);
+                        button->hide();
+                    } else if (!overflow && button->property("_ng_overflow").toBool()) {
+                        button->setProperty("_ng_overflow", false);
+                        button->show();
+                    }
+                }
+                m_trailing->layout()->activate();
+                if (overflow) {
+                    m_trailingHiddenWidth = before - m_trailing->sizeHint().width();
+                }
+                m_trailingOverflow = overflow;
             }
         }
         m_sortPill->setVisible(!compact);
@@ -2047,6 +2071,8 @@ private:
     DolphinView *m_view;
     QWidget *m_leading;
     QWidget *m_trailing = nullptr;
+    bool m_trailingOverflow = false; // the buttons on the right hidden but the menu (narrowest)
+    int m_trailingHiddenWidth = 0;
     QHBoxLayout *m_leadingLayout = nullptr;
     NgFlowLayout *m_flow;
     QPointer<QWidget> m_sortPill, m_sortCaption, m_sortCompact; // the sorting as a pill, or as one button when narrow
