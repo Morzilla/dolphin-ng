@@ -492,6 +492,8 @@ target_sources(dolphinstatic PRIVATE
 
 target_link_libraries(dolphinstatic
     dolphinprivate
+    Qt6::Qml   # dolphin-ng: the window decoration's own title bar buttons (NgThemeButtons)
+    Qt6::Quick
     KF6::CoreAddons
     KF6::IconWidgets # dolphin-ng: the icon button of the quick actions editor
     KF6::GuiAddons

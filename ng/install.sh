@@ -114,17 +114,17 @@ if [ "$DEPS" = 1 ]; then
     say "installing the build dependencies (sudo)"
     if command -v dnf >/dev/null; then
         # A partly updated system can end up with mixed KDE Frameworks versions: update first if in doubt.
-        safe_pkgs dnf install git cmake gcc-c++ extra-cmake-modules 'dnf-command(builddep)' poppler-utils qt6-qtmultimedia-devel ImageMagick || true
+        safe_pkgs dnf install git cmake gcc-c++ extra-cmake-modules 'dnf-command(builddep)' poppler-utils qt6-qtmultimedia-devel qt6-qtdeclarative-devel ImageMagick || true
         # ffmpeg-free conflicts with the RPM Fusion ffmpeg many people have
         command -v ffmpeg >/dev/null || safe_pkgs dnf install ffmpeg-free || true
         safe_pkgs dnf builddep dolphin || { echo "Dolphin's build dependencies were not installed." >&2; exit 1; }
         [ "$THEME" = 1 ] && safe_pkgs dnf install kvantum || true
     elif command -v apt-get >/dev/null; then
         sudo apt-get update
-        safe_pkgs apt-get install git cmake g++ extra-cmake-modules poppler-utils qt6-multimedia-dev imagemagick ffmpeg || true
+        safe_pkgs apt-get install git cmake g++ extra-cmake-modules poppler-utils qt6-multimedia-dev qt6-declarative-dev imagemagick ffmpeg || true
         # Dolphin's build dependencies by name (from Debian's dolphin package), so the source repositories (deb-src),
         # off by default, are not needed; apt build-dep only as a fallback
-        safe_pkgs apt-get install gettext qt6-base-dev qt6-base-private-dev qt6-multimedia-dev libbaloowidgets-dev \
+        safe_pkgs apt-get install gettext qt6-base-dev qt6-base-private-dev qt6-multimedia-dev qt6-declarative-dev libbaloowidgets-dev \
             libkf6baloo-dev libkf6bookmarks-dev libkf6codecs-dev libkf6colorscheme-dev libkf6completion-dev \
             libkf6config-dev libkf6coreaddons-dev libkf6crash-dev libkf6dbusaddons-dev libkf6filemetadata-dev \
             libkf6guiaddons-dev libkf6i18n-dev libkf6iconthemes-dev libkf6kcmutils-dev libkf6kio-dev libkf6newstuff-dev \
@@ -141,15 +141,15 @@ if [ "$DEPS" = 1 ]; then
         done
         [ "$THEME" = 1 ] && safe_pkgs apt-get install qt6-style-kvantum || true
     elif command -v pacman >/dev/null; then
-        sudo pacman -S --needed --noconfirm git cmake extra-cmake-modules base-devel poppler qt6-multimedia qt6-multimedia-ffmpeg imagemagick ffmpeg \
+        sudo pacman -S --needed --noconfirm git cmake extra-cmake-modules base-devel poppler qt6-multimedia qt6-multimedia-ffmpeg qt6-declarative imagemagick ffmpeg \
             kio kparts knewstuff kcmutils kdbusaddons kiconthemes ktextwidgets kcrash kbookmarks kcompletion \
             kwindowsystem kdoctools baloo baloo-widgets kfilemetadata kuserfeedback phonon-qt6 plasma-activities
         [ "$THEME" = 1 ] && sudo pacman -S --needed --noconfirm kvantum || true
     elif command -v zypper >/dev/null; then
-        sudo zypper --non-interactive install git cmake gcc-c++ extra-cmake-modules poppler-tools qt6-multimedia-devel ImageMagick ffmpeg || true
+        sudo zypper --non-interactive install git cmake gcc-c++ extra-cmake-modules poppler-tools qt6-multimedia-devel qt6-declarative-devel ImageMagick ffmpeg || true
         # what Dolphin's CMakeLists asks for, as cmake() capabilities: no source repositories needed
         sudo zypper --non-interactive install 'cmake(Qt6Core)' 'cmake(Qt6Concurrent)' 'cmake(Qt6Widgets)' 'cmake(Qt6Gui)' \
-            'cmake(Qt6DBus)' 'cmake(Qt6GuiPrivate)' 'cmake(Qt6Multimedia)' 'cmake(Qt6MultimediaWidgets)' \
+            'cmake(Qt6DBus)' 'cmake(Qt6GuiPrivate)' 'cmake(Qt6Multimedia)' 'cmake(Qt6MultimediaWidgets)' 'cmake(Qt6Quick)' \
             'cmake(KF6KCMUtils)' 'cmake(KF6NewStuff)' 'cmake(KF6CoreAddons)' 'cmake(KF6I18n)' 'cmake(KF6DBusAddons)' \
             'cmake(KF6Bookmarks)' 'cmake(KF6Config)' 'cmake(KF6KIO)' 'cmake(KF6Parts)' 'cmake(KF6Solid)' \
             'cmake(KF6IconThemes)' 'cmake(KF6Completion)' 'cmake(KF6TextWidgets)' 'cmake(KF6Notifications)' \

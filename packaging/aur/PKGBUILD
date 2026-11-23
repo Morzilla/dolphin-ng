@@ -12,7 +12,7 @@ url="https://github.com/Morzilla/dolphin-ng"
 license=(GPL-2.0-or-later)
 depends=(baloo baloo-widgets kbookmarks kcmutils kcodecs kcolorscheme kcompletion kconfig kcoreaddons kcrash
          kdbusaddons kfilemetadata kguiaddons ki18n kiconthemes kio knewstuff knotifications kparts solid
-         ktextwidgets kuserfeedback kwidgetsaddons kwindowsystem qt6-base qt6-multimedia)
+         ktextwidgets kuserfeedback kwidgetsaddons kwindowsystem qt6-base qt6-multimedia qt6-declarative)
 makedepends=(git cmake extra-cmake-modules kdoctools)
 optdepends=('kio-extras: thumbnails and more places'
             'imagemagick: quick actions on images'

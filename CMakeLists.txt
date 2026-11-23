@@ -75,6 +75,8 @@ find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
     Gui
     DBus
     Multimedia         # dolphin-ng: video and audio in the preview card
+    Qml                # dolphin-ng: the window decoration's own title bar buttons (KWin's preview module)
+    Quick
 )
 
 if (Qt6Gui_VERSION VERSION_GREATER_EQUAL "6.10.0")

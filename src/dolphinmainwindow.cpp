@@ -85,6 +85,10 @@
 #include <QAbstractButton>
 #include <QHBoxLayout>
 #include <QMouseEvent>
+#include <QQuickPaintedItem>
+#include <QQuickItem>
+#include <QQmlEngine>
+#include <QQmlComponent>
 #include <QTabBar>
 #include <QToolBar>
 #include <QWindow>
@@ -143,6 +147,226 @@ const int MaxActivateTabShortcuts = 9;
 // dolphin-ng: the tabs in the title bar (setting TABS=titlebar). The window has no frame of the window manager's: the
 // row of tabs is its title bar, with the window's buttons at its end, and these two classes give it what the frame
 // gave: buttons, moving by the row, resizing from the edges.
+// dolphin-ng: the window decoration's own minimize, maximize (restore) and close buttons, as KWin's theme draws them
+// (Breeze, an Aurorae theme, Klassy...). They come from the module System Settings draws its decoration previews with
+// (org.kde.kwin.private.kdecoration, installed with KWin): its Button is a painted Qt Quick item that holds a real
+// button of the decoration, so it is painted straight into the title row's buttons, without a window of its own.
+// The module is KWin's private API: when it is missing, or the decoration does not load, the title row draws its own
+// buttons (NgWindowButton's fallback). Breeze NG keeps those: they are drawn after its own decoration's.
+// Settings: DOLPHIN_NG_THEME_BUTTONS=on|off forces either way.
+class NgThemeButtons : public QObject
+{
+public:
+    enum Slot { Minimize, Maximize, Restore, Close, Slots };
+    static NgThemeButtons *instance()
+    {
+        static QPointer<NgThemeButtons> self;
+        if (!self) {
+            self = new NgThemeButtons(qApp);
+        }
+        return self;
+    }
+    // the decoration KWin uses (kwinrc)
+    static std::pair<QString, QString> decoration()
+    {
+        const KConfigGroup group = KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2"));
+        return {group.readEntry("library", QStringLiteral("org.kde.breeze")), group.readEntry("theme", QString())};
+    }
+    // whether the title row shows the theme's buttons (not yet whether they could be made: see paint)
+    static bool wanted()
+    {
+        const QString forced = qEnvironmentVariable("DOLPHIN_NG_THEME_BUTTONS").toLower();
+        if (forced == QLatin1String("on") || forced == QLatin1String("off")) {
+            return forced == QLatin1String("on");
+        }
+        return decoration().first != QLatin1String("org.kde.breezeng");
+    }
+    // paints the theme's button into @p rect; false when there is none to paint (then the caller draws its own)
+    bool paint(QPainter *painter, const QRectF &rect, Slot slot, bool active)
+    {
+        if (m_unsupported || !build() || !configure()) {
+            return false;
+        }
+        QQuickPaintedItem *item = m_items[active ? 1 : 0][slot];
+        if (!item) {
+            return false;
+        }
+        // painted once into a picture of its own, then copied: some decorations clear their button's square first,
+        // which on the translucent window punched a dark hole behind the button
+        const qreal dpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
+        const QString key = QStringLiteral("%1-%2-%3x%4@%5").arg(slot).arg(active).arg(rect.width()).arg(rect.height()).arg(dpr);
+        auto cached = m_images.constFind(key);
+        if (cached == m_images.constEnd()) {
+            if (item->width() != rect.width() || item->height() != rect.height()) {
+                item->setSize(rect.size()); // (the item lays its decoration button out in its size)
+            }
+            QImage image((rect.size() * dpr).toSize(), QImage::Format_ARGB32_Premultiplied);
+            image.setDevicePixelRatio(dpr);
+            image.fill(Qt::transparent);
+            QPainter imagePainter(&image);
+            imagePainter.setRenderHint(QPainter::Antialiasing);
+            item->paint(&imagePainter);
+            imagePainter.end();
+            // the item ends by tinting what it drew with its colour at alpha 127 (SourceAtop: meant for System
+            // Settings' lists, it cannot be turned off). Black is used, which only halves each pixel's colour and
+            // keeps its alpha: doubled back here, the theme's own colours return
+            bool painted = false;
+            for (int y = 0; y < image.height(); ++y) {
+                auto *line = reinterpret_cast<QRgb *>(image.scanLine(y));
+                for (int x = 0; x < image.width(); ++x) {
+                    const int alpha = qAlpha(line[x]);
+                    if (alpha == 0) {
+                        continue;
+                    }
+                    painted = true;
+                    auto undo = [alpha](int channel) {
+                        return qMin(alpha, (channel * 255 + 64) / 128);
+                    };
+                    line[x] = qRgba(undo(qRed(line[x])), undo(qGreen(line[x])), undo(qBlue(line[x])), alpha);
+                }
+            }
+            if (!painted) {
+                // a decoration that has no button of its own outside a window (Aurorae themes on some Plasma
+                // versions): nothing was drawn. The title row draws its own buttons instead, all of them
+                qCDebug(DolphinDebug) << "dolphin-ng: the window decoration drew no button outside a window, own ones drawn";
+                m_unsupported = true;
+                return false;
+            }
+            cached = m_images.insert(key, image);
+        }
+        painter->drawImage(rect.topLeft(), *cached);
+        return true;
+    }
+
+private:
+    explicit NgThemeButtons(QObject *parent)
+        : QObject(parent)
+    {
+        // a new colour scheme: the pictures are painted again. The application's palette changes with it, and the
+        // preview clients (which read the scheme on their own) say so too, a moment apart: both lead here
+        qApp->installEventFilter(this);
+        m_refresh.setSingleShot(true);
+        m_refresh.setInterval(50);
+        connect(&m_refresh, &QTimer::timeout, this, [this] {
+            m_images.clear();
+            for (const QPointer<QWidget> &button : std::as_const(m_buttons)) {
+                if (button) {
+                    button->update();
+                }
+            }
+        });
+    }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == qApp && event->type() == QEvent::ApplicationPaletteChange) {
+            m_refresh.start();
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+public:
+    // a title row button that shows these pictures: repainted when they are painted again
+    void watch(QWidget *button)
+    {
+        m_buttons.removeAll(nullptr);
+        m_buttons.append(button);
+    }
+
+private:
+    // the engine and the eight buttons (inactive and active window, each slot), made once
+    bool build()
+    {
+        if (m_tried) {
+            return m_root;
+        }
+        m_tried = true;
+        const auto [plugin, theme] = decoration();
+        m_engine = new QQmlEngine(this);
+        auto quoted = [](QString text) {
+            return text.replace(QLatin1Char('\\'), QLatin1String("\\\\")).replace(QLatin1Char('"'), QLatin1String("\\\""));
+        };
+        QString buttons;
+        for (int active = 0; active < 2; ++active) {
+            for (int type : {3, 4, 4, 5}) { // KDecoration3::DecorationButtonType: Minimize, Maximize (twice), Close
+                // (color: the preview tints the whole button with it at alpha 127, see paint: black, undone there)
+                buttons += QStringLiteral("    KDecoration.Button { bridge: bridgeItem.bridge; settings: settingsItem; type: %1; width: 24; height: 24; "
+                                          "color: \"black\" }\n")
+                               .arg(type);
+            }
+        }
+        const QString qml = QStringLiteral(
+                                "import QtQuick\n"
+                                "import org.kde.kwin.private.kdecoration as KDecoration\n"
+                                "Item {\n"
+                                "    property bool valid: bridgeItem.bridge ? bridgeItem.bridge.valid : false\n"
+                                "    KDecoration.Bridge { id: bridgeItem; plugin: \"%1\"; theme: \"%2\" }\n"
+                                "    KDecoration.Settings { id: settingsItem; bridge: bridgeItem.bridge }\n"
+                                "%3}\n")
+                                .arg(quoted(plugin), quoted(theme), buttons);
+        QQmlComponent component(m_engine);
+        component.setData(qml.toUtf8(), QUrl());
+        auto *root = qobject_cast<QQuickItem *>(component.create());
+        if (!root || !root->property("valid").toBool()) {
+            qCDebug(DolphinDebug) << "dolphin-ng: no window decoration buttons from KWin's preview module, own ones drawn" << component.errors();
+            delete root;
+            return false;
+        }
+        root->setParent(this);
+        m_root = root;
+        int index = 0;
+        for (QQuickItem *item : root->childItems()) {
+            if (QString::fromLatin1(item->metaObject()->className()).contains(QLatin1String("PreviewButtonItem")) && index < 2 * Slots) {
+                m_items[index / Slots][index % Slots] = static_cast<QQuickPaintedItem *>(item);
+                ++index;
+            }
+        }
+        if (index != 2 * Slots) {
+            m_root = nullptr;
+            delete root;
+            return false;
+        }
+        return true;
+    }
+    // each button has a window of its own (a preview client, made with the button): active or not, maximized or not
+    bool configure()
+    {
+        if (m_configured) {
+            return true;
+        }
+        for (int active = 0; active < 2; ++active) {
+            for (int slot = 0; slot < Slots; ++slot) {
+                QObject *client = nullptr;
+                for (QObject *object : m_items[active][slot]->findChildren<QObject *>()) {
+                    if (QString::fromLatin1(object->metaObject()->className()).contains(QLatin1String("PreviewClient"))) {
+                        client = object;
+                        break;
+                    }
+                }
+                if (!client) {
+                    return false; // (not made yet: the next paint tries again)
+                }
+                // (its paletteChanged(QPalette) has no typed signature to connect to here: by name, to the timer)
+                connect(client, SIGNAL(paletteChanged(QPalette)), &m_refresh, SLOT(start()));
+                client->setProperty("active", active == 1);
+                client->setProperty("maximizedVertically", slot == Restore);
+                client->setProperty("maximizedHorizontally", slot == Restore);
+            }
+        }
+        m_configured = true;
+        return true;
+    }
+
+    QQmlEngine *m_engine = nullptr;
+    QPointer<QQuickItem> m_root;
+    QQuickPaintedItem *m_items[2][Slots] = {};
+    QHash<QString, QImage> m_images; // what was painted, by slot, state, size and scale
+    QList<QPointer<QWidget>> m_buttons;
+    QTimer m_refresh; // the pictures painted again (a new colour scheme)
+    bool m_unsupported = false; // the decoration drew nothing: own buttons from then on
+    bool m_tried = false;
+    bool m_configured = false;
+};
+
 class NgWindowButton : public QAbstractButton
 {
 public:
@@ -150,14 +374,27 @@ public:
     NgWindowButton(Kind kind, QWidget *parent)
         : QAbstractButton(parent)
         , m_kind(kind)
+        , m_theme(NgThemeButtons::wanted())
     {
-        setFixedSize(22, 26); // (an 18 px disc every 24 px, as the buttons of Breeze NG's window decoration)
+        // (an 18 px disc every 24 px, as the buttons of Breeze NG's window decoration; the theme's buttons a 24 px square)
+        setFixedSize(m_theme ? 24 : 22, 26);
+        if (m_theme) {
+            NgThemeButtons::instance()->watch(this);
+        }
         setFocusPolicy(Qt::NoFocus);
         setAttribute(Qt::WA_Hover);
         setCursor(Qt::ArrowCursor);
     }
 
 protected:
+    bool event(QEvent *event) override
+    {
+        // active or not, maximized or not: the theme's buttons change with the window
+        if (event->type() == QEvent::WindowActivate || event->type() == QEvent::WindowDeactivate) {
+            update();
+        }
+        return QAbstractButton::event(event);
+    }
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
@@ -165,6 +402,26 @@ protected:
         const bool dark = palette().color(QPalette::Window).lightnessF() < 0.5;
         const QColor ink = dark ? QColor(255, 255, 255) : QColor(0, 0, 0);
         const bool hovered = underMouse();
+        if (m_theme) {
+            const QRectF square = QRectF(0, (height() - 24) / 2.0, 24, 24);
+            // the theme's own button, at rest; pointing at it and pressing it lay a soft disc behind, as most
+            // decorations do (the decoration's own hover cannot be had from a preview)
+            if (hovered || isDown()) {
+                QColor fill = m_kind == Close ? QColor(232, 84, 72) : ink;
+                fill.setAlphaF(m_kind == Close ? (isDown() ? 0.55 : 0.40) : (isDown() ? 0.22 : 0.13));
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(fill);
+                painter.drawEllipse(square.adjusted(1, 1, -1, -1));
+            }
+            const NgThemeButtons::Slot slot = m_kind == Minimize ? NgThemeButtons::Minimize
+                : m_kind == Close                                ? NgThemeButtons::Close
+                : window()->isMaximized()                        ? NgThemeButtons::Restore
+                                                                 : NgThemeButtons::Maximize;
+            if (NgThemeButtons::instance()->paint(&painter, square, slot, window()->isActiveWindow())) {
+                return;
+            }
+            painter.setBrush(Qt::NoBrush);
+        }
         const QRectF circle = QRectF(rect()).adjusted(2, 4, -2, -4);
         QColor fill = ink;
         fill.setAlphaF(isDown() ? 0.30 : hovered ? 0.22 : 0.12);
@@ -203,6 +460,7 @@ protected:
 
 private:
     Kind m_kind;
+    bool m_theme; // the decoration's own buttons (NgThemeButtons), when they can be had
 };
 
 // dolphin-ng: a corner of the window without a frame, cut round over whatever is there. The widget style cuts the
