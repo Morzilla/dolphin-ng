@@ -2025,7 +2025,8 @@ void NgInfoView::restyle()
     captionInk = ngHaloInk(captionInk, palette);
     // on glass, the shadow of the sidebar's text under the panel's labels too (names, captions, dates, the legend):
     // light text over a light wallpaper behind the glass could not be read. Not under the chips, which have a fill
-    const bool halo = ngSidebarHalo() || ngTextHalo();
+    // (in Aurora Breeze NG shades every text itself: a second shadow smudged the captions into a dark blur)
+    const bool halo = ngSidebarHalo() && !ngAurora();
     const QColor shadowColour = ngIsDark(palette) ? QColor(0, 0, 0, 190) : QColor(255, 255, 255, 215);
     const auto labels = findChildren<QLabel *>();
     for (QLabel *label : labels) {
