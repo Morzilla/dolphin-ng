@@ -849,22 +849,49 @@ DolphinMainWindow::DolphinMainWindow()
             // the row is the window's title bar: no frame from the window manager, the window's buttons on the side
             // KWin has them (the close button's side), the rest of the row to drag the window by
             const KConfigGroup decoration = KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2"));
-            const bool buttonsLeft = decoration.readEntry("ButtonsOnLeft", QStringLiteral("MS")).contains(QLatin1Char('X'));
-            auto *buttons = new QWidget(m_ngTabsToolBar);
-            auto *buttonsLayout = new QHBoxLayout(buttons);
-            buttonsLayout->setContentsMargins(buttonsLeft ? 0 : 4, 0, buttonsLeft ? 4 : 0, 5);
-            buttonsLayout->setSpacing(2);
-            auto *minimize = new NgWindowButton(NgWindowButton::Minimize, buttons);
-            auto *maximize = new NgWindowButton(NgWindowButton::Maximize, buttons);
-            auto *close = new NgWindowButton(NgWindowButton::Close, buttons);
-            minimize->setToolTip(ngTr("Minimize", "Riduci a icona"));
-            maximize->setToolTip(ngTr("Maximize", "Massimizza"));
-            close->setToolTip(ngTr("Close", "Chiudi"));
-            connect(minimize, &QAbstractButton::clicked, this, &QWidget::showMinimized);
-            connect(maximize, &QAbstractButton::clicked, this, [this] {
-                isMaximized() ? showNormal() : showMaximized();
-            });
-            connect(close, &QAbstractButton::clicked, this, &QWidget::close);
+            // which window buttons, on which side and in which order: KWin's own layout (System Settings > Window
+            // decorations > Titlebar Buttons). Of its letters Dolphin NG draws I (minimize), A (maximize) and X (close);
+            // the others (menu, on all desktops, help...) belong to the decoration (issue #12: all three were drawn
+            // whatever the layout said)
+            QString leftLayout = decoration.readEntry("ButtonsOnLeft", QStringLiteral("MS"));
+            QString rightLayout = decoration.readEntry("ButtonsOnRight", QStringLiteral("HIAX"));
+            // for tests: DOLPHIN_NG_TEST_BUTTONS="left|right" (KWin's letters) in place of KWin's own layout
+            if (const QString test = qEnvironmentVariable("DOLPHIN_NG_TEST_BUTTONS"); test.contains(QLatin1Char('|'))) {
+                leftLayout = test.section(QLatin1Char('|'), 0, 0);
+                rightLayout = test.section(QLatin1Char('|'), 1, 1);
+            }
+            const bool buttonsLeft = leftLayout.contains(QLatin1Char('X'));
+            auto makeGroup = [this](const QString &layout, bool left) {
+                auto *group = new QWidget(m_ngTabsToolBar);
+                auto *groupLayout = new QHBoxLayout(group);
+                groupLayout->setContentsMargins(left ? 0 : 4, 0, left ? 4 : 0, 5);
+                groupLayout->setSpacing(2);
+                for (const QChar letter : layout) {
+                    NgWindowButton *button = nullptr;
+                    if (letter == QLatin1Char('I')) {
+                        button = new NgWindowButton(NgWindowButton::Minimize, group);
+                        button->setToolTip(ngTr("Minimize", "Riduci a icona"));
+                        connect(button, &QAbstractButton::clicked, this, &QWidget::showMinimized);
+                    } else if (letter == QLatin1Char('A')) {
+                        button = new NgWindowButton(NgWindowButton::Maximize, group);
+                        button->setToolTip(ngTr("Maximize", "Massimizza"));
+                        connect(button, &QAbstractButton::clicked, this, [this] {
+                            isMaximized() ? showNormal() : showMaximized();
+                        });
+                    } else if (letter == QLatin1Char('X')) {
+                        button = new NgWindowButton(NgWindowButton::Close, group);
+                        button->setToolTip(ngTr("Close", "Chiudi"));
+                        connect(button, &QAbstractButton::clicked, this, &QWidget::close);
+                    }
+                    if (button) {
+                        groupLayout->addWidget(button);
+                    }
+                }
+                return group;
+            };
+            QWidget *leftButtons = makeGroup(leftLayout, true);
+            QWidget *rightButtons = makeGroup(rightLayout, false);
+            QWidget *buttons = buttonsLeft ? leftButtons : rightButtons; // (the close button's side)
             // beside them, on the inner side: the Information panel shown and hidden (as F11), the sidebar button's icon
             // mirrored, its band on the right
             auto *panel = new QToolButton(buttons);
@@ -886,20 +913,20 @@ DolphinMainWindow::DolphinMainWindow()
                 connect(dock, &QDockWidget::visibilityChanged, panel, update);
                 update();
             });
-            for (QWidget *button : buttonsLeft ? QList<QWidget *>{close, maximize, minimize, panel} : QList<QWidget *>{panel, minimize, maximize, close}) {
-                buttonsLayout->addWidget(button);
+            auto *buttonsLayout = static_cast<QHBoxLayout *>(buttons->layout());
+            if (buttonsLeft) {
+                buttonsLayout->addWidget(panel);
+            } else {
+                buttonsLayout->insertWidget(0, panel);
             }
             auto *drag = new QWidget(m_ngTabsToolBar);
             drag->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
             drag->setMinimumWidth(60);
-            if (buttonsLeft) {
-                m_ngTabsToolBar->addWidget(buttons);
-            }
+            // (a side with none of them takes no room)
+            m_ngTabsToolBar->addWidget(leftButtons)->setVisible(leftButtons->layout()->count() > 0);
             m_ngTabsToolBar->addWidget(topBar);
             m_ngTabsToolBar->addWidget(drag);
-            if (!buttonsLeft) {
-                m_ngTabsToolBar->addWidget(buttons);
-            }
+            m_ngTabsToolBar->addWidget(rightButtons)->setVisible(rightButtons->layout()->count() > 0);
             // (the buttons where the decoration of every other window has them: measured against KWin's)
             // (no margin under the row, and the row no taller than a title bar: there was a wide empty band between
             // the tabs and the sidebar and location bar below them)
@@ -910,7 +937,7 @@ DolphinMainWindow::DolphinMainWindow()
                 buttonsLeft ? margins.setLeft(0) : margins.setRight(0);
                 rowLayout->setContentsMargins(margins);
             }
-            new NgFrameless(this, {m_ngTabsToolBar, drag, buttons});
+            new NgFrameless(this, {m_ngTabsToolBar, drag, leftButtons, rightButtons});
             QTimer::singleShot(0, this, &DolphinMainWindow::ngStyleTitleRow);
         } else {
             m_ngTabsToolBar->addWidget(topBar);
