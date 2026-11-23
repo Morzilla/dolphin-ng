@@ -1818,12 +1818,12 @@ qreal ngAuroraVeilAlpha(bool dark, bool button)
 QColor ngAuroraFrost(bool button)
 {
     // white with a tinge of the accent, as Breeze NG's frost: the panels of a light scheme 12 %, the fields, pills and
-    // buttons on them 8 % (they stand out from the panels by being whiter). A grey accent: white
+    // buttons on them 15 % (the panels have the glass darkening them). A grey accent: white
     const QColor accent = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);
     if (accent.hslSaturationF() < 0.15) {
         return QColor(255, 255, 255);
     }
-    const qreal t = button ? 0.08 : 0.12;
+    const qreal t = button ? 0.15 : 0.12;
     return QColor::fromRgbF(1.0 - t + t * accent.redF(), 1.0 - t + t * accent.greenF(), 1.0 - t + t * accent.blueF());
 }
 
