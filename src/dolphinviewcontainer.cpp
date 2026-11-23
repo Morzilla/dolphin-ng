@@ -1714,7 +1714,11 @@ private:
             // (not a lit toggle: the cards are the view nearly always, so it stood grey all the time; its label says
             // the look, and it lights only under the pointer and while pressed, as Filters does)
             cards->setPopupMode(QToolButton::MenuButtonPopup);
-            cards->setText(cardsOn ? ngTr("Cards: %1", "Card: %1").arg(QLatin1String(looks[m_view->ngCardLook()])) : ngTr("Cards", "Card"));
+            // (in another view the label says which: the list, the Details view with its columns, the icons)
+            const QString otherView = m_view->viewMode() == DolphinView::DetailsView
+                ? (ngNoIcons() && m_view->ngColumnsShown() ? ngTr("Details", "Dettagli") : ngTr("List", "Lista"))
+                : ngTr("Icons", "Icone");
+            cards->setText(cardsOn ? ngTr("Cards: %1", "Card: %1").arg(QLatin1String(looks[m_view->ngCardLook()])) : ngTr("View: %1", "Vista: %1").arg(otherView));
             m_cards = cards;
             cards->setToolTip(cardsOn ? ngTr("A click goes to the next kind of card (Tessera, Scheda, Dossier); the arrow picks one, or another view (list, icons).",
                                              "Un clic passa al tipo di card seguente (Tessera, Scheda, Dossier); la freccia ne sceglie uno, o un'altra vista (lista, icone).")
