@@ -1906,7 +1906,14 @@ QColor ngOnAccent(const QColor &fill)
 {
     // relative luminance (sRGB weights, without the gamma: close enough to tell light from dark)
     const qreal luminance = 0.2126 * fill.redF() + 0.7152 * fill.greenF() + 0.0722 * fill.blueF();
-    return luminance > 0.58 ? QColor(20, 22, 26) : QColor(255, 255, 255);
+    if (luminance <= 0.58) {
+        return QColor(255, 255, 255);
+    }
+    // on a pale accent: near black leaning to the accent's hue, as the text of Breeze NG (a plain black stood apart)
+    if (fill.hslSaturationF() < 0.15) {
+        return QColor(20, 22, 26);
+    }
+    return QColor::fromHslF(fill.hslHueF(), qMin(0.55, fill.hslSaturationF()), 0.17);
 }
 
 QColor ngAuroraSelectionText(const QPalette &palette)
