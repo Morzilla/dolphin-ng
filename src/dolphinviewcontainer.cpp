@@ -996,7 +996,7 @@ private:
             // one intensity for every surface at rest (Breeze NG's setting), the accent for what is on
             const bool dark = ngIsDark(palette);
             const QString veil = QString::number(ngAuroraVeil(dark, true).alphaF(), 'f', 3);
-            const QString veilInk = QStringLiteral("255, 255, 255"); // (light schemes: frost, not black ink)
+            const QString veilInk = dark ? QStringLiteral("255, 255, 255") : ngAuroraFrostRgb(); // (light schemes: frost, tinged by the accent)
             const QColor accent = ngAuroraSelection(palette);
             const QColor accentHover = ngAuroraSelection(palette, 0.08);
             const QString accentRgb = QStringLiteral("%1, %2, %3").arg(accent.red()).arg(accent.green()).arg(accent.blue());
@@ -1580,7 +1580,7 @@ private:
             const int inner = outer - 6;
             pill->setStyleSheet(QStringLiteral("QWidget#sortPill { background: rgba(%1, %4); border: %5; border-radius: %2px; }"
                                                "QToolButton { border-radius: %3px; padding: 2px 11px; }")
-                                    .arg(ngAurora() ? QStringLiteral("255, 255, 255") : ink)
+                                    .arg(ngAurora() ? (ngIsDark(QApplication::palette()) ? QStringLiteral("255, 255, 255") : ngAuroraFrostRgb()) : ink)
                                     .arg(outer / 2 - 1) // (below half the height: a larger radius switches the rounding off)
                                     .arg(inner / 2 - 1)
                                     .arg(ngAurora() ? QString::number(ngAuroraVeil(ngIsDark(palette()), true).alphaF(), 'f', 3) : QStringLiteral("0.05"),

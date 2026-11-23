@@ -1815,11 +1815,29 @@ qreal ngAuroraVeilAlpha(bool dark, bool button)
     return (button ? s_ngAuroraButton : s_ngAuroraPanel) / 100.0 * (dark ? 1.0 : 0.75);
 }
 
+QColor ngAuroraFrost()
+{
+    // white with a tinge of the accent (12 %), as Breeze NG's frost: the fields, pills and cards of a light scheme take
+    // the accent's colour instead of a plain white. A grey accent: white
+    const QColor accent = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);
+    if (accent.hslSaturationF() < 0.15) {
+        return QColor(255, 255, 255);
+    }
+    const qreal t = 0.12;
+    return QColor::fromRgbF(1.0 - t + t * accent.redF(), 1.0 - t + t * accent.greenF(), 1.0 - t + t * accent.blueF());
+}
+
+QString ngAuroraFrostRgb()
+{
+    const QColor frost = ngAuroraFrost();
+    return QStringLiteral("%1, %2, %3").arg(frost.red()).arg(frost.green()).arg(frost.blue());
+}
+
 QColor ngAuroraVeil(bool dark, bool button)
 {
     // light schemes: frost, white and denser (black ink on light glass read as grey): as Helper::auroraVeilColor in
-    // Breeze NG
-    QColor ink(255, 255, 255);
+    // Breeze NG. (Tinged by the accent: ngAuroraFrost)
+    QColor ink = dark ? QColor(255, 255, 255) : ngAuroraFrost();
     ink.setAlphaF(dark ? ngAuroraVeilAlpha(dark, button) : qMin(ngAuroraVeilAlpha(dark, button) * (button ? 10.5 : 8.8), 0.92));
     return ink;
 }
