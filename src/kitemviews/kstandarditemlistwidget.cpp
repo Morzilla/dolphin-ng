@@ -893,7 +893,7 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
         // the file type as a watermark: large, faint letters at the start of the row, fading out under the name
         const bool openRows = ngRowStyle() == NgRowStyle::Open;
         const QRectF rowRect = openRows ? selectionRectFull() : selectionRectFull().adjusted(3, 3, -3, -3);
-        qreal x0 = rowRect.left() + (openRows ? 16 : 10);
+        qreal x0 = rowRect.left() + (openRows ? 16 : 10) + (m_ngDetailsRow ? ngExpansionIndent() : 0); // (Details: after the tree)
         QFont watermarkFont(m_customizedFont);
         watermarkFont.setPixelSize(qMax(12, qRound(size().height() * 0.50)));
         watermarkFont.setWeight(QFont::Black);
@@ -1775,7 +1775,7 @@ void KStandardItemListWidget::styleOptionChanged(const KItemListStyleOption &cur
 
 void KStandardItemListWidget::hoveredChanged(bool hovered)
 {
-    if (m_layout == CardsLayout || m_ngObjectRow) {
+    if (m_layout == CardsLayout || m_ngObjectRow || m_ngDetailsRow) { // (the rows whose quick actions come with the pointer)
         // dolphin-ng: the pill of actions fades in and out with the hover
         if (!m_ngRevealAnimation) {
             m_ngRevealAnimation = new QVariantAnimation(this);
@@ -2595,7 +2595,8 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         if (noIcons) {
             switch (rowMark) {
             case NgMark::Tile:
-                left = leftPadding() + 13 + (compact ? widgetHeight - 10 : widgetHeight - 18) + (compact ? 12 : 16);
+                // (the Details view: after the expansion arrow and the tree lines of the parents, as the drawing)
+                left = leftPadding() + 13 + (columns ? ngExpansionIndent() : 0) + (compact ? widgetHeight - 10 : widgetHeight - 18) + (compact ? 12 : 16);
                 break;
             case NgMark::Pill:
                 left = leftPadding() + 13 + fontHeight * 4.8 + 16;
@@ -2803,9 +2804,10 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
             QFont pillFont = m_customizedFont;
             pillFont.setPointSizeF(pillFont.pointSizeF() * 0.88);
             const QFontMetricsF pillMetrics(pillFont);
-            const qreal pillHeight = qMin(qreal(fontHeight + 2), pillMetrics.height() + 5) + 12;
+            // (compact Details rows: a pill as tall as the row allows, so that it fits)
+            const qreal pillHeight = compact ? qMax(qreal(12), widgetHeight - 6) : qMin(qreal(fontHeight + 2), pillMetrics.height() + 5) + 12;
             const qreal earliest = left + fontHeight * 14; // the name keeps at least this much
-            if (!rowActions.isEmpty() && textRight - earliest > 60 && widgetHeight >= pillHeight + 4) {
+            if (!rowActions.isEmpty() && textRight - earliest > 60 && widgetHeight >= pillHeight + (compact ? 2 : 4)) {
                 ngLayoutActionPill(rowActions, earliest, (widgetHeight - pillHeight) / 2.0, textRight, pillHeight, pillMetrics, true);
                 if (!m_ngCardActionsPill.isEmpty()) {
                     textRight = m_ngCardActionsPill.left() - 12;

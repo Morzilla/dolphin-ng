@@ -2804,6 +2804,11 @@ void DolphinView::applyViewProperties(const ViewProperties &props)
         Q_EMIT zoomLevelChanged(m_view->zoomLevel(), zoomLevelChangeFrom);
     }
 
+    // dolphin-ng: the folder's own choice of columns (the Details view), if it has one. Before the header's widths: it
+    // shows or hides the header, and a hidden one skipped the folder's saved widths below
+    const QString ownColumns = ngFolderColumns(url());
+    m_view->ngSetRowColumns(ownColumns.isEmpty() ? QVariant() : QVariant(ownColumns == QLatin1String("on")));
+
     KItemListView *itemListView = m_container->controller()->view();
     if (itemListView->isHeaderVisible()) {
         KItemListHeader *header = itemListView->header();
@@ -2826,9 +2831,6 @@ void DolphinView::applyViewProperties(const ViewProperties &props)
     // dolphin-ng: the folder's own look of cards, if it has one
     const QString ownLook = ngFolderCardLook(url());
     m_view->ngSetCardLook(ownLook == QLatin1String("a") ? 0 : ownLook == QLatin1String("b") ? 1 : ownLook == QLatin1String("c") ? 2 : -1);
-    // and its own choice of columns (the Details view), if it has one
-    const QString ownColumns = ngFolderColumns(url());
-    m_view->ngSetRowColumns(ownColumns.isEmpty() ? QVariant() : QVariant(ownColumns == QLatin1String("on")));
 
     m_view->endTransaction();
 
