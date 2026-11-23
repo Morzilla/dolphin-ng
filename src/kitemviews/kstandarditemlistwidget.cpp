@@ -189,6 +189,15 @@ NgMark ngMark()
 }
 
 
+// dolphin-ng: the glass shadow under the text of a card. The card is a sheet of its own (frost on a light scheme,
+// a veil on a dark one): the full shadow of the window's glass blurred its small text into a smudge. None on a light
+// scheme, where the frost is bright enough; a light one on a dark scheme, where the veil is thin
+static qreal ngCardHaloStrength(const QGraphicsItem *item)
+{
+    Q_UNUSED(item)
+    return ngIsDark(QGuiApplication::palette()) ? 0.4 : 0.0;
+}
+
 QDateTime ngDateTimeOf(const QVariant &raw)
 {
     // the model keeps the raw epoch seconds for the modification time (see KFileItemModel), a QDateTime for other roles
@@ -5682,10 +5691,14 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
         nameFont.setWeight(QFont::DemiBold);
         painter->setFont(nameFont);
         painter->setPen(text);
-        if (ngTextHalo()) {
-            ngPaintTextHalo(painter, text, [&](const QPointF &offset) {
-                painter->drawStaticText(nameInfo->pos + offset, nameInfo->staticText);
-            });
+        if (ngTextHalo() && ngCardHaloStrength(this) > 0) {
+            ngPaintTextHalo(
+                painter,
+                text,
+                [&](const QPointF &offset) {
+                    painter->drawStaticText(nameInfo->pos + offset, nameInfo->staticText);
+                },
+                ngCardHaloStrength(this));
         }
         painter->drawStaticText(nameInfo->pos, nameInfo->staticText);
     }
@@ -5872,7 +5885,7 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
         const qreal tone = highlight.hslSaturationF() < 0.15 ? 0.0 : 1.0; // (a grey accent: a grey ink)
         strong = dark ? QColor::fromHslF(hue, 0.40 * tone, 0.84) : QColor::fromHslF(hue, 0.28 * tone, 0.44);
     }
-    const bool ngHaloCards = ngTextHalo();
+    const bool ngHaloCards = ngTextHalo() && ngCardHaloStrength(this) > 0;
     for (const NgCardText &entry : std::as_const(m_ngCardTexts)) {
         painter->setFont(entry.font);
         QColor ink = entry.tone == 1 ? strong : entry.tone == 2 ? dim : entry.tone == 3 ? QColor(232, 192, 72) : m_additionalInfoTextColor;
@@ -5886,7 +5899,7 @@ void KStandardItemListWidget::paintNgCard(QPainter *painter, QWidget *widget)
                 [&](const QPointF &offset) {
                     painter->drawText(entry.pos + offset, entry.text);
                 },
-                entry.tone == 1 ? 1.0 : 0.85);
+                ngCardHaloStrength(this));
         }
         painter->setPen(ink);
         painter->drawText(entry.pos, entry.text);
