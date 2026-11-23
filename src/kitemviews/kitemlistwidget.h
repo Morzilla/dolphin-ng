@@ -302,6 +302,8 @@ DOLPHIN_EXPORT NgCardStyle ngCardStyle(); // the default look (NG settings)
 // the look of the cards of the view this item belongs to: the folder's own when it has one, else the default
 DOLPHIN_EXPORT NgCardStyle ngCardStyle(const QGraphicsItem *item);
 // a folder's own look of cards: "a", "b", "c", or empty for the default
+// PANELS_EDGE=flush: the sidebar and the Information panel against the window's edges (no margin on the outer sides)
+DOLPHIN_EXPORT bool ngPanelsFlush();
 DOLPHIN_EXPORT QString ngFolderCardLook(const QUrl &url);
 DOLPHIN_EXPORT void ngSetFolderCardLook(const QUrl &url, const QString &look);
 /** dolphin-ng: cards grow to fill the row (DOLPHIN_NG_CARDS_FIT=stretch) instead of keeping their size. */

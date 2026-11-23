@@ -325,6 +325,11 @@ void ngSetFolderCardLook(const QUrl &url, const QString &look)
     group.sync();
 }
 
+bool ngPanelsFlush()
+{
+    return ngSetting("PANELS_EDGE").toLower() == QLatin1String("flush");
+}
+
 bool ngCardsStretch()
 {
     return ngSetting("CARDS_FIT").toLower() == QLatin1String("stretch");
