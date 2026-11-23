@@ -41,6 +41,8 @@ public:
     void readSettings();
     // dolphin-ng: the look of the cards of the folder shown (0..2), or -1 for the default one
     void ngSetCardLook(int look);
+    // dolphin-ng: the folder's own choice of columns over the drawn rows (an invalid value: the default, ROW_COLUMNS)
+    void ngSetRowColumns(const QVariant &columns);
     void writeSettings();
 
 protected:

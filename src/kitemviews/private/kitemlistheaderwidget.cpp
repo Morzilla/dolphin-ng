@@ -444,7 +444,7 @@ void KItemListHeaderWidget::paintRole(QPainter *painter, const QByteArray &role,
 {
     // dolphin-ng: over the drawn rows the header is light: no bar of sections, the names in the dim text colour, the
     // sort arrow beside the sorted one, a faint pill under the pointer (a solid header was a dark block on the glass)
-    if (ngRowColumns()) {
+    if (ngRowColumns(this)) {
         const bool sorted = m_model->sortRole() == role;
         QColor ink = palette().color(QPalette::WindowText);
         if (m_hoveredIndex == orderIndex || m_pressedRoleIndex == orderIndex) {

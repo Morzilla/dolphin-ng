@@ -27,7 +27,7 @@ DolphinItemListView::DolphinItemListView(QGraphicsWidget *parent)
 {
     // dolphin-ng: the NG settings apply without a restart
     connect(NgSettings::instance(), &NgSettings::changed, this, [this] {
-        setHeaderVisible(itemLayout() == DetailsLayout && (!ngTwoLineList() || ngRowColumns()));
+        setHeaderVisible(itemLayout() == DetailsLayout && (!ngTwoLineList() || ngRowColumns(this)));
         updateFont();
         updateGridSize();
         ngRefresh();
@@ -44,6 +44,18 @@ void DolphinItemListView::ngSetCardLook(int look)
     }
     setProperty("_ng_card_style", look);
     updateFont();
+    updateGridSize();
+    ngRefresh();
+}
+
+void DolphinItemListView::ngSetRowColumns(const QVariant &columns)
+{
+    const QVariant before = property("_ng_row_columns");
+    if (before.isValid() == columns.isValid() && (!columns.isValid() || before.toBool() == columns.toBool())) {
+        return;
+    }
+    setProperty("_ng_row_columns", columns);
+    setHeaderVisible(itemLayout() == DetailsLayout && (!ngTwoLineList() || ngRowColumns(this)));
     updateGridSize();
     ngRefresh();
 }
@@ -177,7 +189,7 @@ bool DolphinItemListView::itemLayoutSupportsItemExpanding(ItemLayout layout) con
 
 void DolphinItemListView::onItemLayoutChanged(ItemLayout current, ItemLayout previous)
 {
-    setHeaderVisible(current == DetailsLayout && (!ngTwoLineList() || ngRowColumns())); // dolphin-ng: the two-line list has no columns, unless asked
+    setHeaderVisible(current == DetailsLayout && (!ngTwoLineList() || ngRowColumns(this))); // dolphin-ng: the two-line list has no columns, unless asked
 
     updateFont();
     updateGridSize();
@@ -278,8 +290,11 @@ void DolphinItemListView::updateGridSize()
         itemWidth = -1;
         itemHeight = padding * 2 + qMax(iconSize, option.fontMetrics.lineSpacing());
         if (ngNoIcons()) {
-            // dolphin-ng: the icon-less row is two lines of text plus its own padding, whatever the icon size
-            itemHeight = padding * 2 + 2 * option.fontMetrics.height() + 4 + 24;
+            // dolphin-ng: the icon-less row is two lines of text plus its own padding, whatever the icon size; the
+            // compact Details view one line (as KStandardItemListWidgetInformant::calculateDetailsLayoutItemSizeHints)
+            itemHeight = ngRowColumns(this) && ngDetailsCompact() ? padding * 2 + option.fontMetrics.height() + 10
+                : ngRowColumns(this)                               ? padding * 2 + 2 * option.fontMetrics.height() + 4 + 12
+                                                                   : padding * 2 + 2 * option.fontMetrics.height() + 4 + 24;
         }
         break;
     }

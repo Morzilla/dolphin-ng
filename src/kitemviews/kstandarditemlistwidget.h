@@ -407,6 +407,8 @@ private:
     QList<int> m_ngCardActionIndex; // one per entry of m_ngCardActions: which quick action of the file it is
     QRectF m_ngRowThumb; // two-line rows: where the small preview is drawn (empty: the type mark is shown)
     bool m_ngObjectRow = false; // two-line rows drawn like the cards (MARK=object, the default)
+    bool m_ngDetailsRow = false; // dolphin-ng: the Details view (columns, the small tile)
+    bool m_ngCompactRow = false; // ...in one line
     QRectF m_ngRowObject; // ... where the drawing of the file is
     int m_ngRowCount = -1; // ... the item count of a folder, for its drawing
     QPixmap m_ngRowThumbPixmap;

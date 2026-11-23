@@ -2826,6 +2826,9 @@ void DolphinView::applyViewProperties(const ViewProperties &props)
     // dolphin-ng: the folder's own look of cards, if it has one
     const QString ownLook = ngFolderCardLook(url());
     m_view->ngSetCardLook(ownLook == QLatin1String("a") ? 0 : ownLook == QLatin1String("b") ? 1 : ownLook == QLatin1String("c") ? 2 : -1);
+    // and its own choice of columns (the Details view), if it has one
+    const QString ownColumns = ngFolderColumns(url());
+    m_view->ngSetRowColumns(ownColumns.isEmpty() ? QVariant() : QVariant(ownColumns == QLatin1String("on")));
 
     m_view->endTransaction();
 
@@ -2865,7 +2868,19 @@ void DolphinView::ngSetCardLook(int look, bool everywhere)
 
 bool DolphinView::ngFolderHasOwnView() const
 {
-    return ngFolderHasOwnCardLook() || ViewProperties(viewPropertiesUrl()).ngHasOwn();
+    return ngFolderHasOwnCardLook() || !ngFolderColumns(url()).isEmpty() || ViewProperties(viewPropertiesUrl()).ngHasOwn();
+}
+
+bool DolphinView::ngColumnsShown() const
+{
+    return ngRowColumns(m_view);
+}
+
+void DolphinView::ngSetColumnsShown(bool on)
+{
+    ngSetFolderColumns(url(), on ? QStringLiteral("on") : QStringLiteral("off"));
+    m_view->ngSetRowColumns(on);
+    Q_EMIT viewSettingsChanged(false);
 }
 
 void DolphinView::ngMakeFolderViewDefault()
@@ -2892,7 +2907,15 @@ void DolphinView::ngMakeFolderViewDefault()
             own.ngForget(); // this folder follows the default again, which is now its view
         }
     }
+    // the folder's choice of columns, too
+    const QString ownColumns = ngFolderColumns(url());
+    if (!ownColumns.isEmpty()) {
+        setNgSetting("ROW_COLUMNS", ownColumns == QLatin1String("on") ? QStringLiteral("on") : QString());
+        ngSetFolderColumns(url(), QString());
+        ngSettingsInvalidate();
+    }
     m_view->ngSetCardLook(-1);
+    m_view->ngSetRowColumns(QVariant());
     applyViewProperties();
     Q_EMIT viewSettingsChanged(false);
 }
@@ -2900,6 +2923,7 @@ void DolphinView::ngMakeFolderViewDefault()
 void DolphinView::ngResetFolderView()
 {
     ngSetFolderCardLook(url(), QString());
+    ngSetFolderColumns(url(), QString());
     {
         ViewProperties props(viewPropertiesUrl());
         props.ngForget();

@@ -330,6 +330,30 @@ bool ngPanelsFlush()
     return ngSetting("PANELS_EDGE").toLower() == QLatin1String("flush");
 }
 
+static KConfigGroup ngFolderColumnsGroup()
+{
+    return KSharedConfig::openConfig(QStringLiteral("dolphin-ng-foldersrc"))->group(QStringLiteral("Columns"));
+}
+
+QString ngFolderColumns(const QUrl &url)
+{
+    return url.isEmpty() ? QString() : ngFolderColumnsGroup().readEntry(ngFolderKey(url), QString());
+}
+
+void ngSetFolderColumns(const QUrl &url, const QString &columns)
+{
+    if (url.isEmpty()) {
+        return;
+    }
+    KConfigGroup group = ngFolderColumnsGroup();
+    if (columns.isEmpty()) {
+        group.deleteEntry(ngFolderKey(url));
+    } else {
+        group.writeEntry(ngFolderKey(url), columns);
+    }
+    group.sync();
+}
+
 bool ngCardsStretch()
 {
     return ngSetting("CARDS_FIT").toLower() == QLatin1String("stretch");
@@ -2000,8 +2024,29 @@ bool ngNoIcons(const QGraphicsItem *item)
 
 bool ngRowColumns()
 {
-    const QString mark = ngSetting("MARK").toLower();
-    return ngSetting("ROW_COLUMNS").toLower() == QLatin1String("on") && ngNoIcons() && (mark.isEmpty() || mark == QLatin1String("object"));
+    // (with every mark of the rows: the drawing of the file, the tile, the pill, the signs...)
+    return ngSetting("ROW_COLUMNS").toLower() == QLatin1String("on") && ngNoIcons();
+}
+
+bool ngRowColumns(const QGraphicsItem *item)
+{
+    if (!ngNoIcons()) {
+        return false;
+    }
+    for (const QGraphicsItem *it = item; it; it = it->parentItem()) {
+        if (const QGraphicsObject *object = it->toGraphicsObject()) {
+            const QVariant own = object->property("_ng_row_columns");
+            if (own.isValid()) {
+                return own.toBool();
+            }
+        }
+    }
+    return ngRowColumns();
+}
+
+bool ngDetailsCompact()
+{
+    return ngSetting("DETAILS_DENSITY").toLower() == QLatin1String("compact");
 }
 
 void KItemListWidget::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)

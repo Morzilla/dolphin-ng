@@ -644,8 +644,12 @@ void KStandardItemListWidgetInformant::calculateDetailsLayoutItemSizeHints(QVect
     const KItemListStyleOption &option = view->styleOption();
     // dolphin-ng: two text lines per row
     const int textHeight = ngTwoLineList(view) ? 2 * option.fontMetrics.height() + 4 : option.fontMetrics.height();
-    const qreal height = ngNoIcons(view) ? option.padding * 2 + textHeight + (ngMark() == NgMark::Object ? 44 : 24) // no icon: as tall as its two lines (a little more for the drawing)
-                                      : option.padding * 2 + qMax(option.iconSize, textHeight);
+    // dolphin-ng: the Details view (rows with columns) has the small tile for a mark; compact, one line as low as the text
+    const bool details = ngRowColumns(view);
+    const qreal height = details && ngDetailsCompact() ? option.padding * 2 + option.fontMetrics.height() + 10
+        : details                                    ? option.padding * 2 + textHeight + 12
+        : ngNoIcons(view) ? option.padding * 2 + textHeight + (ngMark() == NgMark::Object ? 44 : 24) // no icon: as tall as its two lines (a little more for the drawing)
+                          : option.padding * 2 + qMax(option.iconSize, textHeight);
     logicalHeightHints.fill(std::make_pair(height, false));
     logicalWidthHint = -1.0;
 }
@@ -949,7 +953,7 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
                 painter->restore();
             }
         }
-        const NgMark mark = ngMark();
+        const NgMark mark = m_ngDetailsRow ? NgMark::Tile : ngMark(); // (the Details view: the small tile)
         if (m_ngObjectRow) {
             // the drawing of the card, small: type and size written on it; a real preview becomes the object
             // (a print, a page, a film strip). Resting on a preview opens the quick view, as on the cards
@@ -994,7 +998,16 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
                 painter->setPen(m_ngTint);
                 painter->drawText(box, flags, m_ngSigla);
             };
-            if (mark == NgMark::Tile) {
+            if (mark == NgMark::Tile && m_ngCompactRow) {
+                // one line: a small tile with the glyph alone
+                const qreal side = h - 10;
+                const QRectF tile(x0 + 3, (h - side) / 2.0, side, side);
+                painter->setPen(QPen(edge, 1));
+                painter->setBrush(soft);
+                painter->drawRoundedRect(tile.adjusted(0.5, 0.5, -0.5, -0.5), side / 3.8, side / 3.8);
+                const qreal g = side * 0.62;
+                glyph(QRectF(tile.center().x() - g / 2, tile.center().y() - g / 2, g, g));
+            } else if (mark == NgMark::Tile) {
                 const qreal side = h - 18;
                 const QRectF tile(x0 + 3, (h - side) / 2.0, side, side);
                 painter->setPen(QPen(edge, 1));
@@ -2561,11 +2574,17 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         }
         m_ngDateRole = dateRole;
         const qreal gap = columnWidthInc / 2;
+        // the Details view: the drawn rows with columns, the small tile for a mark, one line when compact
+        const bool columns = noIcons && ngRowColumns(this);
+        const bool compact = columns && ngDetailsCompact();
+        m_ngDetailsRow = columns;
+        m_ngCompactRow = compact;
+        const NgMark rowMark = columns ? NgMark::Tile : ngMark();
         qreal left = firstColumnInc + gap;
         if (noIcons) {
-            switch (ngMark()) {
+            switch (rowMark) {
             case NgMark::Tile:
-                left = leftPadding() + 13 + (widgetHeight - 18) + 16;
+                left = leftPadding() + 13 + (compact ? widgetHeight - 10 : widgetHeight - 18) + (compact ? 12 : 16);
                 break;
             case NgMark::Pill:
                 left = leftPadding() + 13 + fontHeight * 4.8 + 16;
@@ -2586,15 +2605,14 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         }
         const qreal right = size().width() - 18;
         const int lineGap = 2;
-        const qreal firstY = qMax(qreal(option.padding), (widgetHeight - (2 * fontHeight + lineGap)) / 2.0);
+        const qreal firstY = compact ? standardY : qMax(qreal(option.padding), (widgetHeight - (2 * fontHeight + lineGap)) / 2.0);
         const qreal secondY = firstY + fontHeight + lineGap;
 
         // a narrow view drops the date first, then the size column
         // dolphin-ng: rows drawn like the cards: the drawing says type and size, the dates are the two lines at the end
-        m_ngObjectRow = noIcons && ngMark() == NgMark::Object;
+        m_ngObjectRow = noIcons && rowMark == NgMark::Object;
         // with columns: the name and its line end where the header's name column ends; every other role goes in its
         // column, at the place of the header's (no dates block, no chips for them)
-        const bool columns = m_ngObjectRow && ngRowColumns();
         if (columns) {
             dateRole.clear();
             m_ngDateRole.clear();
@@ -2643,7 +2661,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         m_ngBarFraction = -1;
         m_ngBarRect = QRectF();
         m_ngCount.clear();
-        const bool sizeColumn = noIcons && !m_ngObjectRow && m_sortedVisibleRoles.contains("size");
+        const bool sizeColumn = noIcons && !m_ngObjectRow && !columns && m_sortedVisibleRoles.contains("size");
         // the type and the size written in the drawing
         m_ngRowCount = values.contains("count") ? values.value("count").toInt() : -1;
         m_ngInfoSize = values.value("isDir").toBool() ? (values.value("size").toLongLong() > 0 ? roleText("size", values) : QString()) : roleText("size", values);
@@ -2757,7 +2775,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         m_ngCardActions.clear();
         m_ngCardActionIndex.clear();
         m_ngCardFab = QRectF();
-        m_ngCardHoverPill = m_ngObjectRow; // drawn rows: the actions come with the pointer, as on the cards
+        m_ngCardHoverPill = m_ngObjectRow || columns; // drawn rows and Details: the actions come with the pointer, as on the cards
         m_ngCardActionIcons.clear();
         m_ngCardActionSeps.clear();
         m_ngCardActionsPill = QRectF();
@@ -2832,8 +2850,8 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         const qreal chipY = secondY + (fontHeight - chipHeight) / 2.0;
         qreal chipX = left;
         auto chip = [&](const QString &text, bool tinted) {
-            if (text.isEmpty()) {
-                return;
+            if (text.isEmpty() || compact) {
+                return; // (compact: one line, the name alone)
             }
             const qreal width = chipMetrics.horizontalAdvance(text) + 16;
             if (chipX + width > textRight) {

@@ -1759,21 +1759,34 @@ private:
                     const char *icon;
                     DolphinView::Mode mode;
                     int tiles; // -1: does not matter, 1: with tiles, 0: classic
-                } others[] = {{ngTr("List", "Lista"), "view-list-details", DolphinView::DetailsView, -1},
-                              {ngTr("Icons", "Icone"), "view-list-icons", DolphinView::IconsView, 1},
-                              {ngTr("Classic icons", "Icone classiche"), "view-list-icons", DolphinView::IconsView, 0}};
+                    int columns; // the list: -1 does not matter, 1 with columns (Details), 0 without (List)
+                } others[] = {{ngTr("List", "Lista"), "view-list-details", DolphinView::DetailsView, -1, 0},
+                              {ngTr("Details (columns)", "Dettagli (colonne)"), "view-list-tree", DolphinView::DetailsView, -1, 1},
+                              {ngTr("Icons", "Icone"), "view-list-icons", DolphinView::IconsView, 1, -1},
+                              {ngTr("Classic icons", "Icone classiche"), "view-list-icons", DolphinView::IconsView, 0, -1}};
                 auto *views = new QActionGroup(menu);
                 for (const auto &other : others) {
+                    if (other.columns >= 0 && !ngNoIcons()) {
+                        if (other.columns == 1) {
+                            continue; // (columns over the drawn rows only: with the icons the list is Dolphin's own)
+                        }
+                    }
                     QAction *action = menu->addAction(QIcon::fromTheme(QLatin1String(other.icon)), other.label);
                     action->setCheckable(true);
-                    action->setChecked(m_view->viewMode() == other.mode && (other.tiles < 0 || ngTiles() == (other.tiles == 1)));
+                    action->setChecked(m_view->viewMode() == other.mode && (other.tiles < 0 || ngTiles() == (other.tiles == 1))
+                                       && (other.columns < 0 || !ngNoIcons() || m_view->ngColumnsShown() == (other.columns == 1)));
                     views->addAction(action);
                     const DolphinView::Mode mode = other.mode;
                     const int tiles = other.tiles;
-                    connect(action, &QAction::triggered, this, [this, mode, tiles] {
+                    const int columns = other.columns;
+                    connect(action, &QAction::triggered, this, [this, mode, tiles, columns] {
                         if (tiles >= 0 && ngTiles() != (tiles == 1)) {
                             setNgSetting("TILES", tiles == 1 ? QString() : QStringLiteral("off"));
                             ngSettingsInvalidate();
+                        }
+                        // the list with or without columns: the folder's own choice
+                        if (columns >= 0 && ngNoIcons() && m_view->ngColumnsShown() != (columns == 1)) {
+                            m_view->ngSetColumnsShown(columns == 1);
                         }
                         if (m_view->viewMode() != mode) {
                             m_view->setViewMode(mode);
@@ -1905,8 +1918,8 @@ private:
 
         // columns of attributes after the name (drawn rows only): on or off, and which ones. Their order and widths are
         // the header's (drag a column header to move it); the choice is the folder's, as Dolphin keeps it
-        if (ngNoIcons() && (ngSetting("MARK").isEmpty() || ngSetting("MARK").toLower() == QLatin1String("object"))) {
-            const bool on = ngRowColumns();
+        if (ngNoIcons()) {
+            const bool on = m_view->ngColumnsShown();
             auto *columns = new QToolButton(this);
             columns->setProperty("ngPill", true);
             columns->setAutoRaise(true);
@@ -1921,7 +1934,18 @@ private:
             show->setCheckable(true);
             show->setChecked(on);
             connect(show, &QAction::toggled, this, [this](bool checked) {
-                setNgSetting("ROW_COLUMNS", checked ? QStringLiteral("on") : QString());
+                m_view->ngSetColumnsShown(checked); // this folder's own choice, as the view menu's Details
+                QTimer::singleShot(0, this, [this] {
+                    rebuild();
+                });
+            });
+            // comfortable rows (the name over its type, the small tile) or compact (one line, as low as the text)
+            QAction *compact = menu->addAction(ngTr("Compact rows", "Righe compatte"));
+            compact->setCheckable(true);
+            compact->setChecked(ngDetailsCompact());
+            compact->setEnabled(on);
+            connect(compact, &QAction::toggled, this, [this](bool checked) {
+                setNgSetting("DETAILS_DENSITY", checked ? QStringLiteral("compact") : QString());
                 ngSettingsInvalidate();
                 QTimer::singleShot(0, this, [this] {
                     rebuild();

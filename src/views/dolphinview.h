@@ -448,6 +448,12 @@ public Q_SLOTS:
     void ngSetCardLook(int look, bool everywhere = false);
     bool ngFolderHasOwnView() const;
     void ngResetFolderView();
+    /**
+     * dolphin-ng: the Details view, the drawn rows with columns: ngColumnsShown() says whether this folder shows them
+     * (its own choice, or ROW_COLUMNS); ngSetColumnsShown() makes it the folder's own choice.
+     */
+    bool ngColumnsShown() const;
+    void ngSetColumnsShown(bool on);
     /** dolphin-ng: the folder's own view becomes the default one (of every folder without a view of its own) */
     void ngMakeFolderViewDefault();
 
