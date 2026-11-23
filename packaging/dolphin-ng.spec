@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      d91a1e751171851911b334db4fea544a36a55ba0
+%global commit      1fd97a970fb9dcdf17f6ff8fbb4f4a4f472cd8cb
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611231116
+%global snapdate    202611231855
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -132,6 +132,15 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Mon Nov 23 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611231855git1fd97a9-1
+- Details view: columns over the drawn rows, per folder, comfortable or compact, plain by default
+- View button: one list of views (cards, list, Details, icons)
+- Location bar always visible; the search becomes a lens in a narrow window
+- Title bar: the window decoration's own buttons, macOS-style option, even margins
+- Sidebar easier to resize and grows back with the window; panels against the window's edges as an option
+- Readability on glass and dark schemes; the accent's tinge on Aurora Light
+- Opens its windows in its own instance only (wrong icon in the task manager)
+
 * Mon Nov 23 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611231116gitd91a1e7-1
 - Title bar: only the window buttons of KWin's Titlebar Buttons layout, in its order (#12)
 - Side panels easier to resize: a wider hold on the edge with the view
