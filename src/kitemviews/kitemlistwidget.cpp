@@ -1818,13 +1818,26 @@ qreal ngAuroraVeilAlpha(bool dark, bool button)
 QColor ngAuroraFrost(bool button)
 {
     // white with a tinge of the accent, as Breeze NG's frost: the panels of a light scheme 12 %, the fields, pills and
-    // buttons on them only 5 % (they stand out from the panels by being whiter). A grey accent: white
+    // buttons on them 8 % (they stand out from the panels by being whiter). A grey accent: white
     const QColor accent = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);
     if (accent.hslSaturationF() < 0.15) {
         return QColor(255, 255, 255);
     }
-    const qreal t = button ? 0.05 : 0.12;
+    const qreal t = button ? 0.08 : 0.12;
     return QColor::fromRgbF(1.0 - t + t * accent.redF(), 1.0 - t + t * accent.greenF(), 1.0 - t + t * accent.blueF());
+}
+
+QColor ngAuroraTinted(const QColor &colour, qreal amount)
+{
+    // (Aurora on a light scheme only: elsewhere the colour as it is)
+    const QColor accent = QGuiApplication::palette().color(QPalette::Active, QPalette::Highlight);
+    if (!ngAurora() || ngIsDark(QGuiApplication::palette()) || accent.hslSaturationF() < 0.15) {
+        return colour;
+    }
+    QColor out = QColor::fromRgbF(colour.redF() * (1 - amount) + accent.redF() * amount, colour.greenF() * (1 - amount) + accent.greenF() * amount,
+                                  colour.blueF() * (1 - amount) + accent.blueF() * amount);
+    out.setAlphaF(colour.alphaF());
+    return out;
 }
 
 QString ngAuroraFrostRgb()

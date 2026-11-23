@@ -253,6 +253,8 @@ DOLPHIN_EXPORT qreal ngAuroraVeilAlpha(bool dark, bool button = false);
 // Aurora on a light scheme: the frost of its surfaces, white with a tinge of the accent (and as "r, g, b" for style sheets)
 DOLPHIN_EXPORT QColor ngAuroraFrost(bool button = true);
 DOLPHIN_EXPORT QString ngAuroraFrostRgb();
+// a light surface of Aurora on a light scheme with the accent's tinge (amount: how much of it), as the frost
+DOLPHIN_EXPORT QColor ngAuroraTinted(const QColor &colour, qreal amount = 0.08);
 DOLPHIN_EXPORT QColor ngAuroraVeil(bool dark, bool button = false);
 // the accent as a light: its hue, always luminous (as the style's Helper::auroraAccent)
 DOLPHIN_EXPORT QColor ngAuroraAccent(const QPalette &palette, qreal alpha);

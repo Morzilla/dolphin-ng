@@ -747,7 +747,7 @@ protected:
             }
         } else if ((m_listing || (m_bar == NgFileFacts::Archive && m_pixmap.isNull())) && !m_entries.isEmpty()) {
             // an archive: what is inside, its top level (folders with how many files, then the files), each with its size
-            painter.fillRect(rect(), dark ? QColor(22, 25, 34, 235) : QColor(246, 247, 250, 240));
+            painter.fillRect(rect(), dark ? QColor(22, 25, 34, 235) : ngAuroraTinted(QColor(246, 247, 250, 240))); // (Aurora: the accent's tinge)
             QFont row = font();
             row.setPointSizeF(row.pointSizeF() * 0.86);
             painter.setFont(row);
@@ -932,8 +932,8 @@ protected:
     {
         QLinearGradient ground(0, band.top(), 0, band.bottom());
         if (!paper && lightBand()) {
-            ground.setColorAt(0, QColor(252, 252, 253, 225));
-            ground.setColorAt(1, QColor(246, 247, 249, 245));
+            ground.setColorAt(0, ngAuroraTinted(QColor(252, 252, 253, 225)));
+            ground.setColorAt(1, ngAuroraTinted(QColor(246, 247, 249, 245)));
             painter.fillRect(band, ground);
             painter.fillRect(QRectF(band.left(), band.top(), band.width(), 1), QColor(0, 0, 0, 22));
             return;
