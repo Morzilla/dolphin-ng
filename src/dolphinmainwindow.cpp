@@ -2092,6 +2092,10 @@ void DolphinMainWindow::ngApplyTextHalo()
                 const auto children = content->findChildren<QWidget *>();
                 for (QWidget *child : children) {
                     child->update();
+                    if (child->inherits("NgInfoView")) {
+                        QEvent restyle(QEvent::StyleChange); // (the Information panel shades its labels again)
+                        QApplication::sendEvent(child, &restyle);
+                    }
                 }
             }
             dock->update();

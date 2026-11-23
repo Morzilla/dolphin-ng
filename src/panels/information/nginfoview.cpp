@@ -26,6 +26,7 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QInputDialog>
+#include <QGraphicsDropShadowEffect>
 #include <QLabel>
 #include <QLineEdit>
 #include <QLocale>
@@ -2022,12 +2023,29 @@ void NgInfoView::restyle()
         captionInk.setAlphaF(0.75);
     }
     captionInk = ngHaloInk(captionInk, palette);
+    // on glass, the shadow of the sidebar's text under the panel's labels too (names, captions, dates, the legend):
+    // light text over a light wallpaper behind the glass could not be read. Not under the chips, which have a fill
+    const bool halo = ngSidebarHalo() || ngTextHalo();
+    const QColor shadowColour = ngIsDark(palette) ? QColor(0, 0, 0, 190) : QColor(255, 255, 255, 215);
     const auto labels = findChildren<QLabel *>();
     for (QLabel *label : labels) {
         if (label->property("_ng_dim_label").toBool()) {
             QPalette own = label->palette();
             own.setColor(QPalette::WindowText, captionInk);
             label->setPalette(own);
+        }
+        const bool filled = label->styleSheet().contains(QLatin1String("background"));
+        auto *effect = qobject_cast<QGraphicsDropShadowEffect *>(label->graphicsEffect());
+        if (halo && !filled) {
+            if (!effect) {
+                effect = new QGraphicsDropShadowEffect(label);
+                label->setGraphicsEffect(effect);
+            }
+            effect->setBlurRadius(6);
+            effect->setOffset(0, 1);
+            effect->setColor(shadowColour);
+        } else if (effect) {
+            label->setGraphicsEffect(nullptr);
         }
     }
     const bool dark = ngIsDark(palette);

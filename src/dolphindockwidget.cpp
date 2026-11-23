@@ -752,6 +752,19 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
         painter.fillRect(card, QColor(255, 255, 255, qRound(ngEnvInt("DOLPHIN_NG_FROST", 55) * 255 / 100.0)));
         painter.restore();
     }
+    if (frosted && !ngAurora() && ngIsDark(palette())) {
+        // a dark scheme: smoke of the window's colour over the wallpaper, as the frost on a light one, so that light
+        // text reads on the glass over a light wallpaper or window behind (it was white on a pale blue; issue #9).
+        // DOLPHIN_NG_SMOKE: how dense, in percent
+        painter.save();
+        QPainterPath clip;
+        clip.addRoundedRect(card, radius, radius);
+        painter.setClipPath(clip, Qt::IntersectClip);
+        QColor smoke = palette().color(QPalette::Window);
+        smoke.setAlphaF(qBound(0, ngEnvInt("DOLPHIN_NG_SMOKE", 45), 100) / 100.0);
+        painter.fillRect(card, smoke);
+        painter.restore();
+    }
     if (!ngAurora()) {
         // light veil, a little stronger at the top
         QLinearGradient veil(card.topLeft(), card.bottomLeft());
