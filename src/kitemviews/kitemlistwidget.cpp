@@ -2044,6 +2044,11 @@ bool ngRowColumns(const QGraphicsItem *item)
     return ngRowColumns();
 }
 
+bool ngDetailsPlain()
+{
+    return ngSetting("DETAILS_LOOK").toLower() != QLatin1String("tiles");
+}
+
 bool ngDetailsCompact()
 {
     return ngSetting("DETAILS_DENSITY").toLower() == QLatin1String("compact");
@@ -2055,7 +2060,7 @@ void KItemListWidget::paint(QPainter *painter, const QStyleOptionGraphicsItem *o
 
     // dolphin-ng: with any style but "stripe" the view sets m_alternateBackground on every row
     // (see KItemListView::updateAlternateBackgroundForWidget) and the row is drawn here.
-    if (m_alternateBackground && ngRowStyle() == NgRowStyle::Card) {
+    if (m_alternateBackground && ngRowStyle() == NgRowStyle::Card && !(ngRowColumns(this) && ngDetailsPlain())) { // (the plain Details view: no card)
         // a rounded card per row, darker than the view, with a hairline of light along its top edge;
         // same footprint as the hover/selection shape of the style
         const QRectF card = selectionRectFull().adjusted(3, 3, -3, -3);

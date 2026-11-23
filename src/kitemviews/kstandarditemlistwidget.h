@@ -409,6 +409,7 @@ private:
     bool m_ngObjectRow = false; // two-line rows drawn like the cards (MARK=object, the default)
     bool m_ngDetailsRow = false; // dolphin-ng: the Details view (columns, the small tile)
     bool m_ngCompactRow = false; // ...in one line
+    bool m_ngPlainRow = false; // ...plain: the file's own icon, no card or wash (DETAILS_LOOK, the default)
     QRectF m_ngRowObject; // ... where the drawing of the file is
     int m_ngRowCount = -1; // ... the item count of a folder, for its drawing
     QPixmap m_ngRowThumbPixmap;

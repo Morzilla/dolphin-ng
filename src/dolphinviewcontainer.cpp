@@ -1955,6 +1955,18 @@ private:
                     rebuild();
                 });
             });
+            // plain rows (the file's own icon, nothing around the row: the default) or the tiles and coloured rows
+            QAction *tiles = menu->addAction(ngTr("Tiles and coloured rows", "Piastrelle e righe colorate"));
+            tiles->setCheckable(true);
+            tiles->setChecked(!ngDetailsPlain());
+            tiles->setEnabled(on);
+            connect(tiles, &QAction::toggled, this, [this](bool checked) {
+                setNgSetting("DETAILS_LOOK", checked ? QStringLiteral("tiles") : QString());
+                ngSettingsInvalidate();
+                QTimer::singleShot(0, this, [this] {
+                    rebuild();
+                });
+            });
             menu->addSeparator();
             // the general attributes (size, dates, type, tags...) in the menu itself; those of documents, images,
             // audio, video and the rest in a submenu each, which says how many of its columns are on (one long list

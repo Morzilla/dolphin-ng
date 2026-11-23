@@ -318,6 +318,8 @@ DOLPHIN_EXPORT void ngSetFolderColumns(const QUrl &url, const QString &columns);
 DOLPHIN_EXPORT bool ngRowColumns(const QGraphicsItem *item);
 // DETAILS_DENSITY=compact: the rows with columns in one line, as low as the text
 DOLPHIN_EXPORT bool ngDetailsCompact();
+// DETAILS_LOOK: the Details view plain (the default: the file's own icon, no card or colour wash on the rows) or "tiles"
+DOLPHIN_EXPORT bool ngDetailsPlain();
 DOLPHIN_EXPORT void ngSetFolderCardLook(const QUrl &url, const QString &look);
 /** dolphin-ng: cards grow to fill the row (DOLPHIN_NG_CARDS_FIT=stretch) instead of keeping their size. */
 DOLPHIN_EXPORT bool ngCardsStretch();

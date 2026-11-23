@@ -877,7 +877,7 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
     }
 
     const bool ngRow = m_layout == DetailsLayout && ngNoIcons(this);
-    if (ngRow && m_ngCategory == int(NgKind::Folder) && ngSetting("FOLDER_TINT").toLower() != QLatin1String("off")) {
+    if (ngRow && !m_ngPlainRow && m_ngCategory == int(NgKind::Folder) && ngSetting("FOLDER_TINT").toLower() != QLatin1String("off")) {
         // a folder's row wears the accent (its own colour for a well-known folder): told from a file at a glance
         const QRectF rowRect = ngRowStyle() == NgRowStyle::Open ? selectionRectFull() : selectionRectFull().adjusted(3, 3, -3, -3);
         QColor tint = m_ngTint;
@@ -891,7 +891,7 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
     }
     if (ngRow && !m_ngSigla.isEmpty()) {
         // the file type as a watermark: large, faint letters at the start of the row, fading out under the name
-        const bool openRows = ngRowStyle() == NgRowStyle::Open;
+        const bool openRows = ngRowStyle() == NgRowStyle::Open || m_ngPlainRow;
         const QRectF rowRect = openRows ? selectionRectFull() : selectionRectFull().adjusted(3, 3, -3, -3);
         qreal x0 = rowRect.left() + (openRows ? 16 : 10) + (m_ngDetailsRow ? ngExpansionIndent() : 0); // (Details: after the tree)
         QFont watermarkFont(m_customizedFont);
@@ -907,7 +907,7 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
         // the row takes the colour of the file's category, strongest at the start and gone by the middle
         // (dithered: so faint a gradient over so many pixels shows as bands when it is drawn plain)
         const int washWidth = qMax(8, qRound(rowRect.width() * (openRows ? 0.40 : 0.62)));
-        if (ngSetting("ROW_WASH").toLower() != QLatin1String("hide")) {
+        if (ngSetting("ROW_WASH").toLower() != QLatin1String("hide") && !m_ngPlainRow) {
             painter->setBrushOrigin(rowRect.topLeft());
             painter->fillRect(QRectF(rowRect.left(), rowRect.top(), washWidth, rowRect.height()),
                               QBrush(ngDitheredWash(m_ngTint, washWidth, openRows ? 0.14 : 0.22, openRows ? 0.05 : 0.06, 0.55)));
@@ -971,6 +971,12 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
             painter->restore();
         } else if (!m_ngRowThumb.isEmpty()) {
             // the picture stands for the mark
+        } else if (m_ngPlainRow) {
+            // the plain Details view: the file's own icon, as it is
+            if (!m_ngIcon.isNull()) {
+                const qreal side = m_ngIcon.width() / m_ngIcon.devicePixelRatio();
+                painter->drawPixmap(QPointF(x0 + 3, (size().height() - side) / 2.0), m_ngIcon);
+            }
         } else if (mark != NgMark::Watermark) {
             // Glyph and abbreviation as one mark, in the colour of the file's kind.
             const qreal h = size().height();
@@ -2590,6 +2596,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         const bool compact = columns && ngDetailsCompact();
         m_ngDetailsRow = columns;
         m_ngCompactRow = compact;
+        m_ngPlainRow = columns && ngDetailsPlain();
         const NgMark rowMark = columns ? NgMark::Tile : ngMark();
         qreal left = firstColumnInc + gap;
         if (noIcons) {
@@ -2836,7 +2843,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
                     m_ngTint = ngAccent(ngSpecialFolderColour(special), darkScheme);
                 }
             }
-            if (!m_ngIcon.isNull() && !m_ngIconFaded) {
+            if (!m_ngIcon.isNull() && !m_ngIconFaded && !m_ngPlainRow) { // (the plain Details view shows the icon as it is)
                 // watermark: the icon fades out from left to right (done once, after its colour was read)
                 QPainter fade(&m_ngIcon);
                 fade.setCompositionMode(QPainter::CompositionMode_DestinationIn);
@@ -3176,10 +3183,10 @@ void KStandardItemListWidget::drawSiblingsInformation(QPainter *painter)
         const qreal mid = h / 2.0;
         const qreal ownX = (m_expansionArea.left() + m_expansionArea.right()) / 2.0; // the expansion arrow
         // where the tile is (as paint() places it): a level's children hang from under the centre of its tile
-        const bool openRows = ngRowStyle() == NgRowStyle::Open;
+        const bool openRows = ngRowStyle() == NgRowStyle::Open || m_ngPlainRow;
         const QRectF rowRect = openRows ? selectionRectFull() : selectionRectFull().adjusted(3, 3, -3, -3);
         const qreal tileLeft = rowRect.left() + (openRows ? 16 : 10) + (m_ngDetailsRow ? ngExpansionIndent() : 0) + 3;
-        const qreal side = m_ngCompactRow ? h - 10 : h - 18;
+        const qreal side = m_ngPlainRow && !m_ngIcon.isNull() ? m_ngIcon.width() / m_ngIcon.devicePixelRatio() : m_ngCompactRow ? h - 10 : h - 18;
         const qreal tileOffset = tileLeft + side / 2.0 - ownX; // from the arrow to the tile's centre
         auto column = [&](int level) { // the line that joins the children of the level above `level`
             return qRound(ownX - (own - level + 1) * step + tileOffset) + 0.5;
