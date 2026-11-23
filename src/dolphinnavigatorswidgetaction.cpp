@@ -20,6 +20,7 @@
 
 #include <QApplication>
 #include <QHBoxLayout>
+#include <QMenu>
 #include <QPushButton>
 #include <QStyle>
 #include <QToolBar>
@@ -176,6 +177,12 @@ void DolphinNavigatorsWidgetAction::setBackgroundEnabled(bool enabled)
 
 QWidget *DolphinNavigatorsWidgetAction::createWidget(QWidget *parent)
 {
+    // dolphin-ng: never into a menu. There is one location bar for every place that asks for one: when a narrow window
+    // pushed it into the tool bar's overflow menu, the menu took it (as its own widget) and, emptied again, dropped it,
+    // and the tool bar, wide again, had nothing left to show. In a menu the action stays a plain entry.
+    if (qobject_cast<QMenu *>(parent)) {
+        return nullptr;
+    }
     QWidget *oldParent = m_splitter->parentWidget();
     if (oldParent && oldParent->layout()) {
         oldParent->layout()->removeWidget(m_splitter.get());
