@@ -849,9 +849,12 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
     // other disks and partitions, each a box with its usage; an unmounted one is a dashed box
     m_ngDiskBoxes.clear();
     if (objectName() == QLatin1String("placesDock")) {
+        // (laid out on the card as seen: with PANELS_EDGE=flush the card runs past the window's side and foot, and the
+        // boxes stood against the window's edge)
+        const QRectF seen = card.intersected(QRectF(rect()).adjusted(ngPanelsFlush() ? 6 : 0, 0, 0, ngPanelsFlush() ? -6 : 0));
         const QList<NgDisk> disks = ngSidebarDisks();
         const int room = ngDiskRoom();
-        if (room > 0 && !disks.isEmpty() && card.height() > 200 + room - 62) {
+        if (room > 0 && !disks.isEmpty() && seen.height() > 200 + room - 62) {
             const bool compact = disks.size() > 3;
             const bool alone = disks.size() == 1;
             const bool darkGlass = ngIsDark(palette());
@@ -872,12 +875,12 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
             const QFontMetrics metrics(small);
             // where the panel gave them room (its sections' order), in this widget's coordinates
             const QVariant disksY = widget() ? widget()->property("ngDisksY") : QVariant();
-            qreal top = disksY.isValid() && disksY.toInt() >= 0 ? widget()->mapTo(this, QPoint(0, disksY.toInt())).y() : card.bottom() - room;
+            qreal top = disksY.isValid() && disksY.toInt() >= 0 ? widget()->mapTo(this, QPoint(0, disksY.toInt())).y() : seen.bottom() - room;
             for (const NgDisk &disk : disks) {
                 const bool device = !disk.url.isEmpty(); // not a disk: one line, its kind on the right, no usage
                 const bool mounted = !disk.root.isEmpty() || device;
                 const qreal height = !mounted || device ? 32 : compact ? 40 : 54;
-                const QRectF box(card.left() + 8, top, card.width() - 16, height);
+                const QRectF box(seen.left() + 8, top, seen.width() - 16, height);
                 top += height + 6;
                 // a mounted USB stick or card: an eject button at the right, as in KDE's own list
                 QRectF eject;
