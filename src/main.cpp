@@ -274,11 +274,12 @@ int main(int argc, char **argv)
         urls.append(urls.last());
     }
 
-    // dolphin-ng: Stash left the default tool bar on 2026-11-18, but a tool bar saved before (the installer copies the
-    // default the first time) still had it: taken off once. Added again by hand afterwards, it stays.
-    {
+    // dolphin-ng: Stash left the default tool bar on 2026-11-18, and Root went into the location bar as an icon on
+    // 2026-11-23, but a tool bar saved before (the installer copies the default the first time) still had them: taken
+    // off once each. Added again by hand afterwards, they stay.
+    for (const auto &[key, action] : {std::pair{"StashOffToolbar", "split_stash"}, std::pair{"RootOffToolbar", "go_root"}}) {
         KConfigGroup ng(KSharedConfig::openConfig(), QStringLiteral("DolphinNG"));
-        if (!ng.readEntry("StashOffToolbar", false)) {
+        if (!ng.readEntry(key, false)) {
             QFile file(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/kxmlgui5/dolphin/dolphinui.rc"));
             if (file.open(QIODevice::ReadOnly)) {
                 const QString text = QString::fromUtf8(file.readAll());
@@ -288,14 +289,14 @@ int main(int argc, char **argv)
                 if (end > start) {
                     QString bar = text.mid(start, end - start);
                     const int before = bar.size();
-                    bar.remove(QRegularExpression(QStringLiteral("\\s*<Action\\s+name=[\"']split_stash[\"']\\s*/>")));
+                    bar.remove(QRegularExpression(QStringLiteral("\\s*<Action\\s+name=[\"']%1[\"']\\s*/>").arg(QLatin1String(action))));
                     if (bar.size() != before && file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
                         file.write((text.left(start) + bar + text.mid(end)).toUtf8());
                         file.close();
                     }
                 }
             }
-            ng.writeEntry("StashOffToolbar", true);
+            ng.writeEntry(key, true);
             ng.sync();
         }
     }

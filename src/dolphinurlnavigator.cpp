@@ -11,6 +11,7 @@
 #include "dolphinplacesmodelsingleton.h"
 #include "dolphinurlnavigatorscontroller.h"
 #include "global.h"
+#include "kitemviews/kitemlistwidget.h"
 
 #include <KLocalizedString>
 #include <KUrlComboBox>
@@ -21,6 +22,7 @@
 #include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
+#include <QToolButton>
 
 DolphinUrlNavigator::DolphinUrlNavigator(QWidget *parent)
     : DolphinUrlNavigator(QUrl(), parent)
@@ -72,6 +74,28 @@ DolphinUrlNavigator::DolphinUrlNavigator(const QUrl &url, QWidget *parent)
     readOnlyBadge->setToolTip(i18nc("@info:tooltip of a 'locked' symbol in url navigator", "This folder is not writable for you."));
     readOnlyBadge->hide();
     setBadgeWidget(readOnlyBadge);
+
+    // dolphin-ng: the root of the file system as an icon at the start of the location bar, inside its field (it was a
+    // "Root" button of the tool bar, beside the bar); hidden while the location is typed
+    auto *root = new QToolButton(this);
+    root->setObjectName(QStringLiteral("ng_root_button"));
+    root->setAutoRaise(true);
+    root->setFocusPolicy(Qt::NoFocus);
+    root->setIcon(QIcon::fromTheme(QStringLiteral("folder-root")));
+    root->setIconSize(QSize(16, 16));
+    root->setToolTip(ngTr("Root folder (/)", "Cartella radice (/)"));
+    root->setAccessibleName(ngTr("Root folder", "Cartella radice"));
+    connect(root, &QToolButton::clicked, this, [this] {
+        setLocationUrl(QUrl::fromLocalFile(QStringLiteral("/")));
+    });
+    if (auto *box = qobject_cast<QBoxLayout *>(layout())) {
+        box->insertSpacing(0, 4);
+        box->insertWidget(1, root);
+    }
+    root->setVisible(!isUrlEditable());
+    connect(this, &KUrlNavigator::editableStateChanged, root, [root](bool editable) {
+        root->setVisible(!editable);
+    });
 }
 
 DolphinUrlNavigator::~DolphinUrlNavigator()

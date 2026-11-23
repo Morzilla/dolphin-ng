@@ -111,7 +111,6 @@
         <Action name="go_back" />
         <Action name="go_forward" />
         <Action name="go_up" />
-        <Action name="go_root" />
         <Action name="view_settings" />
         <Action name="url_navigators" />
         <Action name="create_dir" />
