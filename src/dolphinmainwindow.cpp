@@ -2191,7 +2191,12 @@ void DolphinMainWindow::ngApplyTextHalo()
     }
     if (m_ngFilterAction) {
         if (QWidget *field = toolBar(QStringLiteral("mainToolBar"))->widgetForAction(m_ngFilterAction)) {
-            shade(field, 4);
+            // (no shadow effect on the field: an effect takes the whole widget, and the light shadow round its see-through
+            // frost made it a tone lighter than the location bar beside it, the same kind of field; its text stands on
+            // the frost, as the location bar's does)
+            if (field->graphicsEffect()) {
+                field->setGraphicsEffect(nullptr);
+            }
             // its placeholder ("Search in the folder") solid on glass: see-through, it vanished over a white window
             const auto edits = field->findChildren<QLineEdit *>() << qobject_cast<QLineEdit *>(field);
             for (QLineEdit *edit : edits) {
