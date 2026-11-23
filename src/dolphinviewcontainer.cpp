@@ -1698,135 +1698,135 @@ private:
             m_groupsTextWidth = groups->sizeHint().width();
         }
 
-        // ---- the cards view: the button switches it on and off, its menu picks the look
+        // ---- the view: one button, one list. The three cards (Tessera, Scheda, Dossier), the list, the Details view
+        // with its columns and the icons are alternatives of one choice: the label says which is shown, a click goes to
+        // the next, the menu picks any. The folder's own choice (cards' look, columns) as before
         {
             auto *spacer = new QWidget(this);
             spacer->setFixedWidth(8);
             m_flow->addWidget(spacer);
             m_gaps.append(spacer);
             const bool cardsOn = m_view->viewMode() == DolphinView::CardsView;
-            static const char *const looks[] = {"Tessera", "Scheda", "Dossier"};
+            struct ViewChoice {
+                QString label;
+                const char *icon;
+                DolphinView::Mode mode;
+                int look; // the cards: 0 Tessera, 1 Scheda, 2 Dossier; else -1
+                int columns; // the list: 1 with columns (Details), 0 without; else -1
+                int tiles; // the icons: 1 Dolphin NG's tiles, 0 classic; else -1
+            };
+            QList<ViewChoice> choices{{QStringLiteral("Tessera"), "view-grid", DolphinView::CardsView, 0, -1, -1},
+                                      {QStringLiteral("Scheda"), "view-grid", DolphinView::CardsView, 1, -1, -1},
+                                      {QStringLiteral("Dossier"), "view-grid", DolphinView::CardsView, 2, -1, -1},
+                                      {ngTr("List", "Lista"), "view-list-details", DolphinView::DetailsView, -1, 0, -1}};
+            if (ngNoIcons()) { // (columns over the drawn rows only: with the icons the list is Dolphin's own)
+                choices.append({ngTr("Details", "Dettagli"), "view-list-tree", DolphinView::DetailsView, -1, 1, -1});
+            }
+            choices.append({ngTr("Icons", "Icone"), "view-list-icons", DolphinView::IconsView, -1, -1, 1});
+            choices.append({ngTr("Classic icons", "Icone classiche"), "view-list-icons", DolphinView::IconsView, -1, -1, 0});
+            auto isCurrent = [this](const ViewChoice &choice) {
+                if (m_view->viewMode() != choice.mode) {
+                    return false;
+                }
+                if (choice.look >= 0) {
+                    return m_view->ngCardLook() == choice.look;
+                }
+                if (choice.columns >= 0) {
+                    return !ngNoIcons() || m_view->ngColumnsShown() == (choice.columns == 1);
+                }
+                return choice.tiles < 0 || ngTiles() == (choice.tiles == 1);
+            };
+            int current = 0;
+            for (int i = 0; i < choices.size(); ++i) {
+                if (isCurrent(choices.at(i))) {
+                    current = i;
+                    break;
+                }
+            }
+            auto apply = [this](const ViewChoice &choice) {
+                if (choice.look >= 0) {
+                    m_view->ngSetCardLook(choice.look); // this folder's own look (the default one is in the settings)
+                }
+                if (choice.tiles >= 0 && ngTiles() != (choice.tiles == 1)) {
+                    setNgSetting("TILES", choice.tiles == 1 ? QString() : QStringLiteral("off"));
+                    ngSettingsInvalidate();
+                }
+                if (choice.columns >= 0 && ngNoIcons() && m_view->ngColumnsShown() != (choice.columns == 1)) {
+                    m_view->ngSetColumnsShown(choice.columns == 1); // the folder's own choice
+                }
+                if (m_view->viewMode() != choice.mode) {
+                    if (choice.mode == DolphinView::CardsView) {
+                        m_modeBeforeCards = m_view->viewMode();
+                    }
+                    m_view->setViewMode(choice.mode);
+                } else {
+                    rebuild();
+                }
+            };
             auto *cards = new QToolButton(this);
             cards->setProperty("ngPill", true);
             cards->setAutoRaise(true);
             cards->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-            cards->setIcon(QIcon::fromTheme(QStringLiteral("view-grid"), QIcon::fromTheme(QStringLiteral("view-list-icons"))));
-            // (not a lit toggle: the cards are the view nearly always, so it stood grey all the time; its label says
-            // the look, and it lights only under the pointer and while pressed, as Filters does)
+            cards->setIcon(QIcon::fromTheme(QLatin1String(choices.at(current).icon), QIcon::fromTheme(QStringLiteral("view-list-icons"))));
+            // (not a lit toggle: its label says the view, and it lights only under the pointer and while pressed, as
+            // Filters does)
             cards->setPopupMode(QToolButton::MenuButtonPopup);
-            // (in another view the label says which: the list, the Details view with its columns, the icons)
-            const QString otherView = m_view->viewMode() == DolphinView::DetailsView
-                ? (ngNoIcons() && m_view->ngColumnsShown() ? ngTr("Details", "Dettagli") : ngTr("List", "Lista"))
-                : ngTr("Icons", "Icone");
-            cards->setText(cardsOn ? ngTr("Cards: %1", "Card: %1").arg(QLatin1String(looks[m_view->ngCardLook()])) : ngTr("View: %1", "Vista: %1").arg(otherView));
+            cards->setText(ngTr("View: %1", "Vista: %1").arg(choices.at(current).label));
             m_cards = cards;
-            cards->setToolTip(cardsOn ? ngTr("A click goes to the next kind of card (Tessera, Scheda, Dossier); the arrow picks one, or another view (list, icons).",
-                                             "Un clic passa al tipo di card seguente (Tessera, Scheda, Dossier); la freccia ne sceglie uno, o un'altra vista (lista, icone).")
-                                      : ngTr("Cards view: every item is a card with all its details. The arrow picks the kind of card, or another view (list, icons).",
-                                             "Vista a card: ogni elemento è una scheda con tutti i dettagli. La freccia sceglie il tipo di card, o un'altra vista (lista, icone)."));
+            cards->setToolTip(ngTr("A click goes to the next view; the arrow picks one (cards, list, Details, icons).",
+                                   "Un clic passa alla vista seguente; la freccia ne sceglie una (card, lista, dettagli, icone)."));
             auto *menu = new QMenu(cards);
             auto *group = new QActionGroup(menu);
-            for (int i = 0; i < 3; ++i) {
-                QAction *action = menu->addAction(QStringLiteral("%1 · %2").arg(QChar(QLatin1Char('A' + i)), QLatin1String(looks[i])));
+            for (int i = 0; i < choices.size(); ++i) {
+                const ViewChoice choice = choices.at(i);
+                if (i == 3) {
+                    menu->addSeparator(); // (the cards above, the other views below)
+                }
+                QAction *action = menu->addAction(QIcon::fromTheme(QLatin1String(choice.icon)), choice.label);
                 action->setCheckable(true);
-                action->setChecked(m_view->ngCardLook() == i);
+                action->setChecked(i == current);
                 group->addAction(action);
-                connect(action, &QAction::triggered, this, [this, i] {
-                    m_view->ngSetCardLook(i); // this folder's own look (the default one is in the settings)
-                    if (m_view->viewMode() != DolphinView::CardsView) {
-                        m_modeBeforeCards = m_view->viewMode();
-                        m_view->setViewMode(DolphinView::CardsView);
-                    } else {
-                        rebuild();
-                    }
+                connect(action, &QAction::triggered, this, [apply, choice] {
+                    apply(choice);
                 });
             }
-            menu->addSeparator();
-            auto *fit = new QActionGroup(menu);
-            const QString fits[] = {ngTr("Fixed-size cards", "Card di misura fissa"), ngTr("Fill the row", "Riempi la riga")};
-            for (int i = 0; i < 2; ++i) {
-                QAction *action = menu->addAction(fits[i]);
-                action->setCheckable(true);
-                action->setChecked(ngCardsStretch() == (i == 1));
-                fit->addAction(action);
-                connect(action, &QAction::triggered, this, [i] {
-                    setNgSetting("CARDS_FIT", i == 1 ? QStringLiteral("stretch") : QString());
-                    ngSettingsInvalidate();
-                });
-            }
-            // the other views, one click away from the bar too: the list, the icons as Dolphin NG draws them (tiles)
-            // and the classic icons (the icon with its name under it, as in Dolphin)
-            menu->addSeparator();
-            {
-                const struct {
-                    QString label;
-                    const char *icon;
-                    DolphinView::Mode mode;
-                    int tiles; // -1: does not matter, 1: with tiles, 0: classic
-                    int columns; // the list: -1 does not matter, 1 with columns (Details), 0 without (List)
-                } others[] = {{ngTr("List", "Lista"), "view-list-details", DolphinView::DetailsView, -1, 0},
-                              {ngTr("Details (columns)", "Dettagli (colonne)"), "view-list-tree", DolphinView::DetailsView, -1, 1},
-                              {ngTr("Icons", "Icone"), "view-list-icons", DolphinView::IconsView, 1, -1},
-                              {ngTr("Classic icons", "Icone classiche"), "view-list-icons", DolphinView::IconsView, 0, -1}};
-                auto *views = new QActionGroup(menu);
-                for (const auto &other : others) {
-                    if (other.columns >= 0 && !ngNoIcons()) {
-                        if (other.columns == 1) {
-                            continue; // (columns over the drawn rows only: with the icons the list is Dolphin's own)
-                        }
-                    }
-                    QAction *action = menu->addAction(QIcon::fromTheme(QLatin1String(other.icon)), other.label);
+            if (cardsOn) {
+                // the cards' own option: how wide they are
+                menu->addSeparator();
+                auto *fit = new QActionGroup(menu);
+                const QString fits[] = {ngTr("Fixed-size cards", "Card di misura fissa"), ngTr("Fill the row", "Riempi la riga")};
+                for (int i = 0; i < 2; ++i) {
+                    QAction *action = menu->addAction(fits[i]);
                     action->setCheckable(true);
-                    action->setChecked(m_view->viewMode() == other.mode && (other.tiles < 0 || ngTiles() == (other.tiles == 1))
-                                       && (other.columns < 0 || !ngNoIcons() || m_view->ngColumnsShown() == (other.columns == 1)));
-                    views->addAction(action);
-                    const DolphinView::Mode mode = other.mode;
-                    const int tiles = other.tiles;
-                    const int columns = other.columns;
-                    connect(action, &QAction::triggered, this, [this, mode, tiles, columns] {
-                        if (tiles >= 0 && ngTiles() != (tiles == 1)) {
-                            setNgSetting("TILES", tiles == 1 ? QString() : QStringLiteral("off"));
-                            ngSettingsInvalidate();
-                        }
-                        // the list with or without columns: the folder's own choice
-                        if (columns >= 0 && ngNoIcons() && m_view->ngColumnsShown() != (columns == 1)) {
-                            m_view->ngSetColumnsShown(columns == 1);
-                        }
-                        if (m_view->viewMode() != mode) {
-                            m_view->setViewMode(mode);
-                        } else {
-                            rebuild();
-                        }
+                    action->setChecked(ngCardsStretch() == (i == 1));
+                    fit->addAction(action);
+                    connect(action, &QAction::triggered, this, [i] {
+                        setNgSetting("CARDS_FIT", i == 1 ? QStringLiteral("stretch") : QString());
+                        ngSettingsInvalidate();
+                    });
+                }
+                // the look chosen here is this folder's own; the default one is for every folder that has none
+                menu->addSeparator();
+                QAction *everywhere = menu->addAction(QIcon::fromTheme(QStringLiteral("folder-copy")), ngTr("Use this look in every folder", "Usa questo aspetto in tutte le cartelle"));
+                connect(everywhere, &QAction::triggered, this, [this] {
+                    m_view->ngSetCardLook(m_view->ngCardLook(), true);
+                    rebuild();
+                });
+                if (m_view->ngFolderHasOwnCardLook()) {
+                    static const char *const lookNames[] = {"Tessera", "Scheda", "Dossier"};
+                    QAction *back = menu->addAction(QIcon::fromTheme(QStringLiteral("edit-undo")),
+                                                    ngTr("Back to the default look (%1)", "Torna all'aspetto predefinito (%1)").arg(QLatin1String(lookNames[int(ngCardStyle())])));
+                    connect(back, &QAction::triggered, this, [this] {
+                        m_view->ngSetCardLook(-1);
+                        rebuild();
                     });
                 }
             }
-            // the look chosen here is this folder's own; the default one is for every folder that has none
-            menu->addSeparator();
-            QAction *everywhere = menu->addAction(QIcon::fromTheme(QStringLiteral("folder-copy")), ngTr("Use this look in every folder", "Usa questo aspetto in tutte le cartelle"));
-            connect(everywhere, &QAction::triggered, this, [this] {
-                m_view->ngSetCardLook(m_view->ngCardLook(), true);
-                rebuild();
-            });
-            if (m_view->ngFolderHasOwnCardLook()) {
-                static const char *const lookNames[] = {"Tessera", "Scheda", "Dossier"};
-                QAction *back = menu->addAction(QIcon::fromTheme(QStringLiteral("edit-undo")),
-                                                ngTr("Back to the default look (%1)", "Torna all'aspetto predefinito (%1)").arg(QLatin1String(lookNames[int(ngCardStyle())])));
-                connect(back, &QAction::triggered, this, [this] {
-                    m_view->ngSetCardLook(-1);
-                    rebuild();
-                });
-            }
             cards->setMenu(menu);
             menuButton(cards);
-            // a click: the cards view in the look used last; already there, the next look
-            connect(cards, &QToolButton::clicked, this, [this, cardsOn] {
-                if (!cardsOn) {
-                    m_modeBeforeCards = m_view->viewMode();
-                    m_view->setViewMode(DolphinView::CardsView);
-                    return;
-                }
-                m_view->ngSetCardLook((m_view->ngCardLook() + 1) % 3); // this folder's own look
-                rebuild();
+            // a click: the next view of the list
+            connect(cards, &QToolButton::clicked, this, [apply, choices, current] {
+                apply(choices.at((current + 1) % choices.size()));
             });
             m_flow->addWidget(cards);
         }
