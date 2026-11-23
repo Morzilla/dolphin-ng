@@ -983,7 +983,8 @@ private:
             // what is on wears the accent, with the accent's own text colour (as a selection): not a grey of ink
             const QColor accent = palette.color(QPalette::Highlight);
             const QColor accentHover = accent.lighter(110);
-            const QString on = QStringLiteral("background: %1; border-color: %1; color: %2;").arg(accent.name(), ngSelectionText(palette).name());
+            m_onText = ngSelectionText(palette);
+            const QString on = QStringLiteral("background: %1; border-color: %1; color: %2;").arg(accent.name(), m_onText.name());
             sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked { %1 }").arg(on));
             sheet.replace(QStringLiteral("QToolButton:checked:hover { background: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton:checked:hover { background: %1; border-color: %1; }").arg(accentHover.name()));
             sheet.replace(QStringLiteral("QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink), QStringLiteral("QToolButton[ngPill=\"true\"]:checked { %1 }").arg(on));
@@ -1011,6 +1012,7 @@ private:
                           QStringLiteral("QToolButton[ngPill=\"true\"] { background: rgba(%1, %2); border-color: transparent;").arg(veilInk, veil));
             sheet.replace(QStringLiteral("QToolButton[ngPill=\"true\"]:hover { background: rgba(%1, 0.10); }").arg(ink),
                           QStringLiteral("QToolButton[ngPill=\"true\"]:hover { background: rgba(%1, %2); }").arg(veilInk, QString::number(qMin(1.0, ngAuroraVeil(dark, true).alphaF() + (dark ? 0.06 : 0.20)), 'f', 3)));
+            m_onText = ngAuroraSelectionText(palette);
             sheet.replace(QStringLiteral("QToolButton:checked { background: rgba(%1, 0.16); }").arg(ink), QStringLiteral("QToolButton:checked { background: rgba(%1, %2); color: %3; }").arg(accentRgb, QString::number(accent.alphaF(), 'f', 2), ngAuroraSelectionText(palette).name()));
             // (and a button with a name that is on: the accent too, not the grey of the pill's rule)
             sheet.replace(QStringLiteral("QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }").arg(ink),
@@ -1052,9 +1054,14 @@ private:
         for (QToolButton *button : buttons) {
             if (button->isCheckable() && !button->property("_ng_on_icon").toBool()) {
                 button->setProperty("_ng_on_icon", true);
-                new NgOnIcon(button, [] {
+                new NgOnIcon(button, [this] {
+                    // the colour the style sheet gave the text on the fill when it was built (asked again here, the look
+                    // could have changed since: a dark blue icon by white text on the accent)
+                    if (m_onText.isValid()) {
+                        return m_onText;
+                    }
                     const QPalette palette = QApplication::palette();
-                    return ngAurora() ? ngAuroraSelectionText(palette) : ngSelectionText(palette); // (the text's colour on the fill: icon and text alike)
+                    return ngAurora() ? ngAuroraSelectionText(palette) : ngSelectionText(palette);
                 });
             }
         }
@@ -2049,6 +2056,7 @@ private:
     bool m_trailingIconsOnly = false; // the named buttons on the right show only their icon (see fitSorting)
     int m_trailingTextWidth = 0; // the width their names take
     QPointer<QToolButton> m_groups; // the groups button (icon only when even the compact bar is too wide)
+    QColor m_onText; // the colour of text on the fill of a button that is on, as the style sheet has it (and so its icon)
     QPointer<QToolButton> m_filters, m_cards; // the filters and cards buttons (icon only when narrower still)
     QToolButton *m_ownView = nullptr; // "this folder's view", on the right: shown when the folder has one of its own
     int m_groupsTextWidth = 0;
