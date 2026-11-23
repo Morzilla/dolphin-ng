@@ -1058,6 +1058,13 @@ DolphinMainWindow::DolphinMainWindow()
             // whatever the layout said)
             QString leftLayout = decoration.readEntry("ButtonsOnLeft", QStringLiteral("MS"));
             QString rightLayout = decoration.readEntry("ButtonsOnRight", QStringLiteral("HIAX"));
+            // TITLE_BUTTONS=left: as on macOS, close, minimize and maximize at the left end of the row, before the sidebar's
+            // button; the Information panel's button stays at the right end
+            const bool macButtons = ngSetting("TITLE_BUTTONS").toLower() == QLatin1String("left");
+            if (macButtons) {
+                leftLayout = QStringLiteral("XIA");
+                rightLayout.clear();
+            }
             // for tests: DOLPHIN_NG_TEST_BUTTONS="left|right" (KWin's letters) in place of KWin's own layout
             if (const QString test = qEnvironmentVariable("DOLPHIN_NG_TEST_BUTTONS"); test.contains(QLatin1Char('|'))) {
                 leftLayout = test.section(QLatin1Char('|'), 0, 0);
@@ -1116,8 +1123,11 @@ DolphinMainWindow::DolphinMainWindow()
                 connect(dock, &QDockWidget::visibilityChanged, panel, update);
                 update();
             });
-            auto *buttonsLayout = static_cast<QHBoxLayout *>(buttons->layout());
-            if (buttonsLeft) {
+            if (macButtons) {
+                // (macOS style: the window's buttons at the left, this one alone at the right end)
+                panel->setParent(rightButtons);
+                static_cast<QHBoxLayout *>(rightButtons->layout())->addWidget(panel);
+            } else if (auto *buttonsLayout = static_cast<QHBoxLayout *>(buttons->layout()); buttonsLeft) {
                 buttonsLayout->addWidget(panel);
             } else {
                 buttonsLayout->insertWidget(0, panel);
@@ -1127,7 +1137,8 @@ DolphinMainWindow::DolphinMainWindow()
             drag->setMinimumWidth(60);
             // (a side with none of them takes no room)
             m_ngTabsToolBar->addWidget(leftButtons)->setVisible(leftButtons->layout()->count() > 0);
-            m_ngTabsToolBar->addWidget(topBar);
+            m_ngTitleTabsAction = m_ngTabsToolBar->addWidget(topBar); // (the sidebar's button goes before it, see ngPlaceSidebarToggle)
+            m_ngMacButtons = macButtons;
             m_ngTabsToolBar->addWidget(drag);
             m_ngTabsToolBar->addWidget(rightButtons)->setVisible(rightButtons->layout()->count() > 0);
             // (the buttons where the decoration of every other window has them: measured against KWin's)
@@ -4845,7 +4856,9 @@ void DolphinMainWindow::ngPlaceSidebarToggle()
             holderLayout->setSpacing(0);
             holderLayout->addWidget(button);
             m_ngTitleToggle = button;
-            m_ngTabsToolBar->insertWidget(m_ngTabsToolBar->actions().value(0), holder);
+            // first in the row; with the window's buttons at the left (macOS style) after them, before the tabs
+            QAction *before = m_ngMacButtons && m_ngTitleTabsAction ? m_ngTitleTabsAction.data() : m_ngTabsToolBar->actions().value(0);
+            m_ngTabsToolBar->insertWidget(before, holder);
             auto align = [this, holder, holderLayout, button] {
                 auto *tabs = m_ngTabsToolBar ? m_ngTabsToolBar->findChild<QTabBar *>() : nullptr;
                 if (!tabs || tabs->count() == 0 || tabs->height() <= 0) {

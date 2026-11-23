@@ -62,6 +62,7 @@ private:
     QComboBox *m_devices;
     QComboBox *m_disksPos;
     QComboBox *m_startAt = nullptr; // Dolphin's "Show on startup": the folders and tabs of last time, or the home folder
+    QCheckBox *m_macButtons = nullptr; // the window's buttons at the left, as on macOS (TITLE_BUTTONS=left)
     QCheckBox *m_barNames = nullptr; // the sort bar's new folder and split buttons with their names (BAR_NAMES, off: icons)
     QCheckBox *m_restoreSelection = nullptr; // with them, the files that were selected (RESTORE_SELECTION, off by default)
     QComboBox *m_tabsPlace = nullptr; // where the tabs are (TABS): in the title bar, above the location bar, above the files

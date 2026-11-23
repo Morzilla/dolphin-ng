@@ -1245,6 +1245,8 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
         rowLayout->addStretch();
         page->addWidget(row);
     }
+    m_macButtons = toggle(ngTr("Window buttons on the left, as on macOS (tabs in the title bar; new windows)",
+                               "Pulsanti della finestra a sinistra, come su macOS (schede nella barra del titolo; nuove finestre)"));
     m_barNames = toggle(ngTr("Names beside the icons of New Folder and Split (on the right of the sort bar)",
                              "Nomi accanto alle icone di Nuova cartella e Dividi (a destra della barra di ordinamento)"));
     // what a new start shows: Dolphin's own choice ("Show on startup"), here where it is looked for, with the selection
@@ -1476,6 +1478,7 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     connect(m_hoverDelay, &QSpinBox::valueChanged, this, &NgSettingsPage::changed);
     connect(m_restoreSelection, &QCheckBox::toggled, this, &NgSettingsPage::changed);
     connect(m_barNames, &QCheckBox::toggled, this, &NgSettingsPage::changed);
+    connect(m_macButtons, &QCheckBox::toggled, this, &NgSettingsPage::changed);
     connect(m_startAt, &QComboBox::currentIndexChanged, this, &NgSettingsPage::changed);
     connect(m_startAt, &QComboBox::currentIndexChanged, this, [this] {
         m_restoreSelection->setEnabled(m_startAt->currentData().toBool());
@@ -1637,6 +1640,7 @@ void NgSettingsPage::loadSettings()
     m_startAt->setCurrentIndex(GeneralSettings::rememberOpenedTabs() ? 0 : 1);
     m_restoreSelection->setChecked(ngSetting("RESTORE_SELECTION").toLower() == QLatin1String("on"));
     m_barNames->setChecked(ngSetting("BAR_NAMES").toLower() == QLatin1String("on"));
+    m_macButtons->setChecked(ngSetting("TITLE_BUTTONS").toLower() == QLatin1String("left"));
     m_restoreSelection->setEnabled(GeneralSettings::rememberOpenedTabs());
     m_glassPanel->setChecked(ngSetting("SIDEBAR").toLower() != QLatin1String("plain"));
     m_backdrop->setCurrentIndex(qMax(0, m_backdrop->findData(ngSetting("GLASS_MODE").toLower())));
@@ -1731,6 +1735,7 @@ void NgSettingsPage::applySettings()
     }
     setNgSetting("RESTORE_SELECTION", m_restoreSelection->isChecked() ? QStringLiteral("on") : QString());
     setNgSetting("BAR_NAMES", m_barNames->isChecked() ? QStringLiteral("on") : QString());
+    setNgSetting("TITLE_BUTTONS", m_macButtons->isChecked() ? QStringLiteral("left") : QString());
     setNgSetting("SIDEBAR", m_glassPanel->isChecked() ? QString() : QStringLiteral("plain"));
     setNgSetting("GLASS_MODE", m_backdrop->currentData().toString());
     setNgSetting("GLASS_IMAGE", m_image->text().trimmed());
@@ -1846,6 +1851,7 @@ void NgSettingsPage::restoreDefaults()
     m_startAt->setCurrentIndex(0);
     m_restoreSelection->setChecked(false);
     m_barNames->setChecked(false);
+    m_macButtons->setChecked(false);
     m_sectionsFollow->setChecked(false);
     fillSectionOrder({QStringLiteral("places"), QStringLiteral("pinned"), QStringLiteral("filters"), QStringLiteral("disks")}, true, true, true);
     for (const auto &entry : std::as_const(m_deviceBoxes)) {

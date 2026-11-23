@@ -807,6 +807,8 @@ private:
     bool m_ngUpPlaced = false; // "up" was put beside back and forward
     QAction *m_ngSidebarToggle = nullptr; // dolphin-ng: shows and hides the places, first in the toolbar
     void ngPlaceSidebarToggle();
+    QPointer<QAction> m_ngTitleTabsAction; // dolphin-ng: the tabs in the title row (the sidebar's button goes before them)
+    bool m_ngMacButtons = false; // dolphin-ng: TITLE_BUTTONS=left, the window's buttons at the left as on macOS
     void ngMoveToolbarButtons();
     DolphinViewContainer *m_activeViewContainer;
 
