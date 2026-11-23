@@ -171,7 +171,9 @@ void KItemListGroupHeader::updateCache()
     const QColor c1 = textColor();
     const QColor c2 = baseColor();
     m_separatorColor = mixedColor(c1, c2, 10);
-    m_roleColor = mixedColor(c1, c2, 60);
+    // dolphin-ng: over the drawn rows (on glass, veiled) the group's title nearly in the text's tone: 60 % was a grey
+    // with too little contrast on a dark scheme
+    m_roleColor = mixedColor(c1, c2, ngTwoLineList(this) ? 88 : 60);
 
     updateSize();
 
@@ -215,13 +217,13 @@ QPalette::ColorRole KItemListGroupHeader::normalBaseColorRole() const
 
 QColor KItemListGroupHeader::textColor() const
 {
-    const QPalette::ColorGroup group = isActiveWindow() ? QPalette::Active : QPalette::Inactive;
+    const QPalette::ColorGroup group = isActiveWindow() || ngTwoLineList(this) ? QPalette::Active : QPalette::Inactive; // dolphin-ng: as the rows' names
     return styleOption().palette.color(group, normalTextColorRole());
 }
 
 QColor KItemListGroupHeader::baseColor() const
 {
-    const QPalette::ColorGroup group = isActiveWindow() ? QPalette::Active : QPalette::Inactive;
+    const QPalette::ColorGroup group = isActiveWindow() || ngTwoLineList(this) ? QPalette::Active : QPalette::Inactive;
     return styleOption().palette.color(group, normalBaseColorRole());
 }
 

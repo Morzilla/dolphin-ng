@@ -310,6 +310,16 @@ DOLPHIN_EXPORT NgCardStyle ngCardStyle(const QGraphicsItem *item);
 // PANELS_EDGE=flush: the sidebar and the Information panel against the window's edges (no margin on the outer sides)
 DOLPHIN_EXPORT bool ngPanelsFlush();
 DOLPHIN_EXPORT QString ngFolderCardLook(const QUrl &url);
+// dolphin-ng: the Details view (the drawn rows with columns): a folder's own choice ("on", "off", or empty for the
+// default, ROW_COLUMNS), kept beside its look of cards
+DOLPHIN_EXPORT QString ngFolderColumns(const QUrl &url);
+DOLPHIN_EXPORT void ngSetFolderColumns(const QUrl &url, const QString &columns);
+// the view the item is in shows columns: its folder's choice (property _ng_row_columns of the view), else ROW_COLUMNS
+DOLPHIN_EXPORT bool ngRowColumns(const QGraphicsItem *item);
+// DETAILS_DENSITY=compact: the rows with columns in one line, as low as the text
+DOLPHIN_EXPORT bool ngDetailsCompact();
+// DETAILS_LOOK: the Details view plain (the default: the file's own icon, no card or colour wash on the rows) or "tiles"
+DOLPHIN_EXPORT bool ngDetailsPlain();
 DOLPHIN_EXPORT void ngSetFolderCardLook(const QUrl &url, const QString &look);
 /** dolphin-ng: cards grow to fill the row (DOLPHIN_NG_CARDS_FIT=stretch) instead of keeping their size. */
 DOLPHIN_EXPORT bool ngCardsStretch();

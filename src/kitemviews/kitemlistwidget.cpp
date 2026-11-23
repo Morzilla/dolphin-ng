@@ -7,6 +7,7 @@
  */
 
 #include "kitemlistwidget.h"
+#include "kstandarditemlistview.h" // dolphin-ng: the layout, for the selection toggle
 #include <QUrl>
 #include <QGraphicsObject>
 
@@ -328,6 +329,30 @@ void ngSetFolderCardLook(const QUrl &url, const QString &look)
 bool ngPanelsFlush()
 {
     return ngSetting("PANELS_EDGE").toLower() == QLatin1String("flush");
+}
+
+static KConfigGroup ngFolderColumnsGroup()
+{
+    return KSharedConfig::openConfig(QStringLiteral("dolphin-ng-foldersrc"))->group(QStringLiteral("Columns"));
+}
+
+QString ngFolderColumns(const QUrl &url)
+{
+    return url.isEmpty() ? QString() : ngFolderColumnsGroup().readEntry(ngFolderKey(url), QString());
+}
+
+void ngSetFolderColumns(const QUrl &url, const QString &columns)
+{
+    if (url.isEmpty()) {
+        return;
+    }
+    KConfigGroup group = ngFolderColumnsGroup();
+    if (columns.isEmpty()) {
+        group.deleteEntry(ngFolderKey(url));
+    } else {
+        group.writeEntry(ngFolderKey(url), columns);
+    }
+    group.sync();
 }
 
 bool ngCardsStretch()
@@ -2000,8 +2025,34 @@ bool ngNoIcons(const QGraphicsItem *item)
 
 bool ngRowColumns()
 {
-    const QString mark = ngSetting("MARK").toLower();
-    return ngSetting("ROW_COLUMNS").toLower() == QLatin1String("on") && ngNoIcons() && (mark.isEmpty() || mark == QLatin1String("object"));
+    // (with every mark of the rows: the drawing of the file, the tile, the pill, the signs...)
+    return ngSetting("ROW_COLUMNS").toLower() == QLatin1String("on") && ngNoIcons();
+}
+
+bool ngRowColumns(const QGraphicsItem *item)
+{
+    if (!ngNoIcons()) {
+        return false;
+    }
+    for (const QGraphicsItem *it = item; it; it = it->parentItem()) {
+        if (const QGraphicsObject *object = it->toGraphicsObject()) {
+            const QVariant own = object->property("_ng_row_columns");
+            if (own.isValid()) {
+                return own.toBool();
+            }
+        }
+    }
+    return ngRowColumns();
+}
+
+bool ngDetailsPlain()
+{
+    return ngSetting("DETAILS_LOOK").toLower() != QLatin1String("tiles");
+}
+
+bool ngDetailsCompact()
+{
+    return ngSetting("DETAILS_DENSITY").toLower() == QLatin1String("compact");
 }
 
 void KItemListWidget::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
@@ -2010,7 +2061,7 @@ void KItemListWidget::paint(QPainter *painter, const QStyleOptionGraphicsItem *o
 
     // dolphin-ng: with any style but "stripe" the view sets m_alternateBackground on every row
     // (see KItemListView::updateAlternateBackgroundForWidget) and the row is drawn here.
-    if (m_alternateBackground && ngRowStyle() == NgRowStyle::Card) {
+    if (m_alternateBackground && ngRowStyle() == NgRowStyle::Card && !(ngRowColumns(this) && ngDetailsPlain())) { // (the plain Details view: no card)
         // a rounded card per row, darker than the view, with a hairline of light along its top edge;
         // same footprint as the hover/selection shape of the style
         const QRectF card = selectionRectFull().adjusted(3, 3, -3, -3);
@@ -2019,8 +2070,13 @@ void KItemListWidget::paint(QPainter *painter, const QStyleOptionGraphicsItem *o
         painter->setPen(Qt::NoPen);
         const bool dark = ngIsDark(m_styleOption.palette);
         if (ngAurora()) {
-            // Breeze NG Aurora: a light veil on the window's glass, no lit edge
-            painter->setBrush(ngAuroraVeil(dark));
+            // Breeze NG Aurora: a light veil on the window's glass, no lit edge (half as dense in the Details view on a
+            // dark scheme: its columns of light text are read on it)
+            QColor veil = ngAuroraVeil(dark);
+            if (dark && ngRowColumns(this)) {
+                veil.setAlphaF(veil.alphaF() * 0.5);
+            }
+            painter->setBrush(veil);
             if (!dark) {
                 painter->setPen(QPen(QColor(255, 255, 255, 140), 1)); // frost has a bright hairline edge
                 painter->drawRoundedRect(card.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8);
@@ -2262,7 +2318,11 @@ void KItemListWidget::setHovered(bool hovered)
         setHoverOpacity(1.0);
 
         // dolphin-ng: a widget without a place for the toggle (the cards) gets none
-        if (m_enabledSelectionToggle && !(QApplication::mouseButtons() & Qt::LeftButton) && !selectionToggleRect().isEmpty()) {
+        // dolphin-ng: not over the drawn rows of the list and the Details view (a "+" at the start of the row, over the
+        // icon or the tree, said nothing a click on the row does not do)
+        const auto *standardView = qobject_cast<const KStandardItemListView *>(parentWidget());
+        const bool ngRows = standardView && standardView->itemLayout() == KStandardItemListView::DetailsLayout && ngNoIcons(this);
+        if (m_enabledSelectionToggle && !ngRows && !(QApplication::mouseButtons() & Qt::LeftButton) && !selectionToggleRect().isEmpty()) {
             initializeSelectionToggle();
         }
 

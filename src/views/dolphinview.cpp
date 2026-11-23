@@ -2804,6 +2804,11 @@ void DolphinView::applyViewProperties(const ViewProperties &props)
         Q_EMIT zoomLevelChanged(m_view->zoomLevel(), zoomLevelChangeFrom);
     }
 
+    // dolphin-ng: the folder's own choice of columns (the Details view), if it has one. Before the header's widths: it
+    // shows or hides the header, and a hidden one skipped the folder's saved widths below
+    const QString ownColumns = ngFolderColumns(url());
+    m_view->ngSetRowColumns(ownColumns.isEmpty() ? QVariant() : QVariant(ownColumns == QLatin1String("on")));
+
     KItemListView *itemListView = m_container->controller()->view();
     if (itemListView->isHeaderVisible()) {
         KItemListHeader *header = itemListView->header();
@@ -2865,7 +2870,19 @@ void DolphinView::ngSetCardLook(int look, bool everywhere)
 
 bool DolphinView::ngFolderHasOwnView() const
 {
-    return ngFolderHasOwnCardLook() || ViewProperties(viewPropertiesUrl()).ngHasOwn();
+    return ngFolderHasOwnCardLook() || !ngFolderColumns(url()).isEmpty() || ViewProperties(viewPropertiesUrl()).ngHasOwn();
+}
+
+bool DolphinView::ngColumnsShown() const
+{
+    return ngRowColumns(m_view);
+}
+
+void DolphinView::ngSetColumnsShown(bool on)
+{
+    ngSetFolderColumns(url(), on ? QStringLiteral("on") : QStringLiteral("off"));
+    m_view->ngSetRowColumns(on);
+    Q_EMIT viewSettingsChanged(false);
 }
 
 void DolphinView::ngMakeFolderViewDefault()
@@ -2892,7 +2909,15 @@ void DolphinView::ngMakeFolderViewDefault()
             own.ngForget(); // this folder follows the default again, which is now its view
         }
     }
+    // the folder's choice of columns, too
+    const QString ownColumns = ngFolderColumns(url());
+    if (!ownColumns.isEmpty()) {
+        setNgSetting("ROW_COLUMNS", ownColumns == QLatin1String("on") ? QStringLiteral("on") : QString());
+        ngSetFolderColumns(url(), QString());
+        ngSettingsInvalidate();
+    }
     m_view->ngSetCardLook(-1);
+    m_view->ngSetRowColumns(QVariant());
     applyViewProperties();
     Q_EMIT viewSettingsChanged(false);
 }
@@ -2900,6 +2925,7 @@ void DolphinView::ngMakeFolderViewDefault()
 void DolphinView::ngResetFolderView()
 {
     ngSetFolderCardLook(url(), QString());
+    ngSetFolderColumns(url(), QString());
     {
         ViewProperties props(viewPropertiesUrl());
         props.ngForget();

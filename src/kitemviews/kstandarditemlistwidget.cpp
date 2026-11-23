@@ -644,8 +644,12 @@ void KStandardItemListWidgetInformant::calculateDetailsLayoutItemSizeHints(QVect
     const KItemListStyleOption &option = view->styleOption();
     // dolphin-ng: two text lines per row
     const int textHeight = ngTwoLineList(view) ? 2 * option.fontMetrics.height() + 4 : option.fontMetrics.height();
-    const qreal height = ngNoIcons(view) ? option.padding * 2 + textHeight + (ngMark() == NgMark::Object ? 44 : 24) // no icon: as tall as its two lines (a little more for the drawing)
-                                      : option.padding * 2 + qMax(option.iconSize, textHeight);
+    // dolphin-ng: the Details view (rows with columns) has the small tile for a mark; compact, one line as low as the text
+    const bool details = ngRowColumns(view);
+    const qreal height = details && ngDetailsCompact() ? option.padding * 2 + option.fontMetrics.height() + 10
+        : details                                    ? option.padding * 2 + textHeight + 12
+        : ngNoIcons(view) ? option.padding * 2 + textHeight + (ngMark() == NgMark::Object ? 44 : 24) // no icon: as tall as its two lines (a little more for the drawing)
+                          : option.padding * 2 + qMax(option.iconSize, textHeight);
     logicalHeightHints.fill(std::make_pair(height, false));
     logicalWidthHint = -1.0;
 }
@@ -873,7 +877,7 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
     }
 
     const bool ngRow = m_layout == DetailsLayout && ngNoIcons(this);
-    if (ngRow && m_ngCategory == int(NgKind::Folder) && ngSetting("FOLDER_TINT").toLower() != QLatin1String("off")) {
+    if (ngRow && !m_ngPlainRow && m_ngCategory == int(NgKind::Folder) && ngSetting("FOLDER_TINT").toLower() != QLatin1String("off")) {
         // a folder's row wears the accent (its own colour for a well-known folder): told from a file at a glance
         const QRectF rowRect = ngRowStyle() == NgRowStyle::Open ? selectionRectFull() : selectionRectFull().adjusted(3, 3, -3, -3);
         QColor tint = m_ngTint;
@@ -887,9 +891,10 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
     }
     if (ngRow && !m_ngSigla.isEmpty()) {
         // the file type as a watermark: large, faint letters at the start of the row, fading out under the name
-        const bool openRows = ngRowStyle() == NgRowStyle::Open;
+        const bool openRows = ngRowStyle() == NgRowStyle::Open || m_ngPlainRow;
         const QRectF rowRect = openRows ? selectionRectFull() : selectionRectFull().adjusted(3, 3, -3, -3);
-        qreal x0 = rowRect.left() + (openRows ? 16 : 10);
+        // (Details: after the tree; plain, the icon close to the view's edge)
+        qreal x0 = rowRect.left() + (m_ngPlainRow ? 4 : openRows ? 16 : 10) + (m_ngDetailsRow ? ngExpansionIndent() : 0);
         QFont watermarkFont(m_customizedFont);
         watermarkFont.setPixelSize(qMax(12, qRound(size().height() * 0.50)));
         watermarkFont.setWeight(QFont::Black);
@@ -903,7 +908,7 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
         // the row takes the colour of the file's category, strongest at the start and gone by the middle
         // (dithered: so faint a gradient over so many pixels shows as bands when it is drawn plain)
         const int washWidth = qMax(8, qRound(rowRect.width() * (openRows ? 0.40 : 0.62)));
-        if (ngSetting("ROW_WASH").toLower() != QLatin1String("hide")) {
+        if (ngSetting("ROW_WASH").toLower() != QLatin1String("hide") && !m_ngPlainRow) {
             painter->setBrushOrigin(rowRect.topLeft());
             painter->fillRect(QRectF(rowRect.left(), rowRect.top(), washWidth, rowRect.height()),
                               QBrush(ngDitheredWash(m_ngTint, washWidth, openRows ? 0.14 : 0.22, openRows ? 0.05 : 0.06, 0.55)));
@@ -949,7 +954,7 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
                 painter->restore();
             }
         }
-        const NgMark mark = ngMark();
+        const NgMark mark = m_ngDetailsRow ? NgMark::Tile : ngMark(); // (the Details view: the small tile)
         if (m_ngObjectRow) {
             // the drawing of the card, small: type and size written on it; a real preview becomes the object
             // (a print, a page, a film strip). Resting on a preview opens the quick view, as on the cards
@@ -967,6 +972,12 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
             painter->restore();
         } else if (!m_ngRowThumb.isEmpty()) {
             // the picture stands for the mark
+        } else if (m_ngPlainRow) {
+            // the plain Details view: the file's own icon, as it is
+            if (!m_ngIcon.isNull()) {
+                const qreal side = m_ngIcon.width() / m_ngIcon.devicePixelRatio();
+                painter->drawPixmap(QPointF(x0 + 3, (size().height() - side) / 2.0), m_ngIcon);
+            }
         } else if (mark != NgMark::Watermark) {
             // Glyph and abbreviation as one mark, in the colour of the file's kind.
             const qreal h = size().height();
@@ -994,7 +1005,16 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
                 painter->setPen(m_ngTint);
                 painter->drawText(box, flags, m_ngSigla);
             };
-            if (mark == NgMark::Tile) {
+            if (mark == NgMark::Tile && m_ngCompactRow) {
+                // one line: a small tile with the glyph alone
+                const qreal side = h - 10;
+                const QRectF tile(x0 + 3, (h - side) / 2.0, side, side);
+                painter->setPen(QPen(edge, 1));
+                painter->setBrush(soft);
+                painter->drawRoundedRect(tile.adjusted(0.5, 0.5, -0.5, -0.5), side / 3.8, side / 3.8);
+                const qreal g = side * 0.62;
+                glyph(QRectF(tile.center().x() - g / 2, tile.center().y() - g / 2, g, g));
+            } else if (mark == NgMark::Tile) {
                 const qreal side = h - 18;
                 const QRectF tile(x0 + 3, (h - side) / 2.0, side, side);
                 painter->setPen(QPen(edge, 1));
@@ -1194,7 +1214,15 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
         }
     }
 
-    painter->setPen(m_additionalInfoTextColor);
+    // dolphin-ng: the Details view's columns are read across the row, not glanced at under a name: nearly the text's own
+    // tone (the dimmed mix of text and base lost its contrast on the veiled rows of a dark scheme)
+    QColor infoInk = m_additionalInfoTextColor;
+    if (m_ngDetailsRow && !m_customTextColor.isValid() && !isSelected()) {
+        infoInk = styleOption().palette.color(QPalette::Text);
+        infoInk.setAlphaF(0.88);
+        infoInk = ngHaloInk(infoInk, styleOption().palette);
+    }
+    painter->setPen(infoInk);
     painter->setFont(m_customizedFont);
 
     const bool ngActionsShown = ngRow && m_ngActions && m_ngActions->isVisible();
@@ -1206,7 +1234,7 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
         if (ngHalo) {
             ngPaintTextHalo(
                 painter,
-                m_additionalInfoTextColor,
+                infoInk,
                 [&](const QPointF &offset) {
                     painter->drawStaticText(textInfo->pos + offset, textInfo->staticText);
                 },
@@ -1660,7 +1688,10 @@ QColor KStandardItemListWidget::textColor(const QWidget &widget) const
         }
     }
 
-    const QPalette::ColorGroup group = isActiveWindow() && widget.hasFocus() ? QPalette::Active : QPalette::Inactive;
+    // dolphin-ng: the drawn rows keep the active text colour when the view has no focus: the colour scheme's inactive
+    // effect faded the names, and on the veiled rows of a dark scheme they were hard to read
+    const bool ngRows = m_layout == DetailsLayout && ngTwoLineList(this);
+    const QPalette::ColorGroup group = (isActiveWindow() && widget.hasFocus()) || ngRows ? QPalette::Active : QPalette::Inactive;
     const QPalette::ColorRole role = normalTextColorRole();
     return styleOption().palette.color(group, role);
 }
@@ -1751,7 +1782,7 @@ void KStandardItemListWidget::styleOptionChanged(const KItemListStyleOption &cur
 
 void KStandardItemListWidget::hoveredChanged(bool hovered)
 {
-    if (m_layout == CardsLayout || m_ngObjectRow) {
+    if (m_layout == CardsLayout || m_ngObjectRow || m_ngDetailsRow) { // (the rows whose quick actions come with the pointer)
         // dolphin-ng: the pill of actions fades in and out with the hover
         if (!m_ngRevealAnimation) {
             m_ngRevealAnimation = new QVariantAnimation(this);
@@ -2545,6 +2576,10 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
     qreal x = firstColumnInc;
     const qreal standardY = qMax(qreal(option.padding), (widgetHeight - fontHeight) / 2.0);
 
+    // (set again below for the drawn rows: a widget that leaves them keeps no Details look of before)
+    m_ngDetailsRow = false;
+    m_ngCompactRow = false;
+    m_ngPlainRow = false;
     if (ngTwoLineList(this)) {
         // dolphin-ng, with icons:   +------+  Name                                            Date
         //                            | Icon |  Size · Type · other roles
@@ -2561,11 +2596,24 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         }
         m_ngDateRole = dateRole;
         const qreal gap = columnWidthInc / 2;
+        // the Details view: the drawn rows with columns, the small tile for a mark, one line when compact
+        const bool columns = noIcons && ngRowColumns(this);
+        const bool compact = columns && ngDetailsCompact();
+        m_ngDetailsRow = columns;
+        m_ngCompactRow = compact;
+        m_ngPlainRow = columns && ngDetailsPlain();
+        const NgMark rowMark = columns ? NgMark::Tile : ngMark();
         qreal left = firstColumnInc + gap;
         if (noIcons) {
-            switch (ngMark()) {
+            switch (rowMark) {
             case NgMark::Tile:
-                left = leftPadding() + 13 + (widgetHeight - 18) + 16;
+                // (the Details view: after the expansion arrow and the tree lines of the parents, as the drawing; plain,
+                // right after the file's own icon, which stands close to the view's edge: see paint())
+                if (columns && ngDetailsPlain()) {
+                    left = leftPadding() + 7 + ngExpansionIndent() + qMax(16, qRound(widgetHeight * 0.62)) + 12;
+                } else {
+                    left = leftPadding() + 13 + (columns ? ngExpansionIndent() : 0) + (compact ? widgetHeight - 10 : widgetHeight - 18) + (compact ? 12 : 16);
+                }
                 break;
             case NgMark::Pill:
                 left = leftPadding() + 13 + fontHeight * 4.8 + 16;
@@ -2586,15 +2634,14 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         }
         const qreal right = size().width() - 18;
         const int lineGap = 2;
-        const qreal firstY = qMax(qreal(option.padding), (widgetHeight - (2 * fontHeight + lineGap)) / 2.0);
+        const qreal firstY = compact ? standardY : qMax(qreal(option.padding), (widgetHeight - (2 * fontHeight + lineGap)) / 2.0);
         const qreal secondY = firstY + fontHeight + lineGap;
 
         // a narrow view drops the date first, then the size column
         // dolphin-ng: rows drawn like the cards: the drawing says type and size, the dates are the two lines at the end
-        m_ngObjectRow = noIcons && ngMark() == NgMark::Object;
+        m_ngObjectRow = noIcons && rowMark == NgMark::Object;
         // with columns: the name and its line end where the header's name column ends; every other role goes in its
         // column, at the place of the header's (no dates block, no chips for them)
-        const bool columns = m_ngObjectRow && ngRowColumns();
         if (columns) {
             dateRole.clear();
             m_ngDateRole.clear();
@@ -2643,7 +2690,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         m_ngBarFraction = -1;
         m_ngBarRect = QRectF();
         m_ngCount.clear();
-        const bool sizeColumn = noIcons && !m_ngObjectRow && m_sortedVisibleRoles.contains("size");
+        const bool sizeColumn = noIcons && !m_ngObjectRow && !columns && m_sortedVisibleRoles.contains("size");
         // the type and the size written in the drawing
         m_ngRowCount = values.contains("count") ? values.value("count").toInt() : -1;
         m_ngInfoSize = values.value("isDir").toBool() ? (values.value("size").toLongLong() > 0 ? roleText("size", values) : QString()) : roleText("size", values);
@@ -2757,7 +2804,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         m_ngCardActions.clear();
         m_ngCardActionIndex.clear();
         m_ngCardFab = QRectF();
-        m_ngCardHoverPill = m_ngObjectRow; // drawn rows: the actions come with the pointer, as on the cards
+        m_ngCardHoverPill = m_ngObjectRow || columns; // drawn rows and Details: the actions come with the pointer, as on the cards
         m_ngCardActionIcons.clear();
         m_ngCardActionSeps.clear();
         m_ngCardActionsPill = QRectF();
@@ -2774,9 +2821,10 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
             QFont pillFont = m_customizedFont;
             pillFont.setPointSizeF(pillFont.pointSizeF() * 0.88);
             const QFontMetricsF pillMetrics(pillFont);
-            const qreal pillHeight = qMin(qreal(fontHeight + 2), pillMetrics.height() + 5) + 12;
+            // (compact Details rows: a pill as tall as the row allows, so that it fits)
+            const qreal pillHeight = compact ? qMax(qreal(12), widgetHeight - 6) : qMin(qreal(fontHeight + 2), pillMetrics.height() + 5) + 12;
             const qreal earliest = left + fontHeight * 14; // the name keeps at least this much
-            if (!rowActions.isEmpty() && textRight - earliest > 60 && widgetHeight >= pillHeight + 4) {
+            if (!rowActions.isEmpty() && textRight - earliest > 60 && widgetHeight >= pillHeight + (compact ? 2 : 4)) {
                 ngLayoutActionPill(rowActions, earliest, (widgetHeight - pillHeight) / 2.0, textRight, pillHeight, pillMetrics, true);
                 if (!m_ngCardActionsPill.isEmpty()) {
                     textRight = m_ngCardActionsPill.left() - 12;
@@ -2805,7 +2853,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
                     m_ngTint = ngAccent(ngSpecialFolderColour(special), darkScheme);
                 }
             }
-            if (!m_ngIcon.isNull() && !m_ngIconFaded) {
+            if (!m_ngIcon.isNull() && !m_ngIconFaded && !m_ngPlainRow) { // (the plain Details view shows the icon as it is)
                 // watermark: the icon fades out from left to right (done once, after its colour was read)
                 QPainter fade(&m_ngIcon);
                 fade.setCompositionMode(QPainter::CompositionMode_DestinationIn);
@@ -2832,8 +2880,8 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         const qreal chipY = secondY + (fontHeight - chipHeight) / 2.0;
         qreal chipX = left;
         auto chip = [&](const QString &text, bool tinted) {
-            if (text.isEmpty()) {
-                return;
+            if (text.isEmpty() || compact) {
+                return; // (compact: one line, the name alone)
             }
             const qreal width = chipMetrics.horizontalAdvance(text) + 16;
             if (chipX + width > textRight) {
@@ -3134,6 +3182,77 @@ void KStandardItemListWidget::drawPixmap(QPainter *painter, const QPixmap &pixma
 
 void KStandardItemListWidget::drawSiblingsInformation(QPainter *painter)
 {
+    // dolphin-ng: over the drawn rows the tree is drawn here, softly: nothing at the first level (the style joined every
+    // top-level row with an L of hairline that led nowhere, over the row's card); below it, thin faint lines down from
+    // the parent, a rounded bend into each child, and the expansion arrow as a small chevron
+    // (the Details view's rows only: their tile's place is known here; the other drawn rows keep the style's branches)
+    if (m_layout == DetailsLayout && m_ngDetailsRow && ngTwoLineList(this) && layoutDirection() == Qt::LeftToRight) {
+        const QBitArray siblings = siblingsInformation();
+        const int own = siblings.count() - 1; // the item's own level; 0: the first level
+        const qreal h = size().height();
+        const qreal step = h; // one level further in
+        const qreal mid = h / 2.0;
+        const qreal ownX = (m_expansionArea.left() + m_expansionArea.right()) / 2.0; // the expansion arrow
+        // where the tile is (as paint() places it): a level's children hang from under the centre of its tile
+        const bool openRows = ngRowStyle() == NgRowStyle::Open || m_ngPlainRow;
+        const QRectF rowRect = openRows ? selectionRectFull() : selectionRectFull().adjusted(3, 3, -3, -3);
+        const qreal tileLeft = rowRect.left() + (m_ngPlainRow ? 4 : openRows ? 16 : 10) + (m_ngDetailsRow ? ngExpansionIndent() : 0) + 3;
+        const qreal side = m_ngPlainRow && !m_ngIcon.isNull() ? m_ngIcon.width() / m_ngIcon.devicePixelRatio() : m_ngCompactRow ? h - 10 : h - 18;
+        const qreal tileOffset = tileLeft + side / 2.0 - ownX; // from the arrow to the tile's centre
+        auto column = [&](int level) { // the line that joins the children of the level above `level`
+            return qRound(ownX - (own - level + 1) * step + tileOffset) + 0.5;
+        };
+        QColor lineColour = styleOption().palette.color(QPalette::Text);
+        lineColour.setAlphaF(0.22);
+        QColor arrowColour = styleOption().palette.color(QPalette::Text);
+        arrowColour.setAlphaF(0.72);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setBrush(Qt::NoBrush);
+        painter->setPen(QPen(lineColour, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        // the parents' lines: through the row while that parent has more children below
+        for (int level = 1; level < own; ++level) {
+            if (siblings.at(level)) {
+                painter->drawLine(QPointF(column(level), 0), QPointF(column(level), h));
+            }
+        }
+        const bool expandable = m_isExpandable;
+        if (own >= 1) {
+            // down from the parent's tile and a rounded bend into this item (to its arrow, for a folder); on, if more
+            // of the parent's children follow
+            const qreal x = column(own);
+            const qreal end = expandable ? ownX - 7 : tileLeft - 2;
+            const qreal r = qMin(qreal(7), qMin(mid - 2, (end - x) / 2));
+            QPainterPath bend;
+            bend.moveTo(x, 0);
+            bend.lineTo(x, mid - r);
+            bend.quadTo(x, mid, x + r, mid);
+            bend.lineTo(end, mid);
+            painter->drawPath(bend);
+            if (siblings.at(own)) {
+                painter->drawLine(QPointF(x, mid - r), QPointF(x, h));
+            }
+        }
+        if (expandable && data().value("isExpanded").toBool()) {
+            // an open folder: its children's line starts under its tile
+            const qreal x = qRound(ownX + tileOffset) + 0.5;
+            painter->drawLine(QPointF(x, mid + side / 2.0 + 2), QPointF(x, h));
+        }
+        if (expandable) {
+            // the chevron: pointing right, down when the folder is open
+            const bool open = data().value("isExpanded").toBool();
+            const qreal a = 3.6;
+            painter->setPen(QPen(arrowColour, 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            const QPointF c(ownX, mid);
+            if (open) {
+                painter->drawPolyline(QPolygonF{c + QPointF(-a, -a / 2), c + QPointF(0, a / 2), c + QPointF(a, -a / 2)});
+            } else {
+                painter->drawPolyline(QPolygonF{c + QPointF(-a / 2, -a), c + QPointF(a / 2, 0), c + QPointF(-a / 2, a)});
+            }
+        }
+        painter->restore();
+        return;
+    }
     const int siblingSize = size().height();
     const int x = (m_expansionArea.left() + m_expansionArea.right() - siblingSize) / 2;
     QRect siblingRect(x, 0, siblingSize, siblingSize);
