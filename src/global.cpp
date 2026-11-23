@@ -18,6 +18,8 @@
 #include <KWindowSystem>
 
 #include <QApplication>
+#include <QFileInfo>
+#include <QFile>
 
 QList<QUrl> Dolphin::validateUris(const QStringList &uriList)
 {
@@ -156,8 +158,21 @@ QVector<QPair<QSharedPointer<OrgKdeDolphinMainWindowInterface>, QStringList>> Do
     const QString pattern = QStringLiteral("org.kde.dolphin-");
     // Don't match the pid without leading "-"
     const QString myPid = QLatin1Char('-') + QString::number(QCoreApplication::applicationPid());
+    // dolphin-ng: only instances of this very program. Fedora's Dolphin registers the same names, and a Dolphin NG
+    // started before an update (as the file manager's daemon, say) runs the old code: a new window opened there
+    // took Dolphin's name and icon in the task manager. The running program is read from /proc; an updated one
+    // reads "... (deleted)" there and no longer matches
+    const QString myProgram = QFileInfo(QCoreApplication::applicationFilePath()).canonicalFilePath();
+    auto sameProgram = [&](const QString &service) {
+        const auto pid = sessionInterface->servicePid(service);
+        if (!pid.isValid() || myProgram.isEmpty()) {
+            return true; // (nothing to compare with: as before)
+        }
+        const QString program = QFile::symLinkTarget(QStringLiteral("/proc/%1/exe").arg(pid.value()));
+        return program.isEmpty() || program == myProgram;
+    };
     for (const QString &service : dbusServices) {
-        if (service.startsWith(pattern) && !service.endsWith(myPid)) {
+        if (service.startsWith(pattern) && !service.endsWith(myPid) && sameProgram(service)) {
             // Check if instance can handle our URLs
             QSharedPointer<OrgKdeDolphinMainWindowInterface> interface(
                 new OrgKdeDolphinMainWindowInterface(service, QStringLiteral("/dolphin/Dolphin_1"), QDBusConnection::sessionBus()));
