@@ -108,9 +108,10 @@
             <label>Rename single items inline</label>
             <default>true</default>
         </entry>
+        <!-- dolphin-ng: off by default, in every view (the "+" over the icon said nothing a click does not do) -->
         <entry name="ShowSelectionToggle" type="Bool">
             <label>Show selection toggle</label>
-            <default>true</default>
+            <default>false</default>
         </entry>
         <entry name="ShowPasteBarAfterCopying" type="Bool">
             <label>Show a bar for easy pasting after a cut or copy was done using the selection mode bottom bar.</label>
