@@ -945,6 +945,9 @@ DolphinMainWindow::DolphinMainWindow()
         centralLayout->setContentsMargins(0, 0, 0, 0);
         centralLayout->setSpacing(0);
         m_ngSortBar = ngCreateSortBar(central);
+        // (its buttons stand on sheets of their own: no glass shadow from Breeze NG under their text and icons, which it
+        // only blurred; Breeze NG reads this property)
+        m_ngSortBar->setProperty("_breeze_ng_no_text_shadow", true);
         m_ngSortBar->setVisible(ngTwoLineList());
         connect(NgSettings::instance(), &NgSettings::changed, m_ngSortBar, [this] {
             m_ngSortBar->setVisible(ngTwoLineList());
@@ -4841,6 +4844,9 @@ static QIcon ngSidebarIcon(bool shown, const QColor &ink, bool right)
 void DolphinMainWindow::ngPlaceSidebarToggle()
 {
     KToolBar *bar = toolBar(QStringLiteral("mainToolBar"));
+    if (bar) {
+        bar->setProperty("_breeze_ng_no_text_shadow", true); // (as the sort bar: its buttons have sheets of their own)
+    }
     QAction *places = actionCollection()->action(QStringLiteral("show_places_panel"));
     auto *dock = findChild<QDockWidget *>(QStringLiteral("placesDock"));
     if (!bar || !places || !dock) {
