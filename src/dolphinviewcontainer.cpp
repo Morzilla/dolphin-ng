@@ -892,6 +892,7 @@ private:
                                      "QToolButton[ngPill=\"true\"] { background: rgba(%1, 0.05); border-color: rgba(%1, 0.09); border-radius: 13px; padding-left: 10px; }"
                                      "QToolButton[ngPill=\"true\"][toolButtonStyle=\"0\"] { padding-left: 7px; padding-right: 7px; }" // (an icon alone: centred)
                                      "QToolButton[ngPill=\"true\"][ngClearable=\"true\"] { padding-right: 30px; }" // (the filter's cross inside it)
+                                     "QToolButton[ngPill=\"true\"][ngClearable=\"true\"]::menu-indicator { position: relative; left: -22px; }" // (its arrow before the cross)
                                      "QToolButton[ngPill=\"true\"]:hover { background: rgba(%1, 0.10); }"
                                      "QToolButton[ngPill=\"true\"]:checked { background: rgba(%1, 0.16); border-color: rgba(%1, 0.20); }"
                                      "QWidget#ngTrailing QToolButton::menu-indicator { image: none; width: 0px; }"
