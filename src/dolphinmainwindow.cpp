@@ -598,6 +598,87 @@ private:
     bool m_queued = false;
 };
 
+// dolphin-ng: a wider hold on the edge between a side panel and the view. The window's own separator there is 4 px and
+// draws nothing (NgSeparatorStyle), so it was hard to find ("the sidebar can't be resized"). This strip, invisible
+// too, covers it and the empty margins on either side of it (where the panel's card and the view's content do not
+// reach) and resizes the panel as the separator does.
+class NgDockGrip : public QWidget
+{
+public:
+    NgDockGrip(QMainWindow *window, QDockWidget *dock)
+        : QWidget(window)
+        , m_window(window)
+        , m_dock(dock)
+    {
+        setCursor(Qt::SplitHCursor);
+        setAttribute(Qt::WA_NoSystemBackground);
+        setMouseTracking(false);
+        hide();
+    }
+    QDockWidget *dock() const
+    {
+        return m_dock;
+    }
+    // over the gap between the panel and the view, @p reach px into each of them; hidden when the panel is not beside the view
+    void place(int reach)
+    {
+        QWidget *central = m_window->centralWidget();
+        const bool shown = m_dock && central && m_dock->isVisible() && !m_dock->isFloating();
+        const Qt::DockWidgetArea area = m_dock ? m_window->dockWidgetArea(m_dock) : Qt::NoDockWidgetArea;
+        if (!shown || (area != Qt::LeftDockWidgetArea && area != Qt::RightDockWidgetArea)) {
+            hide();
+            return;
+        }
+        const QRect dock = m_dock->geometry();
+        const QRect view = central->geometry();
+        m_left = area == Qt::LeftDockWidgetArea;
+        const int from = m_left ? dock.right() + 1 - reach : view.right() + 1 - reach;
+        const int to = m_left ? view.left() + reach : dock.left() + reach;
+        if (to <= from || (m_left ? view.left() < dock.right() : dock.left() < view.right())) {
+            hide();
+            return;
+        }
+        setGeometry(from, dock.top(), to - from, dock.height());
+        show();
+        raise();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+    }
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() == Qt::LeftButton && m_dock) {
+            m_startX = event->globalPosition().x();
+            m_startWidth = m_dock->width();
+            m_dragging = true;
+        }
+        event->accept();
+    }
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (m_dragging && m_dock) {
+            const int delta = qRound(event->globalPosition().x() - m_startX);
+            m_window->resizeDocks({m_dock.data()}, {qMax(0, m_left ? m_startWidth + delta : m_startWidth - delta)}, Qt::Horizontal);
+        }
+        event->accept();
+    }
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        m_dragging = false;
+        event->accept();
+    }
+
+private:
+    QMainWindow *m_window;
+    QPointer<QDockWidget> m_dock;
+    bool m_left = true;
+    bool m_dragging = false;
+    qreal m_startX = 0;
+    int m_startWidth = 0;
+};
+
 // dolphin-ng: runs a function, once per turn of the event loop, whenever one of some widgets moves, is resized or shown
 class NgGeometryWatch : public QObject
 {
@@ -820,6 +901,25 @@ DolphinMainWindow::DolphinMainWindow()
     });
 
     setupDockWidgets();
+    // dolphin-ng: a wider, invisible hold on the edges between the side panels and the view (see NgDockGrip)
+    {
+        QList<NgDockGrip *> grips;
+        QList<QWidget *> watched{centralWidget()};
+        for (QDockWidget *dock : findChildren<QDockWidget *>(Qt::FindDirectChildrenOnly)) {
+            grips.append(new NgDockGrip(this, dock));
+            watched.append(dock);
+        }
+        auto *watch = new NgGeometryWatch(this);
+        watch->watch(watched, [this, grips] {
+            for (NgDockGrip *grip : grips) {
+                if (ngTwoLineList()) {
+                    grip->place(6);
+                } else {
+                    grip->hide();
+                }
+            }
+        });
+    }
 
 #if KIO_VERSION >= QT_VERSION_CHECK(6, 24, 0)
     m_serviceMenuShortcutManager = new ServiceMenuShortcutManager(actionCollection(), this);
@@ -1683,6 +1783,23 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
                 delay += 2000;
             }
         }
+    }
+    // for tests: DOLPHIN_NG_TEST_DOCK_PROBE prints, once the window is up, the places panel's and the view's geometry and
+    // the widget under each point of the gap between them (where the separator that resizes the panel should be)
+    if (qEnvironmentVariableIsSet("DOLPHIN_NG_TEST_DOCK_PROBE")) {
+        QTimer::singleShot(2500, this, [this] {
+            auto *dock = findChild<QDockWidget *>(QStringLiteral("placesDock"));
+            if (!dock || !centralWidget()) {
+                return;
+            }
+            const QRect central = centralWidget()->geometry();
+            qWarning() << "NGPROBE dock" << dock->geometry() << "central" << central << "window" << geometry();
+            const int y = central.center().y();
+            for (int x = dock->geometry().right() - 3; x <= central.left() + 3; ++x) {
+                QWidget *child = childAt(x, y);
+                qWarning() << "NGPROBE x" << x << (child ? child->metaObject()->className() : "none") << (child ? child->objectName() : QString());
+            }
+        });
     }
     // for tests: DOLPHIN_NG_TEST_DOCK_WIDTH narrows the places panel step by step down to that width, or widens it to
     // that width at once (no input sent; the window remembers the width as it does a dragged one)

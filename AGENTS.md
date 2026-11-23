@@ -107,6 +107,7 @@ input, Dolphin NG reads these environment variables:
 | `DOLPHIN_NG_TEST_INFO`     | the Information panel shown once the window is up (a number: also its width) |
 | `DOLPHIN_NG_TEST_TOOLBAR_SAVE` | the tool bar configuration applied again twice, as saving it from Configure Toolbars does |
 | `DOLPHIN_NG_TEST_BUTTONS`  | the title bar's window buttons from "left|right" (KWin's letters: I minimize, A maximize, X close) in place of KWin's layout |
+| `DOLPHIN_NG_TEST_DOCK_PROBE` | prints (NGPROBE on stderr) the places panel's and the view's geometry and the widget under each point of the edge between them |
 | `DOLPHIN_NG_TEST_ZOOM`     | the Information panel's preview zoomed in by that factor once it has a picture, its −/+ buttons shown |
 | `DOLPHIN_NG_TEST_PAGE`     | a PDF in the Information panel turned to that page once it shows |
 | `DOLPHIN_NG_TEST_PLAY`     | a video or song in the Information panel played a moment after it shows |
