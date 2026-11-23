@@ -7,6 +7,7 @@
  */
 
 #include "kitemlistwidget.h"
+#include "kstandarditemlistview.h" // dolphin-ng: the layout, for the selection toggle
 #include <QUrl>
 #include <QGraphicsObject>
 
@@ -2317,7 +2318,11 @@ void KItemListWidget::setHovered(bool hovered)
         setHoverOpacity(1.0);
 
         // dolphin-ng: a widget without a place for the toggle (the cards) gets none
-        if (m_enabledSelectionToggle && !(QApplication::mouseButtons() & Qt::LeftButton) && !selectionToggleRect().isEmpty()) {
+        // dolphin-ng: not over the drawn rows of the list and the Details view (a "+" at the start of the row, over the
+        // icon or the tree, said nothing a click on the row does not do)
+        const auto *standardView = qobject_cast<const KStandardItemListView *>(parentWidget());
+        const bool ngRows = standardView && standardView->itemLayout() == KStandardItemListView::DetailsLayout && ngNoIcons(this);
+        if (m_enabledSelectionToggle && !ngRows && !(QApplication::mouseButtons() & Qt::LeftButton) && !selectionToggleRect().isEmpty()) {
             initializeSelectionToggle();
         }
 
