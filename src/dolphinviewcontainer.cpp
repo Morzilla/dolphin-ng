@@ -592,7 +592,10 @@ protected:
     {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
-        QColor ink = m_pill ? m_pill->palette().color(QPalette::ButtonText) : palette().color(QPalette::ButtonText);
+        // (the style sheet colours an on pill's text, not its palette: the same colour as its icon, see watchOnIcons)
+        const auto *pill = qobject_cast<const QAbstractButton *>(m_pill.data());
+        const QPalette app = QApplication::palette();
+        QColor ink = pill && pill->isChecked() ? (ngAurora() ? ngAuroraSelectionText(app) : ngSelectionText(app)) : app.color(QPalette::WindowText);
         if (underMouse() || isDown()) {
             QColor disc = ink;
             disc.setAlphaF(isDown() ? 0.30 : 0.20);
