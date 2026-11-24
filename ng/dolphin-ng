@@ -16,4 +16,7 @@ for candidate in "$P"/lib/*/plugins "$P"/lib/*/qt6/plugins; do
     [ -d "$candidate" ] && PLUGINS="$PLUGINS:$candidate"
 done
 export QT_PLUGIN_PATH="$PLUGINS${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+# (on X11 Qt names the window after the program, "dolphin", and the task manager took it for the stock Dolphin: its
+# icon and name. Wayland uses the desktop file name the program sets, dolphin-ng)
+export RESOURCE_NAME=dolphin-ng
 exec "$P/bin/dolphin" "$@"
