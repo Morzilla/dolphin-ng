@@ -2150,6 +2150,14 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
             const bool trigger = parts.size() > 3 && parts[3] == QLatin1String("trigger");
             if (clicked) {
                 button->click();
+            } else {
+                // (its own menu: opened from the event loop, showMenu() runs the menu's loop and would hold this one)
+                QPointer<QToolButton> opener(button);
+                QTimer::singleShot(0, this, [opener] {
+                    if (opener) {
+                        opener->showMenu();
+                    }
+                });
             }
             // (the bar may build its buttons anew meanwhile: the button is watched, and the menu found among the shown
             // windows when the button is gone)
@@ -2170,12 +2178,19 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
                 if (!button) {
                     button = watched.data();
                 }
-                if (!menu || !menu->isVisible()) {
+                if (!menu) {
                     QFile log(out + QStringLiteral(".log"));
                     if (log.open(QIODevice::WriteOnly)) {
-                        log.write("menu not visible");
+                        log.write("no menu");
                     }
                     return;
+                }
+                // a popup opened with no input behind it is closed at once by a Wayland compositor: the menu is laid
+                // out where it would open, under the button, and pictured as it is
+                if (!menu->isVisible() && button) {
+                    menu->ensurePolished();
+                    menu->adjustSize();
+                    menu->move(button->mapToGlobal(QPoint(0, button->height())));
                 }
                 const auto actions = menu->actions();
                 for (QAction *a : actions) {
