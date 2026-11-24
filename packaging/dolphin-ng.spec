@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      6a80156adc0103b6a248e59daf0e29fb77f024b5
+%global commit      812dca07c19b8871eb0b462df80515b618c0f6fe
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611232011
+%global snapdate    202611241328
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -132,6 +132,10 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Tue Nov 24 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611241328git812dca0-1
+- Sort bar: the menu button centred in a narrow window
+- Details: the pin of a pinned row in the middle of the row
+
 * Mon Nov 23 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611232011git6a80156-1
 - Root as an icon inside the location bar: the Root button leaves the tool bar
 
