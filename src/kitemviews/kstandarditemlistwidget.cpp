@@ -5070,7 +5070,8 @@ void KStandardItemListWidget::paintNgPin(QPainter *painter)
     } else if (ngTwoLineList(this)) {
         radius = 9.5;
         centre = !m_ngRowObject.isEmpty() ? QPointF(m_ngRowObject.left() + 9, m_ngRowObject.top() + 11)
-               : m_ngRowThumb.isEmpty() ? QPointF(rect().left() + 13, rect().top() + 13) : QPointF(m_ngRowThumb.left() + 3, m_ngRowThumb.top() + 3);
+               : m_ngRowThumb.isEmpty() ? QPointF(rect().left() + 13, rect().center().y()) // (a row with no preview, as Details: the middle of the row)
+               : QPointF(m_ngRowThumb.left() + 3, m_ngRowThumb.top() + 3);
     } else {
         const QRectF icon = m_iconRect;
         radius = qBound(7.0, icon.height() * 0.22, 10.0);
