@@ -742,8 +742,7 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
         painter.setBrush(ngAuroraVeil(ngIsDark(palette())));
         if (!ngIsDark(palette())) {
             // as the cards of Breeze NG's windows (Helper::renderAuroraCard): the frost a little denser at the top and
-            // thinner at the bottom, and no bright hairline round it (a white frame round each panel, apart from the
-            // window's own tone)
+            // thinner at the bottom
             const QColor frost = ngAuroraVeil(false);
             QColor top = frost, bottom = frost;
             top.setAlphaF(qMin(1.0, frost.alphaF() * 1.18));
@@ -752,8 +751,11 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
             sheet.setColorAt(0.0, top);
             sheet.setColorAt(1.0, bottom);
             painter.setBrush(sheet);
+            // (one hairline, as those cards have: Helper::auroraCardEdge. The double edge seen before was Breeze NG's own
+            // card under this one, now left out for Dolphin NG's panels)
+            painter.setPen(QPen(QColor(255, 255, 255, 190), 1));
+            painter.drawRoundedRect(QRectF(card).adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
             painter.setPen(Qt::NoPen);
-            painter.drawRoundedRect(card, radius, radius);
         } else {
             painter.drawRoundedRect(card, radius, radius);
         }
