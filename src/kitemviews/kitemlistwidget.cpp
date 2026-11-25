@@ -27,6 +27,7 @@
 #include <KApplicationTrader>
 #include <KService>
 #include <QDir>
+#include <QFileSystemWatcher>
 #include <QFileInfo>
 #include <QFile>
 #include <QCoreApplication>
@@ -480,6 +481,28 @@ NgActivity::NgActivity()
     m_sweep.setInterval(1000);
     connect(&m_sweep, &QTimer::timeout, this, &NgActivity::sweepFamilies);
     QTimer::singleShot(0, this, &NgActivity::loadProcesses);
+    // Every Dolphin NG sees the work of the others: each keeps its list in a file of the runtime directory, and reads
+    // the others' again whenever one of them changes (a moment later: a file is written in more than one step)
+    auto *again = new QTimer(this);
+    again->setSingleShot(true);
+    again->setInterval(250);
+    connect(again, &QTimer::timeout, this, &NgActivity::loadProcesses);
+    auto *watcher = new QFileSystemWatcher(this);
+    const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    watcher->addPath(runtime);
+    auto follow = [watcher, runtime, again] {
+        const QStringList files = QDir(runtime).entryList({QStringLiteral("dolphin-ng-activity-*")}, QDir::Files);
+        for (const QString &name : files) {
+            const QString path = runtime + QLatin1Char('/') + name;
+            if (!watcher->files().contains(path)) {
+                watcher->addPath(path);
+            }
+        }
+        again->start();
+    };
+    connect(watcher, &QFileSystemWatcher::directoryChanged, this, follow);
+    connect(watcher, &QFileSystemWatcher::fileChanged, this, follow);
+    QTimer::singleShot(0, this, follow);
 }
 
 static QString ngActivityStateFile(qint64 owner)
@@ -507,6 +530,13 @@ void NgActivity::saveProcesses()
                                  m_watched.contains(it.key()) ? QStringLiteral("1") : QStringLiteral("0")};
         file.write(fields.join(QLatin1Char('\t')).toUtf8() + '\n');
     }
+    // what the work has made so far, tied to its source: another Dolphin NG did not see those files appear
+    // ("link", parent, child: a line an older Dolphin NG skips, its first field is no process)
+    for (const auto &[child, parent] : std::as_const(m_links)) {
+        if (m_pids.contains(key(parent))) {
+            file.write(QStringList{QStringLiteral("link"), parent.toString(), child.toString()}.join(QLatin1Char('\t')).toUtf8() + '\n');
+        }
+    }
 }
 
 void NgActivity::loadProcesses()
@@ -528,16 +558,29 @@ void NgActivity::loadProcesses()
         if (owner <= 0 || ::kill(static_cast<pid_t>(owner), 0) != 0) {
             QFile::remove(file.fileName()); // its Dolphin is gone: this one takes the list over
         }
+        QList<std::pair<QUrl, QUrl>> tied;
         for (const QString &line : lines) {
             const QStringList f = line.split(QLatin1Char('\t'));
+            if (f.size() == 3 && f.at(0) == QLatin1String("link")) {
+                tied.append({QUrl(f.at(1)), QUrl(f.at(2))});
+                continue;
+            }
             const qint64 pid = f.value(0).toLongLong();
             if (f.size() < 5 || pid <= 0 || ::kill(static_cast<pid_t>(pid), 0) != 0) {
                 continue;
             }
             const QUrl url(f.at(1));
+            if (m_pids.value(key(url)) == pid) {
+                continue; // known already: the lists are read again whenever one of them changes
+            }
             setUntilProcessEnds(url, pid, f.at(2), f.at(3));
             if (f.at(4) == QLatin1String("1")) {
                 watchForChildren(url);
+            }
+        }
+        for (const auto &[parent, child] : std::as_const(tied)) {
+            if (m_pids.contains(key(parent)) && !m_links.contains(key(child)) && QFileInfo::exists(child.toLocalFile())) {
+                link(parent, child);
             }
         }
     }
