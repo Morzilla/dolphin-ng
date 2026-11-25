@@ -7,6 +7,7 @@
 #include "kitemviews/kitemlistwidget.h"
 
 #include <QDateTime>
+#include <cmath>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -73,10 +74,17 @@ NgJobsButton::NgJobsButton(QWidget *parent)
     refresh();
 }
 
+static QString ngJobsCount(int count)
+{
+    return count == 1 ? ngTr("1 job", "1 lavoro") : ngTr("%1 jobs", "%1 lavori").arg(count);
+}
+
 QSize NgJobsButton::sizeHint() const
 {
-    const int text = (m_running + m_waiting) > 0 ? fontMetrics().horizontalAdvance(QString::number(m_running + m_waiting)) + 8 : 0;
-    return QSize(30 + text, 26);
+    QFont bold = font();
+    bold.setWeight(QFont::DemiBold);
+    const int count = m_running + m_waiting;
+    return QSize(count > 0 ? 30 + QFontMetrics(bold).horizontalAdvance(ngJobsCount(count)) + 12 : 32, 26);
 }
 
 void NgJobsButton::refresh()
@@ -101,28 +109,40 @@ void NgJobsButton::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    const bool busy = m_running + m_waiting > 0;
+    const int count = m_running + m_waiting;
+    const bool busy = count > 0;
     const QColor ink = palette().color(QPalette::WindowText);
     const QColor accent = palette().color(QPalette::Highlight);
-    if (busy || underMouse() || m_menu->isVisible()) {
-        QColor pill = busy ? accent : ink;
-        pill.setAlphaF(busy ? 0.30 : 0.10);
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(pill);
-        painter.drawRoundedRect(QRectF(rect()).adjusted(0.5, 1.5, -0.5, -1.5), 11.5, 11.5);
+    const QRectF pill = QRectF(rect()).adjusted(0.5, 1.5, -0.5, -1.5);
+    painter.setPen(Qt::NoPen);
+    if (busy) {
+        // at work: a pill of the accent running to the hue next to it, white on it: seen at a glance in the title row
+        const qreal hue = accent.hslHueF() < 0 ? 0.58 : accent.hslHueF();
+        const bool grey = accent.hslSaturationF() < 0.15;
+        QLinearGradient fill(pill.topLeft(), pill.topRight());
+        fill.setColorAt(0.0, grey ? accent : QColor::fromHslF(hue, 0.78, 0.52));
+        fill.setColorAt(1.0, grey ? accent : QColor::fromHslF(std::fmod(hue + 0.17, 1.0), 0.66, 0.58));
+        painter.setBrush(fill);
+        painter.drawRoundedRect(pill, 11.5, 11.5);
+    } else {
+        QColor rest = ink;
+        rest.setAlphaF((underMouse() || m_menu->isVisible()) ? 0.16 : 0.08);
+        painter.setBrush(rest);
+        painter.drawRoundedRect(pill, 11.5, 11.5);
     }
-    // the sign: a ring; at work an arc of the accent turns on it
-    const QRectF ring(8, height() / 2.0 - 7, 14, 14);
-    QColor track = ink;
-    track.setAlphaF(busy ? 0.22 : 0.55);
+    // the sign: a ring; at work an arc turns on it, at rest the hands of a clock (the history)
+    const QRectF ring(busy ? 9 : (width() - 14) / 2.0, height() / 2.0 - 7, 14, 14);
+    QColor track = busy ? QColor(255, 255, 255, 90) : ink;
+    if (!busy) {
+        track.setAlphaF(0.70);
+    }
     painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(track, 2));
     painter.drawEllipse(ring);
     if (m_running > 0) {
-        painter.setPen(QPen(accent, 2, Qt::SolidLine, Qt::RoundCap));
-        painter.drawArc(ring, qRound(-NgActivity::self()->phase() * 360 * 16) + 90 * 16, -100 * 16);
+        painter.setPen(QPen(QColor(255, 255, 255), 2, Qt::SolidLine, Qt::RoundCap));
+        painter.drawArc(ring, qRound(-NgActivity::self()->phase() * 360 * 16) + 90 * 16, -110 * 16);
     } else if (!busy) {
-        // at rest: the hands of a clock, the history
         painter.setPen(QPen(track, 1.6, Qt::SolidLine, Qt::RoundCap));
         painter.drawLine(ring.center(), ring.center() + QPointF(0, -4));
         painter.drawLine(ring.center(), ring.center() + QPointF(3, 1.5));
@@ -131,8 +151,8 @@ void NgJobsButton::paintEvent(QPaintEvent *)
         QFont bold = font();
         bold.setWeight(QFont::DemiBold);
         painter.setFont(bold);
-        painter.setPen(ink);
-        painter.drawText(QRectF(26, 0, width() - 30, height()), Qt::AlignVCenter | Qt::AlignLeft, QString::number(m_running + m_waiting));
+        painter.setPen(QColor(255, 255, 255));
+        painter.drawText(QRectF(30, 0, width() - 36, height()), Qt::AlignVCenter | Qt::AlignLeft, ngJobsCount(count));
     }
 }
 

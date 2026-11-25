@@ -38,6 +38,7 @@
 #include <QHash>
 #include <QImageReader>
 #include <QMenu>
+#include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
 #include <QScreen>
@@ -740,9 +741,19 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
         }
         painter.setBrush(ngAuroraVeil(ngIsDark(palette())));
         if (!ngIsDark(palette())) {
-            painter.setPen(QPen(QColor(255, 255, 255, 140), 1)); // frost has a bright hairline edge
-            painter.drawRoundedRect(QRectF(card).adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
+            // as the cards of Breeze NG's windows (Helper::renderAuroraCard): the frost a little denser at the top and
+            // thinner at the bottom, and no bright hairline round it (a white frame round each panel, apart from the
+            // window's own tone)
+            const QColor frost = ngAuroraVeil(false);
+            QColor top = frost, bottom = frost;
+            top.setAlphaF(qMin(1.0, frost.alphaF() * 1.18));
+            bottom.setAlphaF(frost.alphaF() * 0.70);
+            QLinearGradient sheet(card.topLeft(), card.bottomLeft());
+            sheet.setColorAt(0.0, top);
+            sheet.setColorAt(1.0, bottom);
+            painter.setBrush(sheet);
             painter.setPen(Qt::NoPen);
+            painter.drawRoundedRect(card, radius, radius);
         } else {
             painter.drawRoundedRect(card, radius, radius);
         }
