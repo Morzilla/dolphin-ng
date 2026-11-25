@@ -4,11 +4,13 @@
  */
 #include "ngjobs.h"
 
+#include "dolphintabwidget.h"
 #include "kitemviews/kitemlistwidget.h"
 
 #include <QDateTime>
+#include <QStandardPaths>
+#include <QFileInfo>
 #include <cmath>
-#include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -275,52 +277,79 @@ void NgJobsButton::rebuild()
     all->setFlat(true);
     connect(all, &QPushButton::clicked, this, [this] {
         m_menu->close();
-        auto *dialog = new NgHistoryDialog(window());
-        dialog->setAttribute(Qt::WA_DeleteOnClose);
-        dialog->show();
+        // a tab of this window: the one already open, or a new one
+        if (auto *tabs = window()->findChild<DolphinTabWidget *>()) {
+            tabs->ngOpenHistoryTab();
+        }
     });
     m_rows->addWidget(all, 0, Qt::AlignLeft);
     m_list->adjustSize();
 }
 
-NgHistoryDialog::NgHistoryDialog(QWidget *parent)
-    : QDialog(parent)
+NgHistoryPage::NgHistoryPage(QWidget *parent)
+    : QWidget(parent)
 {
-    setWindowTitle(ngTr("History of quick actions", "Storico delle azioni rapide"));
-    resize(820, 480);
     auto *layout = new QVBoxLayout(this);
-    auto *tree = new QTreeWidget(this);
-    tree->setRootIsDecorated(false);
-    tree->setAlternatingRowColors(true);
-    tree->setHeaderLabels({ngTr("When", "Quando"), ngTr("Action", "Azione"), ngTr("File", "File"), ngTr("Made", "Risultato"), ngTr("Took", "Durata"), ngTr("Folder", "Cartella")});
-    auto fill = [tree] {
-        tree->clear();
-        const auto all = NgActivity::history(1000);
-        for (const auto &done : all) {
-            const QDateTime ended = QDateTime::fromMSecsSinceEpoch(done.endedAt);
-            auto *item = new QTreeWidgetItem(tree);
-            item->setText(0, QLocale().toString(ended, QLocale::ShortFormat));
-            item->setText(1, done.label);
-            item->setText(2, done.url.fileName());
-            item->setText(3, done.results.join(QStringLiteral(", ")));
-            item->setText(4, done.stopped ? ngTr("Stopped", "Fermato") : tookText(done.endedAt - done.startedAt));
-            item->setText(5, done.url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash).toLocalFile());
-            item->setToolTip(2, done.url.toLocalFile());
-        }
-        for (int column = 0; column < 5; ++column) {
-            tree->resizeColumnToContents(column);
-        }
-    };
-    fill();
-    layout->addWidget(tree);
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
-    auto *clear = buttons->addButton(ngTr("Clear history", "Svuota storico"), QDialogButtonBox::ResetRole);
-    connect(clear, &QPushButton::clicked, this, [fill] {
+    layout->setContentsMargins(12, 10, 12, 12);
+    layout->setSpacing(8);
+    auto *top = new QHBoxLayout;
+    auto *title = new QLabel(ngTr("History of quick actions", "Storico delle azioni rapide"), this);
+    QFont large = title->font();
+    large.setPointSizeF(large.pointSizeF() * 1.35);
+    title->setFont(large);
+    top->addWidget(title, 1);
+    auto *clear = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-clear-history")), ngTr("Clear history", "Svuota storico"), this);
+    connect(clear, &QPushButton::clicked, this, [this] {
         NgActivity::clearHistory();
+        m_seen = -1;
         fill();
     });
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::close);
-    layout->addWidget(buttons);
+    top->addWidget(clear);
+    layout->addLayout(top);
+    m_tree = new QTreeWidget(this);
+    m_tree->setRootIsDecorated(false);
+    m_tree->setAlternatingRowColors(true);
+    m_tree->setUniformRowHeights(true);
+    m_tree->setHeaderLabels({ngTr("When", "Quando"), ngTr("Action", "Azione"), ngTr("File", "File"), ngTr("Made", "Risultato"), ngTr("Took", "Durata"), ngTr("Folder", "Cartella")});
+    layout->addWidget(m_tree, 1);
+    // (a work that ends is written to the history: read again then, and only if the file changed)
+    connect(NgActivity::self(), &NgActivity::changed, this, [this] {
+        if (isVisible()) {
+            fill();
+        }
+    });
+    fill();
+}
+
+void NgHistoryPage::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    fill();
+}
+
+void NgHistoryPage::fill()
+{
+    const QFileInfo file(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/ng-history.tsv"));
+    const qint64 now = file.exists() ? file.lastModified().toMSecsSinceEpoch() + file.size() : 0;
+    if (now == m_seen) {
+        return;
+    }
+    m_seen = now;
+    m_tree->clear();
+    const auto all = NgActivity::history(1000);
+    for (const auto &done : all) {
+        auto *item = new QTreeWidgetItem(m_tree);
+        item->setText(0, QLocale().toString(QDateTime::fromMSecsSinceEpoch(done.endedAt), QLocale::ShortFormat));
+        item->setText(1, done.label);
+        item->setText(2, done.url.fileName());
+        item->setText(3, done.results.join(QStringLiteral(", ")));
+        item->setText(4, done.stopped ? ngTr("Stopped", "Fermato") : tookText(done.endedAt - done.startedAt));
+        item->setText(5, done.url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash).toLocalFile());
+        item->setToolTip(2, done.url.toLocalFile());
+    }
+    for (int column = 0; column < 5; ++column) {
+        m_tree->resizeColumnToContents(column);
+    }
 }
 
 #include "moc_ngjobs.cpp"

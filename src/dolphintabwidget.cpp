@@ -5,6 +5,12 @@
  */
 
 #include "dolphintabwidget.h"
+#include "kitemviews/kitemlistwidget.h"
+#include <QDir>
+#include <QPointer>
+#include <QSplitter>
+#include <QGridLayout>
+#include "ngjobs.h"
 
 #include "dolphin_generalsettings.h"
 #include "dolphintabbar.h"
@@ -718,10 +724,57 @@ void DolphinTabWidget::tabRemoved(int index)
     m_lastViewedTab->setActive(true);
 }
 
+void DolphinTabWidget::ngOpenHistoryTab()
+{
+    for (int i = 0; i < count(); ++i) {
+        if (tabPageAt(i)->property("ngHistoryTab").toBool()) {
+            setCurrentIndex(i);
+            return;
+        }
+    }
+    openNewActivatedTab(QUrl::fromLocalFile(QDir::homePath()));
+    DolphinTabPage *page = currentTabPage();
+    auto *grid = page ? qobject_cast<QGridLayout *>(page->layout()) : nullptr;
+    auto *views = page ? page->findChild<QSplitter *>(QString(), Qt::FindDirectChildrenOnly) : nullptr;
+    if (!grid || !views) {
+        return;
+    }
+    page->setProperty("ngHistoryTab", true);
+    views->hide();
+    auto *history = new NgHistoryPage(page);
+    grid->addWidget(history, 2, 0, 1, 2);
+    const int index = currentIndex();
+    updateTabName(index);
+    tabBar()->setTabIcon(index, QIcon::fromTheme(QStringLiteral("view-history")));
+    tabBar()->setTabToolTip(index, tabName(page));
+    ngScheduleSync();
+    // a folder chosen while the history shows: the tab is a tab of files again
+    QPointer<DolphinTabPage> guard(page);
+    connect(page, &DolphinTabPage::activeViewUrlChanged, history, [this, guard, history, views] {
+        if (!guard) {
+            return;
+        }
+        guard->setProperty("ngHistoryTab", QVariant());
+        history->hide();
+        history->deleteLater();
+        views->show();
+        const int at = indexOf(guard);
+        if (at >= 0) {
+            tabBar()->setTabIcon(at, QIcon());
+            tabBar()->setTabToolTip(at, QString());
+            updateTabName(at);
+            ngScheduleSync();
+        }
+    });
+}
+
 QString DolphinTabWidget::tabName(DolphinTabPage *tabPage) const
 {
     if (!tabPage) {
         return QString();
+    }
+    if (tabPage->property("ngHistoryTab").toBool()) {
+        return ngTr("History", "Storico");
     }
     // clang-format off
     QString name;

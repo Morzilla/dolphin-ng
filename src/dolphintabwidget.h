@@ -128,6 +128,10 @@ public Q_SLOTS:
      * \a secondaryUrl and activates the tab.
      */
     void openNewActivatedTab(const QUrl &primaryUrl, const QUrl &secondaryUrl = QUrl());
+    /** dolphin-ng: the history of quick actions as a tab: the one already open comes to the front, or a new one is
+     *  made. It is a tab like the others with the history laid over its (hidden) view: going to a folder from it
+     *  (the sidebar, the location bar) turns it back into a tab of files. */
+    void ngOpenHistoryTab();
 
     /**
      * Opens a new tab in the background showing the URL \a primaryUrl and the

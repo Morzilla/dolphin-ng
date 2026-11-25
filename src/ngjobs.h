@@ -5,7 +5,6 @@
 #ifndef NGJOBS_H
 #define NGJOBS_H
 
-#include <QDialog>
 #include <QToolButton>
 
 class QMenu;
@@ -41,12 +40,21 @@ private:
     int m_waiting = 0;
 };
 
-/** dolphin-ng: every quick action that ended, the last first */
-class NgHistoryDialog : public QDialog
+/** dolphin-ng: every quick action that ended, the last first: the content of the history tab
+ *  (DolphinTabWidget::ngOpenHistoryTab) */
+class NgHistoryPage : public QWidget
 {
     Q_OBJECT
 public:
-    explicit NgHistoryDialog(QWidget *parent = nullptr);
+    explicit NgHistoryPage(QWidget *parent = nullptr);
+
+protected:
+    void showEvent(QShowEvent *event) override;
+
+private:
+    void fill();
+    class QTreeWidget *m_tree;
+    qint64 m_seen = -1; // the history file's time when it was read last
 };
 
 #endif
