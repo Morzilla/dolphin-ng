@@ -188,8 +188,8 @@ public:
     bool isStopHovered(const QUrl &url) const;
 
     /* The queue and the history of quick actions. */
-    /** starts \a program on \a url, or queues it while the same program is already at work (two transcriptions
-     *  do not run together; an extraction beside a transcription does). False if it could not be started. */
+    /** starts \a program on \a url: at once, or (with the setting "one at a time") queued while another quick
+     *  action is at work. False if it could not be started. */
     bool start(const QUrl &url, const QString &label, const QString &program, const QStringList &arguments, const QString &folder);
     struct Job {
         QUrl url;

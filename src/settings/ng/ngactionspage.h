@@ -78,6 +78,7 @@ private:
     QLineEdit *m_choices;
     QCheckBox *m_isMain;
     QCheckBox *m_confirm;
+    QCheckBox *m_oneAtATime = nullptr; // quick actions run one after the other (the group DolphinNG's JOBS_SERIES)
     QLabel *m_builtinNote;
     QPushButton *m_copy;
     QPushButton *m_delete;

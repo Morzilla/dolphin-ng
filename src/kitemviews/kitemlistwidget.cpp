@@ -989,10 +989,9 @@ QList<NgActivity::Job> NgActivity::jobs() const
 bool NgActivity::start(const QUrl &url, const QString &label, const QString &program, const QStringList &arguments, const QString &folder)
 {
     const Waiting job{url, label, program, folder, arguments};
-    const bool busy = std::any_of(m_programs.cbegin(), m_programs.cend(), [&program](const QString &running) {
-        return running == program;
-    });
-    if (busy) {
+    // in parallel (the default): started at once. One at a time (the settings' "JOBS_SERIES"): it waits while any
+    // quick action is at work, of this Dolphin NG or of another
+    if (ngSetting("JOBS_SERIES") == QLatin1String("1") && !m_programs.isEmpty()) {
         m_queue.append(job);
         set(url, -1, ngTr("Queued", "In coda"));
         return true;
@@ -1002,14 +1001,11 @@ bool NgActivity::start(const QUrl &url, const QString &label, const QString &pro
 
 void NgActivity::startWaiting()
 {
+    // one at a time: the next when nothing is at work; switched back to parallel meanwhile: all that waits
+    const bool series = ngSetting("JOBS_SERIES") == QLatin1String("1");
     for (int i = 0; i < m_queue.count();) {
-        const QString program = m_queue.at(i).program;
-        const bool busy = std::any_of(m_programs.cbegin(), m_programs.cend(), [&program](const QString &running) {
-            return running == program;
-        });
-        if (busy) {
-            ++i;
-            continue;
+        if (series && !m_programs.isEmpty()) {
+            break;
         }
         const Waiting job = m_queue.takeAt(i);
         m_entries.remove(key(job.url)); // (its "queued" entry: the work starts with a fresh one)
