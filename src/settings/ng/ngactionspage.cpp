@@ -7,6 +7,7 @@
 
 #include <KConfigGroup>
 #include <KDesktopFile>
+#include <KShell>
 #include <KIconButton>
 #include <KOpenWithDialog>
 #include <KService>
@@ -77,12 +78,44 @@ QIcon dot(const QColor &colour)
     return QIcon(pixmap);
 }
 
-// %f %F %u %U of a desktop file's Exec line -> {file}; the other field codes go
-QString commandFromExec(QString exec)
+// The field codes of a desktop file's Exec line (the Desktop Entry specification, "The Exec key"), for a quick
+// action: it runs on one file, the card's, so %f and %u are that file and %F and %U a list of one. %i is the
+// icon's option (--icon NAME, nothing without an icon), %c the name, %k the desktop file's location, %% a percent
+// sign; the deprecated codes (%d %D %n %N %v %m) and unknown ones are removed, as the specification asks
+QString commandFromExec(const QString &exec, const QString &icon, const QString &name, const QString &location)
 {
-    exec.replace(QRegularExpression(QStringLiteral("%[fFuU]")), QStringLiteral("{file}"));
-    exec.remove(QRegularExpression(QStringLiteral("\\s*%[ickdDnNvm]")));
-    return exec.trimmed();
+    QString command;
+    for (qsizetype i = 0; i < exec.size(); ++i) {
+        if (exec.at(i) != QLatin1Char('%') || i + 1 >= exec.size()) {
+            command += exec.at(i);
+            continue;
+        }
+        switch (exec.at(++i).toLatin1()) {
+        case 'f':
+        case 'F':
+        case 'u':
+        case 'U':
+            command += QStringLiteral("{file}");
+            break;
+        case 'i':
+            if (!icon.isEmpty()) {
+                command += QStringLiteral("--icon ") + KShell::quoteArg(icon);
+            }
+            break;
+        case 'c':
+            command += KShell::quoteArg(name);
+            break;
+        case 'k':
+            command += KShell::quoteArg(location);
+            break;
+        case '%':
+            command += QLatin1Char('%');
+            break;
+        default:
+            break;
+        }
+    }
+    return command.trimmed();
 }
 } // namespace
 
@@ -722,7 +755,7 @@ void NgActionsPage::addFromServiceMenu()
                 NgActionInfo info;
                 info.label = action.readEntry("Name");
                 info.icon = action.readEntry("Icon", desktop.readIcon());
-                info.command = commandFromExec(action.readEntry("Exec"));
+                info.command = commandFromExec(action.readEntry("Exec"), info.icon, desktop.readName(), desktop.fileName());
                 if (!info.label.isEmpty() && !info.command.isEmpty()) {
                     found.append({desktop.readName().isEmpty() ? file : desktop.readName(), info});
                 }
@@ -753,7 +786,7 @@ void NgActionsPage::addFromApplication()
     NgActionInfo info;
     info.label = ngTr("Open with %1", "Apri con %1").arg(service->name());
     info.icon = service->icon();
-    info.command = commandFromExec(service->exec());
+    info.command = commandFromExec(service->exec(), service->icon(), service->name(), service->entryPath());
     if (!info.command.contains(QLatin1String("{file}"))) {
         info.command += QStringLiteral(" {file}");
     }
