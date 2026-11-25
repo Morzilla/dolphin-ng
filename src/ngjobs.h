@@ -32,6 +32,7 @@ private:
     void refresh();
     void rebuild();
     QMenu *m_menu;
+    class QWidgetAction *m_action; // the list, as the menu's one entry
     QWidget *m_list;
     QVBoxLayout *m_rows;
     QString m_shape; // what the list shows now: built again only when it changes

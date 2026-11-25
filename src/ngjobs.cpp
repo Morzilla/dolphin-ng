@@ -8,6 +8,9 @@
 #include "kitemviews/kitemlistwidget.h"
 
 #include <QDateTime>
+#include <QTimer>
+#include <QCoreApplication>
+#include <QActionEvent>
 #include <QMouseEvent>
 #include <KSharedConfig>
 #include <KConfigGroup>
@@ -74,9 +77,9 @@ NgJobsButton::NgJobsButton(QWidget *parent)
     m_rows = new QVBoxLayout(m_list);
     m_rows->setContentsMargins(8, 8, 8, 8);
     m_rows->setSpacing(6);
-    auto *action = new QWidgetAction(m_menu);
-    action->setDefaultWidget(m_list);
-    m_menu->addAction(action);
+    m_action = new QWidgetAction(m_menu);
+    m_action->setDefaultWidget(m_list);
+    m_menu->addAction(m_action);
     connect(m_menu, &QMenu::aboutToShow, this, [this] {
         m_shape.clear();
         rebuild();
@@ -209,6 +212,7 @@ void NgJobsButton::rebuild()
                 }
             }
         }
+        m_menu->update(); // (on a see-through menu a label painted over its old figure: the whole sheet again)
         return;
     }
     m_shape = shape;
@@ -240,6 +244,27 @@ void NgJobsButton::rebuild()
         m_rows->addWidget(holder);
         return std::pair<QWidget *, QVBoxLayout *>(holder, text);
     };
+    {
+        // the way to the jobs tab first, where it is always in reach (at the bottom it was cut off when the list grew
+        // while it was open)
+        auto *holder = new QWidget(m_list);
+        auto *line = new QHBoxLayout(holder);
+        line->setContentsMargins(4, 0, 0, 0);
+        auto *title = new QLabel(ngTr("Jobs", "Lavori"), holder);
+        QFont bold = title->font();
+        bold.setWeight(QFont::DemiBold);
+        title->setFont(bold);
+        line->addWidget(title, 1);
+        auto *all = new QPushButton(QIcon::fromTheme(QStringLiteral("view-history")), ngTr("History and details", "Storico e dettagli"), holder);
+        connect(all, &QPushButton::clicked, this, [this] {
+            m_menu->close();
+            if (auto *tabs = window()->findChild<DolphinTabWidget *>()) {
+                tabs->ngOpenHistoryTab();
+            }
+        });
+        line->addWidget(all);
+        m_rows->addWidget(holder);
+    }
     bool running = false, waiting = false;
     for (const auto &job : jobs) {
         if (!job.queued && !running) {
@@ -294,17 +319,22 @@ void NgJobsButton::rebuild()
             static_cast<QHBoxLayout *>(holder->layout())->addWidget(outcome);
         }
     }
-    auto *all = new QPushButton(ngTr("Whole history…", "Storico completo…"), m_list);
-    all->setFlat(true);
-    connect(all, &QPushButton::clicked, this, [this] {
-        m_menu->close();
-        // a tab of this window: the one already open, or a new one
-        if (auto *tabs = window()->findChild<DolphinTabWidget *>()) {
-            tabs->ngOpenHistoryTab();
+    // the menu measured its one entry when it opened: told that it changed, so that it grows or shrinks with the list
+    // (a moment later: the rows just added are shown by their layout in the next turn of the event loop, and count for
+    // nothing in the size until then)
+    QTimer::singleShot(0, this, [this] {
+        m_rows->activate();
+        m_list->setMinimumHeight(0);
+        const QSize wanted = m_list->sizeHint().expandedTo(QSize(400, 0));
+        m_list->setMinimumSize(wanted);
+        m_list->resize(wanted);
+        QActionEvent changed(QEvent::ActionChanged, m_action);
+        QCoreApplication::sendEvent(m_menu, &changed);
+        if (m_menu->isVisible()) {
+            m_menu->resize(m_menu->sizeHint());
         }
     });
-    m_rows->addWidget(all, 0, Qt::AlignLeft);
-    m_list->adjustSize();
+
 }
 
 namespace
