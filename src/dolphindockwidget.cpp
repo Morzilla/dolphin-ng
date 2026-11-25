@@ -753,7 +753,7 @@ bool DolphinDockWidget::paintNgGlass(QPainter &painter)
             painter.setBrush(sheet);
             // (one hairline, as those cards have: Helper::auroraCardEdge. The double edge seen before was Breeze NG's own
             // card under this one, now left out for Dolphin NG's panels)
-            painter.setPen(QPen(QColor(255, 255, 255, 190), 1));
+            painter.setPen(QPen(QColor(255, 255, 255, 90), 1));
             painter.drawRoundedRect(QRectF(card).adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
             painter.setPen(Qt::NoPen);
         } else {
