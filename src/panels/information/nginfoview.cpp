@@ -2630,9 +2630,15 @@ void NgInfoView::showFacts()
     }
     m_insideLabel->setVisible(m_item.isDir() && !facts->innerTags.isEmpty());
     m_insideTags->setVisible(m_item.isDir() && !facts->innerTags.isEmpty());
-    m_origin->setText(ngBreakable(facts->origin));
-    m_origin->setVisible(!facts->origin.isEmpty());
-    m_originLabel->setVisible(!facts->origin.isEmpty());
+    // (one row for where the file came from: the file a quick action made it from, or the site it was downloaded from)
+    const bool made = !facts->madeFrom.isEmpty();
+    m_originLabel->setText(made ? (facts->madeBy.isEmpty() ? ngTr("Made from", "Generato da") : facts->madeBy + ngTr(" · from", " · da"))
+                                : ngTr("Downloaded from", "Scaricato da"));
+    m_origin->setText(ngBreakable(made ? QFileInfo(facts->madeFrom).fileName() + (QFileInfo::exists(facts->madeFrom) ? QString() : ngTr(" (no longer there)", " (non c'è più)"))
+                                       : facts->origin));
+    m_origin->setToolTip(made ? facts->madeFrom : QString());
+    m_origin->setVisible(made || !facts->origin.isEmpty());
+    m_originLabel->setVisible(made || !facts->origin.isEmpty());
     const QString whoCaption = facts->whoKind == NgFileFacts::Camera ? ngTr("Camera", "Fotocamera")
         : facts->whoKind == NgFileFacts::Artist                      ? ngTr("Artist", "Artista")
         : facts->whoKind == NgFileFacts::Author                      ? ngTr("Author", "Autore")

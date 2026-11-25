@@ -52,6 +52,19 @@ DOLPHIN_EXPORT QString ngAgoText(const QDateTime &when);
 DOLPHIN_EXPORT QColor ngTagColour(const QString &tag);
 // dolphin-ng: the tags of a local file, read from its extended attributes (as KDE writes them, without Baloo)
 DOLPHIN_EXPORT QStringList ngFileTags(const QString &path);
+// dolphin-ng: where a file made by a quick action came from, kept in the file itself (extended attributes
+// user.dolphin-ng.made-from, the source's path, and user.dolphin-ng.made-by, the action's name), so that it travels with
+// the file when it is moved or renamed. Empty strings when the file says nothing
+struct NgMadeFrom {
+    QString source; // the path of the file it was made from
+    QString action; // "Transcribe", "Extract"
+    bool isEmpty() const
+    {
+        return source.isEmpty();
+    }
+};
+DOLPHIN_EXPORT NgMadeFrom ngFileMadeFrom(const QString &path);
+DOLPHIN_EXPORT void ngSetFileMadeFrom(const QString &path, const QString &source, const QString &action);
 DOLPHIN_EXPORT QString ngSetting(const char *name, const QString &fallback = QString());
 DOLPHIN_EXPORT int ngSettingInt(const char *name, int fallback);
 /** dolphin-ng: the interface text, in Italian when the desktop language is Italian and in English otherwise. */

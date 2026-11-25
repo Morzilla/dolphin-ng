@@ -663,6 +663,14 @@ void NgActivity::link(const QUrl &parent, const QUrl &child)
     }
     m_links.insert(childKey, {child, parent});
     m_linkedAt.insert(childKey, QDateTime::currentMSecsSinceEpoch());
+    // the new file keeps where it came from (the action's name without its trailing dots: "Transcribe…")
+    if (child.isLocalFile() && parent.isLocalFile() && ngFileMadeFrom(child.toLocalFile()).isEmpty()) {
+        QString action = m_entries.value(parentKey).text;
+        while (action.endsWith(QChar(0x2026)) || action.endsWith(QLatin1Char('.'))) {
+            action.chop(1);
+        }
+        ngSetFileMadeFrom(child.toLocalFile(), parent.toLocalFile(), action.trimmed());
+    }
     if (!m_sweep.isActive()) {
         m_sweep.start();
     }
@@ -1695,6 +1703,29 @@ QStringList ngFileTags(const QString &path)
         return {};
     }
     return data.tags();
+}
+
+NgMadeFrom ngFileMadeFrom(const QString &path)
+{
+    NgMadeFrom made;
+    if (path.isEmpty()) {
+        return made;
+    }
+    KFileMetaData::UserMetaData data(path);
+    if (data.isSupported()) {
+        made.source = data.attribute(QStringLiteral("dolphin-ng.made-from"));
+        made.action = data.attribute(QStringLiteral("dolphin-ng.made-by"));
+    }
+    return made;
+}
+
+void ngSetFileMadeFrom(const QString &path, const QString &source, const QString &action)
+{
+    KFileMetaData::UserMetaData data(path);
+    if (!path.isEmpty() && data.isSupported()) {
+        data.setAttribute(QStringLiteral("dolphin-ng.made-from"), source);
+        data.setAttribute(QStringLiteral("dolphin-ng.made-by"), action);
+    }
 }
 
 QString ngAgoText(const QDateTime &when)

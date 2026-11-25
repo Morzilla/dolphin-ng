@@ -4248,6 +4248,15 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                     quickActions = ngQuickActionsFor(fileItem.localPath(), fileItem.mimetype());
                 }
                 kindWords = fileItem.isDir() ? ngTr("Folder", "Cartella") : fileItem.mimeComment();
+                if (look != NgCardStyle::Dossier && fileItem.isLocalFile()) {
+                    // Scheda: a file made by a quick action says so where its kind stands (the picture's band already
+                    // names the kind): "from talk.ogg · Transcribe"
+                    const NgMadeFrom made = ngFileMadeFrom(fileItem.localPath());
+                    if (!made.isEmpty()) {
+                        kindWords = QChar(0x21b3) + QLatin1Char(' ') + ngTr("from ", "da ") + QFileInfo(made.source).fileName()
+                            + (made.action.isEmpty() ? QString() : QStringLiteral(" · ") + made.action);
+                    }
+                }
                 m_ngTagsPath = fileItem.isLocalFile() ? fileItem.localPath() : QString();
                 if (look != NgCardStyle::Dossier) {
                     // drawn over the picture (see paintNgCardTags), not as a line of their own: they add to what the card
@@ -4728,7 +4737,7 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
         const qreal originHeight = qMax(smallFm.height(), chipHeight);
         // the facts and the origin line sit in the middle of the room between the header and the dates
         const bool hasOrigin = facts
-            && ((!facts->lastName.isEmpty() && facts->lastWhen.isValid()) || !facts->origin.isEmpty() || !facts->who.isEmpty() || facts->rating > 0
+            && ((!facts->lastName.isEmpty() && facts->lastWhen.isValid()) || !facts->origin.isEmpty() || !facts->madeFrom.isEmpty() || !facts->who.isEmpty() || facts->rating > 0
                 || !facts->tags.isEmpty());
         {
             const qreal factsHeight = !facts ? 0 : !facts->mix.isEmpty() ? 2 + 7 + 6 + smallFm.height() : valueFm.height() + wordFm.height();
@@ -4796,6 +4805,12 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
             if (!facts->lastName.isEmpty() && facts->lastWhen.isValid()) {
                 line = ngTr("Last changed: ", "Ultimo toccato: ") + QStringLiteral("\x01") + facts->lastName + QStringLiteral("\x02 · ") + ngAgoText(facts->lastWhen);
                 sign = QStringLiteral("chronometer");
+            } else if (!facts->madeFrom.isEmpty()) {
+                // made by a quick action from another file: its name, struck out by its absence in the folder left to
+                // the Information panel
+                line = (facts->madeBy.isEmpty() ? QString() : facts->madeBy + QStringLiteral(" · ")) + ngTr("from ", "da ") + QStringLiteral("\x01")
+                    + QFileInfo(facts->madeFrom).fileName() + QStringLiteral("\x02");
+                sign = QStringLiteral("go-next");
             } else if (!facts->origin.isEmpty()) {
                 line = ngTr("Downloaded from ", "Scaricato da ") + QStringLiteral("\x01") + facts->origin + QStringLiteral("\x02");
                 sign = QStringLiteral("download");
