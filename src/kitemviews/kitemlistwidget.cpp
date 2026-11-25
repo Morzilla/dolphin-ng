@@ -637,6 +637,25 @@ void NgActivity::watchForChildren(const QUrl &parent)
 
 void NgActivity::offerNewFile(const QUrl &url)
 {
+    // a download seen arriving: a file made in the last minutes that says where it was downloaded from (browsers write
+    // that when the download is complete). It goes to the history, once
+    if (url.isLocalFile()) {
+        const QFileInfo info(url.toLocalFile());
+        const qint64 now = QDateTime::currentMSecsSinceEpoch(), made = info.lastModified().toMSecsSinceEpoch();
+        if (info.isFile() && now - made < 120000 && now - made >= 0) {
+            const KFileMetaData::UserMetaData data(info.absoluteFilePath());
+            const QUrl origin = data.isSupported() ? data.originUrl() : QUrl();
+            if (origin.isValid() && !origin.host().isEmpty()) {
+                Done done;
+                done.url = url;
+                done.label = ngTr("Download", "Scaricamento");
+                done.results = {ngTr("from ", "da ") + (origin.host().startsWith(QLatin1String("www.")) ? origin.host().mid(4) : origin.host())};
+                done.startedAt = info.birthTime().isValid() ? info.birthTime().toMSecsSinceEpoch() : made;
+                done.endedAt = made;
+                addToHistory(QStringLiteral("dl-%1-%2").arg(qHash(info.absoluteFilePath())).arg(made / 1000), done);
+            }
+        }
+    }
     if (m_watched.isEmpty()) {
         return;
     }
@@ -932,6 +951,28 @@ void NgActivity::remember(const QString &k, qint64 pid)
     const QStringList fields{id, QString::number(entry.startedAt), QString::number(QDateTime::currentMSecsSinceEpoch()), m_stopped.remove(k) ? QStringLiteral("1") : QStringLiteral("0"),
                              label.trimmed(), k, results.join(QLatin1Char('|'))};
     file.write(fields.join(QLatin1Char('\t')).toUtf8() + '\n');
+}
+
+void NgActivity::addToHistory(const QString &id, const Done &done)
+{
+    QFile file(ngHistoryFile());
+    const QByteArray mark = id.toUtf8() + '\t';
+    if (file.open(QIODevice::ReadOnly)) {
+        const QByteArray known = file.readAll();
+        file.close();
+        const QByteArray later = QByteArray("\n").append(mark);
+        if (known.startsWith(mark) || known.contains(later)) {
+            return;
+        }
+    }
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Append)) {
+        return;
+    }
+    const QStringList fields{id, QString::number(done.startedAt), QString::number(done.endedAt), done.stopped ? QStringLiteral("1") : QStringLiteral("0"), done.label, key(done.url),
+                             done.results.join(QLatin1Char('|'))};
+    file.write(fields.join(QLatin1Char('\t')).toUtf8() + '\n');
+    file.close();
+    Q_EMIT changed();
 }
 
 QList<NgActivity::Done> NgActivity::history(int limit)

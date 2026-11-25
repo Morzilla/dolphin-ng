@@ -107,6 +107,7 @@ public:
             m_inner->registerJob(job);
         }
         KJobTrackerInterface::registerJob(job);
+        m_started.insert(job, QDateTime::currentMSecsSinceEpoch());
         if (auto *del = qobject_cast<KIO::DeleteJob *>(job)) {
             // deleting: the files being deleted, from the start
             m_label.insert(job, ngTr("Deleting", "Eliminazione"));
@@ -178,6 +179,7 @@ public:
 protected:
     void finished(KJob *job) override
     {
+        remember(job);
         forget(job);
     }
     void percent(KJob *job, unsigned long value) override
@@ -189,8 +191,49 @@ protected:
     }
 
 private:
+    // a copy, a move or a deletion that ended goes to the history of the jobs tab: what was worked on (the first
+    // item, and how many there were) and where it went
+    void remember(KJob *job)
+    {
+        if (!m_started.contains(job)) {
+            return;
+        }
+        NgActivity::Done done;
+        done.startedAt = m_started.take(job);
+        done.endedAt = QDateTime::currentMSecsSinceEpoch();
+        done.stopped = job->error() != KJob::NoError;
+        QList<QUrl> sources;
+        if (auto *copy = qobject_cast<KIO::CopyJob *>(job)) {
+            sources = copy->srcUrls();
+            const QUrl to = copy->destUrl();
+            const bool toTrash = to.scheme() == QLatin1String("trash");
+            done.label = toTrash ? ngTr("To the trash", "Nel cestino") : copy->operationMode() == KIO::CopyJob::Move ? ngTr("Move", "Sposta") : ngTr("Copy", "Copia");
+            if (!toTrash) {
+                QString folder = to.isLocalFile() ? to.toLocalFile() : to.toDisplayString();
+                if (folder.startsWith(QDir::homePath())) {
+                    folder = QStringLiteral("Home") + folder.mid(QDir::homePath().size());
+                }
+                done.results = {folder};
+            }
+        } else if (auto *del = qobject_cast<KIO::DeleteJob *>(job)) {
+            sources = del->urls();
+            done.label = ngTr("Delete", "Elimina");
+        } else {
+            return;
+        }
+        if (sources.isEmpty()) {
+            return;
+        }
+        done.url = sources.constFirst();
+        if (sources.count() > 1) {
+            done.label += ngTr(" (%1 items)", " (%1 elementi)").arg(sources.count());
+        }
+        NgActivity::self()->addToHistory(QStringLiteral("io-%1-%2").arg(QCoreApplication::applicationPid()).arg(done.endedAt), done);
+    }
+    QHash<KJob *, qint64> m_started;
     void forget(KJob *job)
     {
+        m_started.remove(job);
         for (const QUrl &url : m_urls.value(job) + m_children.value(job)) {
             NgActivity::self()->clear(url);
         }

@@ -212,6 +212,9 @@ public:
     /** the quick actions that ended, the last first (kept in the application's data directory) */
     static QList<Done> history(int limit = 200);
     static void clearHistory();
+    /** one more line of the history, for work that is not a quick action (a copy, a move, a download seen
+     *  arriving); \a id keeps it to one line when more than one Dolphin NG sees it */
+    void addToHistory(const QString &id, const Done &done);
 
 Q_SIGNALS:
     void changed();
