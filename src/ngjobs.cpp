@@ -8,11 +8,21 @@
 #include "kitemviews/kitemlistwidget.h"
 
 #include <QDateTime>
+#include <QMouseEvent>
+#include <KSharedConfig>
+#include <KConfigGroup>
+#include <QScrollArea>
+#include <QPainterPath>
+#include <QLineEdit>
+#include <QGridLayout>
+#include <QFrame>
+#include <QEvent>
+#include <QDir>
+#include <QComboBox>
 #include <QStandardPaths>
 #include <QFileInfo>
 #include <cmath>
 #include <QHBoxLayout>
-#include <QHeaderView>
 #include <QLabel>
 #include <QLocale>
 #include <QMenu>
@@ -20,7 +30,6 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QStyleOptionToolButton>
-#include <QTreeWidget>
 #include <QVBoxLayout>
 #include <QWidgetAction>
 
@@ -59,7 +68,7 @@ NgJobsButton::NgJobsButton(QWidget *parent)
     setFocusPolicy(Qt::NoFocus);
     setPopupMode(QToolButton::InstantPopup);
     setMenu(m_menu);
-    setToolTip(ngTr("Work in progress and history", "Lavori in corso e storico"));
+    setToolTip(ngTr("Work in progress and history (middle click: the jobs tab)", "Lavori in corso e storico (clic centrale: la scheda dei lavori)"));
     m_list = new QWidget(m_menu);
     m_list->setMinimumWidth(400);
     m_rows = new QVBoxLayout(m_list);
@@ -87,6 +96,18 @@ QSize NgJobsButton::sizeHint() const
     bold.setWeight(QFont::DemiBold);
     const int count = m_running + m_waiting;
     return QSize(count > 0 ? 30 + QFontMetrics(bold).horizontalAdvance(ngJobsCount(count)) + 12 : 32, 26);
+}
+
+void NgJobsButton::mousePressEvent(QMouseEvent *event)
+{
+    // the middle button: straight to the jobs tab, without the list
+    if (event->button() == Qt::MiddleButton) {
+        if (auto *tabs = window()->findChild<DolphinTabWidget *>()) {
+            tabs->ngOpenHistoryTab();
+        }
+        return;
+    }
+    QToolButton::mousePressEvent(event);
 }
 
 void NgJobsButton::refresh()
@@ -286,70 +307,483 @@ void NgJobsButton::rebuild()
     m_list->adjustSize();
 }
 
+namespace
+{
+// "Home/Downloads" for a folder under the user's home, the path as it is elsewhere
+QString shownFolder(const QUrl &url)
+{
+    QString folder = url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash).toLocalFile();
+    const QString home = QDir::homePath();
+    if (folder == home) {
+        return QStringLiteral("Home");
+    }
+    if (folder.startsWith(home + QLatin1Char('/'))) {
+        return QStringLiteral("Home") + folder.mid(home.size());
+    }
+    return folder;
+}
+
+QString kindOf(const QUrl &url)
+{
+    const QString suffix = QFileInfo(url.fileName()).suffix().toUpper();
+    return suffix.isEmpty() || suffix.size() > 4 ? QStringLiteral("FILE") : suffix;
+}
+
+QColor inkOf(const QWidget *widget, qreal alpha)
+{
+    QColor ink = widget->palette().color(QPalette::WindowText);
+    ink.setAlphaF(alpha);
+    return ink;
+}
+
+// the card's sheet, as the cards of Dolphin NG's panels: a veil on the glass with Aurora, a tone of the text elsewhere
+QColor sheetOf(const QWidget *widget, bool faint = false)
+{
+    const bool dark = ngIsDark(widget->palette());
+    QColor sheet = ngAurora() ? ngAuroraVeil(dark) : (dark ? QColor(255, 255, 255, 18) : QColor(255, 255, 255, 150));
+    if (faint) {
+        sheet.setAlphaF(sheet.alphaF() * 0.55);
+    }
+    return sheet;
+}
+
+void paintKind(QPainter *painter, const QRectF &rect, const QString &kind, const QFont &base)
+{
+    const QColor colour = ngTagColour(kind);
+    QLinearGradient fill(rect.topLeft(), rect.bottomRight());
+    fill.setColorAt(0.0, colour.lighter(118));
+    fill.setColorAt(1.0, colour.darker(118));
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(fill);
+    painter->drawRoundedRect(rect, rect.width() * 0.26, rect.width() * 0.26);
+    QFont font = base;
+    font.setPointSizeF(qMax(6.0, base.pointSizeF() * (rect.width() > 40 ? 0.85 : 0.70)));
+    font.setWeight(QFont::Bold);
+    painter->setFont(font);
+    painter->setPen(QColor(255, 255, 255));
+    painter->drawText(rect, Qt::AlignCenter, kind);
+}
+
+// "Action  Home/Folder/name" on one line: the action and the name in the text colour, the folder fainter; the name is
+// what gives way when the line is too long
+void paintTitle(QPainter *painter, const QWidget *widget, const QRectF &rect, const QString &action, const QUrl &url, const QFont &font)
+{
+    QFont bold = font;
+    bold.setWeight(QFont::DemiBold);
+    const QFontMetricsF boldFm(bold), plainFm(font);
+    qreal x = rect.left();
+    painter->setFont(bold);
+    painter->setPen(widget->palette().color(QPalette::WindowText));
+    painter->drawText(QRectF(x, rect.top(), rect.width(), rect.height()), Qt::AlignLeft | Qt::AlignVCenter, action);
+    x += boldFm.horizontalAdvance(action) + boldFm.horizontalAdvance(QLatin1Char(' ')) * 1.5;
+    const QString folder = shownFolder(url) + QLatin1Char('/');
+    const qreal room = rect.right() - x;
+    const qreal nameWidth = boldFm.horizontalAdvance(url.fileName());
+    const QString shownPath = plainFm.elidedText(folder, Qt::ElideLeft, qMax(40.0, room - nameWidth));
+    painter->setFont(font);
+    painter->setPen(inkOf(widget, 0.60));
+    painter->drawText(QRectF(x, rect.top(), room, rect.height()), Qt::AlignLeft | Qt::AlignVCenter, shownPath);
+    x += plainFm.horizontalAdvance(shownPath);
+    painter->setFont(bold);
+    painter->setPen(widget->palette().color(QPalette::WindowText));
+    painter->drawText(QRectF(x, rect.top(), rect.right() - x, rect.height()), Qt::AlignLeft | Qt::AlignVCenter,
+                      boldFm.elidedText(url.fileName(), Qt::ElideMiddle, qMax(30.0, rect.right() - x)));
+}
+
+QToolButton *roundButton(QWidget *parent, const QString &icon, const QString &tip)
+{
+    auto *button = new QToolButton(parent);
+    button->setIcon(QIcon::fromTheme(icon));
+    button->setAutoRaise(true);
+    button->setToolTip(tip);
+    button->setFocusPolicy(Qt::NoFocus);
+    button->setFixedSize(30, 30);
+    return button;
+}
+
+// a quick action at work, or waiting: a card that fills with how far it is
+class RunCard : public QWidget
+{
+public:
+    RunCard(const NgActivity::Job &job, QWidget *parent)
+        : QWidget(parent)
+        , m_url(job.url)
+        , m_label(job.label)
+        , m_queued(job.queued)
+    {
+        setMinimumHeight(84);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    }
+    QUrl m_url;
+    QString m_label;
+    bool m_queued;
+    int m_room = 0; // what the buttons take at the right
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        const NgActivity::Entry entry = NgActivity::self()->entry(m_url);
+        const int percent = m_queued ? -1 : entry.percent;
+        const QRectF card = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        QPainterPath shape;
+        shape.addRoundedRect(card, 14, 14);
+        painter.fillPath(shape, sheetOf(this, m_queued));
+        const QColor accent = palette().color(QPalette::Highlight);
+        const qreal hue = accent.hslHueF() < 0 ? 0.58 : accent.hslHueF();
+        const bool grey = accent.hslSaturationF() < 0.15;
+        const QColor first = grey ? accent : QColor::fromHslF(hue, 0.85, ngIsDark(palette()) ? 0.66 : 0.50);
+        const QColor second = grey ? accent : QColor::fromHslF(std::fmod(hue + 0.17, 1.0), 0.80, ngIsDark(palette()) ? 0.72 : 0.56);
+        if (percent > 0) {
+            // how far it is, as a wash of the accent over the card's left part
+            painter.save();
+            painter.setClipPath(shape);
+            QLinearGradient wash(card.topLeft(), card.topRight());
+            QColor a = first, b = second;
+            a.setAlphaF(0.18);
+            b.setAlphaF(0.10);
+            wash.setColorAt(0.0, a);
+            wash.setColorAt(1.0, b);
+            painter.fillRect(QRectF(card.left(), card.top(), card.width() * percent / 100.0, card.height()), wash);
+            painter.restore();
+        }
+        paintKind(&painter, QRectF(14, (height() - 54) / 2.0, 54, 54), kindOf(m_url), font());
+        const qreal left = 82, right = width() - m_room - 96;
+        QFont large = font();
+        large.setPointSizeF(font().pointSizeF() * 1.12);
+        paintTitle(&painter, this, QRectF(left, 12, right - left, 24), m_label, m_url, large);
+        // what it is making, or why it waits
+        QStringList made;
+        const auto links = NgActivity::self()->links();
+        for (const auto &[child, parent] : links) {
+            if (parent == m_url) {
+                made.append(child.fileName());
+            }
+        }
+        QFont small = font();
+        small.setPointSizeF(qMax(7.0, font().pointSizeF() - 0.5));
+        painter.setFont(small);
+        painter.setPen(inkOf(this, 0.60));
+        const QString under = m_queued ? ngTr("queued: it starts when the work before it has ended", "in coda: parte quando finisce il lavoro prima")
+                                       : made.isEmpty() ? QString() : QStringLiteral("→ ") + made.join(QStringLiteral(", "));
+        painter.drawText(QRectF(left, 36, right - left, 18), Qt::AlignLeft | Qt::AlignVCenter, QFontMetricsF(small).elidedText(under, Qt::ElideRight, right - left));
+        if (!m_queued) {
+            const QRectF bar(left, 62, right - left, 6);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(inkOf(this, 0.13));
+            painter.drawRoundedRect(bar, 3, 3);
+            QLinearGradient fill(bar.topLeft(), bar.topRight());
+            fill.setColorAt(0.0, first);
+            fill.setColorAt(1.0, second);
+            painter.setBrush(fill);
+            if (percent >= 0) {
+                painter.drawRoundedRect(QRectF(bar.left(), bar.top(), qMax(6.0, bar.width() * percent / 100.0), bar.height()), 3, 3);
+            } else {
+                // no figure: a piece that runs along the bar
+                const qreal at = NgActivity::self()->phase();
+                painter.drawRoundedRect(QRectF(bar.left() + (bar.width() - 60) * at, bar.top(), 60, bar.height()), 3, 3);
+            }
+        }
+        // the figure and the time left, from how long it took so far
+        const QRectF figure(right + 8, 14, 84, 30);
+        QFont big = font();
+        big.setPointSizeF(font().pointSizeF() * 1.7);
+        big.setWeight(QFont::Light);
+        painter.setFont(m_queued ? font() : big);
+        painter.setPen(m_queued ? inkOf(this, 0.60) : palette().color(QPalette::WindowText));
+        painter.drawText(figure, Qt::AlignRight | Qt::AlignVCenter, m_queued ? ngTr("queued", "in coda") : percent >= 0 ? QStringLiteral("%1%").arg(percent) : QString());
+        if (!m_queued && percent > 2 && entry.startedAt > 0) {
+            const qint64 took = QDateTime::currentMSecsSinceEpoch() - entry.startedAt;
+            const qint64 left = took * (100 - percent) / percent / 1000;
+            painter.setFont(small);
+            painter.setPen(inkOf(this, 0.60));
+            painter.drawText(QRectF(right + 8, 46, 84, 18), Qt::AlignRight | Qt::AlignVCenter,
+                             ngTr("%1:%2 left", "ancora %1:%2").arg(left / 60).arg(left % 60, 2, 10, QLatin1Char('0')));
+        }
+    }
+};
+
+// a quick action that ended: its time on the line, the action with the file and its path, what it made, how it went
+class DoneRow : public QWidget
+{
+public:
+    DoneRow(const NgActivity::Done &done, bool withDay, bool first, bool last, QWidget *parent)
+        : QWidget(parent)
+        , m_done(done)
+        , m_withDay(withDay)
+        , m_first(first)
+        , m_last(last)
+    {
+        setFixedHeight(50);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        setAttribute(Qt::WA_Hover, true);
+    }
+    NgActivity::Done m_done;
+    bool m_withDay, m_first, m_last;
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        if (underMouse()) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(sheetOf(this, true));
+            painter.drawRoundedRect(QRectF(26, 2, width() - 28, height() - 4), 12, 12);
+        }
+        // the line of time and this entry's dot on it
+        const qreal middle = height() / 2.0;
+        painter.setPen(QPen(inkOf(this, 0.16), 2, Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(QPointF(10, m_first ? middle : 0), QPointF(10, m_last ? middle : height()));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(m_done.stopped ? QColor(0xf0, 0xa0, 0x4b) : palette().color(QPalette::Highlight));
+        painter.drawEllipse(QPointF(10, middle), 5, 5);
+        const QDateTime ended = QDateTime::fromMSecsSinceEpoch(m_done.endedAt);
+        const QString when = m_withDay ? ngAgoText(ended) + QLatin1Char(' ') + QLocale().toString(ended.time(), QLocale::ShortFormat) : QLocale().toString(ended.time(), QLocale::ShortFormat);
+        const qreal timeWidth = m_withDay ? 118 : 54;
+        painter.setFont(font());
+        painter.setPen(inkOf(this, 0.60));
+        painter.drawText(QRectF(36, 0, timeWidth, height()), Qt::AlignLeft | Qt::AlignVCenter, when);
+        const qreal chip = 36 + timeWidth + 8;
+        paintKind(&painter, QRectF(chip, middle - 17, 34, 34), kindOf(m_done.url), font());
+        const QString outcome = m_done.stopped ? ngTr("Stopped", "Fermato") : QStringLiteral("✓ ") + tookText(m_done.endedAt - m_done.startedAt);
+        QFont bold = font();
+        bold.setWeight(QFont::DemiBold);
+        const qreal outcomeWidth = QFontMetricsF(bold).horizontalAdvance(outcome) + 8;
+        const qreal left = chip + 46, right = width() - 44 - outcomeWidth;
+        paintTitle(&painter, this, QRectF(left, 6, right - left, 20), m_done.label, m_done.url, font());
+        QFont small = font();
+        small.setPointSizeF(qMax(7.0, font().pointSizeF() - 0.5));
+        painter.setFont(small);
+        painter.setPen(inkOf(this, 0.60));
+        const QString made = m_done.results.isEmpty() ? (m_done.stopped ? ngTr("nothing made", "nessun risultato") : QString()) : QStringLiteral("→ ") + m_done.results.join(QStringLiteral(", "));
+        painter.drawText(QRectF(left, 26, right - left, 18), Qt::AlignLeft | Qt::AlignVCenter, QFontMetricsF(small).elidedText(made, Qt::ElideRight, right - left));
+        painter.setFont(bold);
+        painter.setPen(m_done.stopped ? QColor(0xf0, 0xa0, 0x4b) : (ngIsDark(palette()) ? QColor(0x5a, 0xd1, 0x8f) : QColor(0x1f, 0x9a, 0x5c)));
+        painter.drawText(QRectF(right, 0, outcomeWidth, height()), Qt::AlignRight | Qt::AlignVCenter, outcome);
+    }
+    bool event(QEvent *event) override
+    {
+        if (event->type() == QEvent::HoverEnter || event->type() == QEvent::HoverLeave) {
+            update();
+        }
+        return QWidget::event(event);
+    }
+};
+
+QWidget *sectionCaption(const QString &text, QWidget *parent)
+{
+    auto *holder = new QWidget(parent);
+    auto *line = new QHBoxLayout(holder);
+    line->setContentsMargins(0, 8, 0, 2);
+    line->setSpacing(10);
+    line->addWidget(caption(text, holder));
+    auto *rule = new QFrame(holder);
+    rule->setFixedHeight(1);
+    rule->setStyleSheet(QStringLiteral("background: rgba(128, 128, 128, 0.30); border: none;"));
+    line->addWidget(rule, 1);
+    return holder;
+}
+}
+
 NgHistoryPage::NgHistoryPage(QWidget *parent)
     : QWidget(parent)
 {
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(12, 10, 12, 12);
-    layout->setSpacing(8);
+    layout->setContentsMargins(16, 10, 8, 8);
+    layout->setSpacing(6);
     auto *top = new QHBoxLayout;
-    auto *title = new QLabel(ngTr("History of quick actions", "Storico delle azioni rapide"), this);
+    top->setSpacing(10);
+    auto *title = new QLabel(ngTr("Jobs", "Lavori"), this);
     QFont large = title->font();
-    large.setPointSizeF(large.pointSizeF() * 1.35);
+    large.setPointSizeF(large.pointSizeF() * 1.6);
     title->setFont(large);
-    top->addWidget(title, 1);
+    top->addWidget(title);
+    m_status = new QLabel(this);
+    m_status->setEnabled(false);
+    top->addWidget(m_status);
+    top->addStretch(1);
+    m_search = new QLineEdit(this);
+    m_search->setPlaceholderText(ngTr("Search the history…", "Cerca nello storico…"));
+    m_search->setClearButtonEnabled(true);
+    m_search->setMinimumWidth(220);
+    top->addWidget(m_search);
+    m_grouping = new QComboBox(this);
+    m_grouping->addItem(ngTr("By day", "Per giorno"));
+    m_grouping->addItem(ngTr("By action", "Per azione"));
+    m_grouping->setCurrentIndex(ngSetting("JOBS_GROUPING") == QLatin1String("action") ? 1 : 0);
+    top->addWidget(m_grouping);
     auto *clear = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-clear-history")), ngTr("Clear history", "Svuota storico"), this);
-    connect(clear, &QPushButton::clicked, this, [this] {
-        NgActivity::clearHistory();
-        m_seen = -1;
-        fill();
-    });
     top->addWidget(clear);
     layout->addLayout(top);
-    m_tree = new QTreeWidget(this);
-    m_tree->setRootIsDecorated(false);
-    m_tree->setAlternatingRowColors(true);
-    m_tree->setUniformRowHeights(true);
-    m_tree->setHeaderLabels({ngTr("When", "Quando"), ngTr("Action", "Azione"), ngTr("File", "File"), ngTr("Made", "Risultato"), ngTr("Took", "Durata"), ngTr("Folder", "Cartella")});
-    layout->addWidget(m_tree, 1);
-    // (a work that ends is written to the history: read again then, and only if the file changed)
+    auto *scroll = new QScrollArea(this);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->viewport()->setAutoFillBackground(false);
+    m_content = new QWidget(scroll);
+    m_content->setAutoFillBackground(false);
+    m_rows = new QVBoxLayout(m_content);
+    m_rows->setContentsMargins(0, 0, 10, 12);
+    m_rows->setSpacing(2);
+    scroll->setWidget(m_content);
+    layout->addWidget(scroll, 1);
+    connect(clear, &QPushButton::clicked, this, [this] {
+        NgActivity::clearHistory();
+        rebuild(true);
+    });
+    connect(m_search, &QLineEdit::textChanged, this, [this] {
+        rebuild(true);
+    });
+    connect(m_grouping, &QComboBox::currentIndexChanged, this, [this](int index) {
+        KConfigGroup group = KSharedConfig::openConfig()->group(QStringLiteral("DolphinNG"));
+        group.writeEntry("JOBS_GROUPING", index == 1 ? QStringLiteral("action") : QStringLiteral("day"));
+        group.sync();
+        ngSettingsInvalidate();
+        rebuild(true);
+    });
     connect(NgActivity::self(), &NgActivity::changed, this, [this] {
         if (isVisible()) {
-            fill();
+            rebuild();
         }
     });
-    fill();
+    rebuild(true);
 }
 
 void NgHistoryPage::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
-    fill();
+    rebuild(true);
 }
 
-void NgHistoryPage::fill()
+void NgHistoryPage::resizeEvent(QResizeEvent *event)
 {
+    QWidget::resizeEvent(event);
+    // (two cards side by side need room for the action, the path and the name)
+    if ((width() < 980) != m_narrow) {
+        m_narrow = width() < 980;
+        rebuild(true);
+    }
+}
+
+void NgHistoryPage::showInDolphin(const QUrl &url)
+{
+    // its folder in a tab of this window, the file selected (the tab that shows the folder already, or a new one)
+    if (auto *tabs = window()->findChild<DolphinTabWidget *>()) {
+        tabs->openFiles({url}, false);
+    }
+}
+
+void NgHistoryPage::rebuild(bool force)
+{
+    const auto jobs = NgActivity::self()->jobs();
     const QFileInfo file(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/ng-history.tsv"));
-    const qint64 now = file.exists() ? file.lastModified().toMSecsSinceEpoch() + file.size() : 0;
-    if (now == m_seen) {
+    QString shape = QString::number(file.exists() ? file.lastModified().toMSecsSinceEpoch() + file.size() : 0);
+    int running = 0, waiting = 0;
+    for (const auto &job : jobs) {
+        shape += QLatin1Char('\n') + job.url.toString() + (job.queued ? QLatin1Char('q') : QLatin1Char('r'));
+        job.queued ? ++waiting : ++running;
+    }
+    m_status->setText(running + waiting == 0 ? ngTr("nothing at work", "nessun lavoro in corso")
+                                             : waiting == 0 ? ngTr("%1 at work", "%1 attivi").arg(running) : ngTr("%1 at work · %2 queued", "%1 attivi · %2 in coda").arg(running).arg(waiting));
+    if (!force && shape == m_shape) {
+        for (QWidget *card : std::as_const(m_cards)) {
+            card->update(); // (how far it is)
+        }
         return;
     }
-    m_seen = now;
-    m_tree->clear();
-    const auto all = NgActivity::history(1000);
-    for (const auto &done : all) {
-        auto *item = new QTreeWidgetItem(m_tree);
-        item->setText(0, QLocale().toString(QDateTime::fromMSecsSinceEpoch(done.endedAt), QLocale::ShortFormat));
-        item->setText(1, done.label);
-        item->setText(2, done.url.fileName());
-        item->setText(3, done.results.join(QStringLiteral(", ")));
-        item->setText(4, done.stopped ? ngTr("Stopped", "Fermato") : tookText(done.endedAt - done.startedAt));
-        item->setText(5, done.url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash).toLocalFile());
-        item->setToolTip(2, done.url.toLocalFile());
+    m_shape = shape;
+    m_cards.clear();
+    while (QLayoutItem *item = m_rows->takeAt(0)) {
+        if (item->widget()) {
+            item->widget()->deleteLater();
+        }
+        delete item;
     }
-    for (int column = 0; column < 5; ++column) {
-        m_tree->resizeColumnToContents(column);
+    if (!jobs.isEmpty()) {
+        m_rows->addWidget(sectionCaption(ngTr("At work", "In corso"), m_content));
+        auto *holder = new QWidget(m_content);
+        auto *grid = new QGridLayout(holder);
+        grid->setContentsMargins(0, 4, 0, 4);
+        grid->setSpacing(12);
+        grid->setColumnStretch(0, 1);
+        grid->setColumnStretch(1, 1);
+        int at = 0;
+        for (const auto &job : jobs) {
+            auto *card = new RunCard(job, holder);
+            auto *buttons = new QHBoxLayout(card);
+            buttons->setContentsMargins(0, 0, 12, 0);
+            buttons->setSpacing(6);
+            buttons->addStretch(1);
+            const QUrl url = job.url;
+            auto *show = roundButton(card, QStringLiteral("document-open-folder"), ngTr("Show in Dolphin NG", "Mostra in Dolphin NG"));
+            connect(show, &QToolButton::clicked, this, [this, url] {
+                showInDolphin(url);
+            });
+            buttons->addWidget(show);
+            auto *stop = roundButton(card, QStringLiteral("dialog-cancel"), job.queued ? ngTr("Take off the queue", "Togli dalla coda") : ngTr("Stop", "Ferma"));
+            connect(stop, &QToolButton::clicked, this, [url] {
+                NgActivity::self()->cancel(url);
+            });
+            buttons->addWidget(stop);
+            card->m_room = 30 * 2 + 6 + 12;
+            m_narrow ? grid->addWidget(card, at, 0, 1, 2) : grid->addWidget(card, at / 2, at % 2);
+            m_cards.append(card);
+            ++at;
+        }
+        m_rows->addWidget(holder);
     }
+    // the history: the last first, in groups (a day, or an action); within a group the last first as well
+    const QString wanted = m_search->text().trimmed();
+    QList<NgActivity::Done> all;
+    for (const auto &done : NgActivity::history(2000)) {
+        if (wanted.isEmpty() || done.label.contains(wanted, Qt::CaseInsensitive) || done.url.toLocalFile().contains(wanted, Qt::CaseInsensitive)
+            || done.results.join(QLatin1Char(' ')).contains(wanted, Qt::CaseInsensitive)) {
+            all.append(done);
+        }
+    }
+    const bool byAction = m_grouping->currentIndex() == 1;
+    QStringList order;
+    QHash<QString, QList<NgActivity::Done>> groups;
+    const QDate today = QDate::currentDate();
+    for (const auto &done : std::as_const(all)) {
+        const QDate day = QDateTime::fromMSecsSinceEpoch(done.endedAt).date();
+        QString name = byAction ? done.label
+            : day == today ? ngTr("Today", "Oggi") : day == today.addDays(-1) ? ngTr("Yesterday", "Ieri") : QLocale().toString(day, QLocale::LongFormat);
+        if (!groups.contains(name)) {
+            order.append(name);
+        }
+        groups[name].append(done);
+    }
+    for (const QString &name : std::as_const(order)) {
+        const auto entries = groups.value(name);
+        m_rows->addWidget(sectionCaption(byAction ? QStringLiteral("%1 · %2").arg(name).arg(entries.count()) : name, m_content));
+        for (int i = 0; i < entries.count(); ++i) {
+            auto *row = new DoneRow(entries.at(i), byAction, i == 0, i == entries.count() - 1, m_content);
+            auto *buttons = new QHBoxLayout(row);
+            buttons->setContentsMargins(0, 0, 8, 0);
+            buttons->addStretch(1);
+            const QUrl url = entries.at(i).url;
+            const QStringList results = entries.at(i).results;
+            auto *show = roundButton(row, QStringLiteral("document-open-folder"), ngTr("Show in Dolphin NG", "Mostra in Dolphin NG"));
+            connect(show, &QToolButton::clicked, this, [this, url, results] {
+                // what it made, when it is still there (the first result, beside its source); otherwise the source
+                const QUrl made = results.isEmpty() ? QUrl() : QUrl::fromLocalFile(url.adjusted(QUrl::RemoveFilename).toLocalFile() + results.constFirst());
+                showInDolphin(made.isValid() && QFileInfo::exists(made.toLocalFile()) ? made : url);
+            });
+            buttons->addWidget(show);
+            m_rows->addWidget(row);
+        }
+    }
+    if (all.isEmpty()) {
+        auto *none = new QLabel(wanted.isEmpty() ? ngTr("No quick action has ended yet: they will be listed here.", "Nessuna azione rapida è ancora finita: compariranno qui.")
+                                                 : ngTr("Nothing in the history matches.", "Niente nello storico corrisponde."), m_content);
+        none->setEnabled(false);
+        none->setContentsMargins(4, 16, 4, 4);
+        m_rows->addWidget(none);
+    }
+    m_rows->addStretch(1);
 }
 
 #include "moc_ngjobs.cpp"

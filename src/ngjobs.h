@@ -26,6 +26,7 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
 
 private:
     void refresh();
@@ -40,8 +41,12 @@ private:
     int m_waiting = 0;
 };
 
-/** dolphin-ng: every quick action that ended, the last first: the content of the history tab
- *  (DolphinTabWidget::ngOpenHistoryTab) */
+/**
+ * dolphin-ng: the content of the jobs tab (DolphinTabWidget::ngOpenHistoryTab): what is at work and what waits, as
+ * large cards at the top (how far, the time left, stop, show the file in Dolphin NG), then every quick action that
+ * ended as a line of time, the last first, grouped by day or by action. Each entry names the action and the file
+ * with its path, and under it what it made.
+ */
 class NgHistoryPage : public QWidget
 {
     Q_OBJECT
@@ -50,11 +55,19 @@ public:
 
 protected:
     void showEvent(QShowEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
-    void fill();
-    class QTreeWidget *m_tree;
-    qint64 m_seen = -1; // the history file's time when it was read last
+    bool m_narrow = false; // the cards of what is at work in one column
+    void rebuild(bool force = false);
+    void showInDolphin(const QUrl &url);
+    QLabel *m_status;
+    class QLineEdit *m_search;
+    class QComboBox *m_grouping;
+    QWidget *m_content;
+    QVBoxLayout *m_rows;
+    QString m_shape;
+    QList<QWidget *> m_cards; // the cards of what is at work: painted again as it goes on
 };
 
 #endif
