@@ -96,6 +96,7 @@
 #include <KConfigGroup>
 #include <KSharedConfig>
 #include <QProxyStyle>
+#include "ngjobs.h"
 #include <QGraphicsDropShadowEffect>
 #include <QPainter>
 #include <QClipboard>
@@ -1442,6 +1443,10 @@ DolphinMainWindow::DolphinMainWindow()
             box->addWidget(leftButtons, 0, Qt::AlignVCenter);
             box->addWidget(topBar, 0, Qt::AlignVCenter); // (the sidebar's button goes before it, see ngPlaceSidebarToggle)
             box->addWidget(drag, 1);
+            // the work of quick actions and its history: in the title row, the same whatever tab is shown
+            auto *jobs = new NgJobsButton(macRow);
+            box->addWidget(jobs, 0, Qt::AlignVCenter);
+            box->addSpacing(8);
             box->addWidget(rightButtons, 0, Qt::AlignVCenter);
             leftButtons->setVisible(leftButtons->layout()->count() > 0); // (a side with none of them takes no room)
             rightButtons->setVisible(rightButtons->layout()->count() > 0);
@@ -1465,6 +1470,10 @@ DolphinMainWindow::DolphinMainWindow()
             QTimer::singleShot(0, this, &DolphinMainWindow::ngStyleTitleRow);
         } else {
             m_ngTabsToolBar->addWidget(topBar);
+            auto *room = new QWidget(m_ngTabsToolBar);
+            room->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+            m_ngTabsToolBar->addWidget(room);
+            m_ngTabsToolBar->addWidget(new NgJobsButton(m_ngTabsToolBar));
         }
         if (m_ngTitleTabs || !m_ngCentralLayout) {
             insertToolBar(toolBar(), m_ngTabsToolBar);
