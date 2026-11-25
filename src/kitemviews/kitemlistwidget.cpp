@@ -29,6 +29,7 @@
 #include <QDir>
 #include <QFileSystemWatcher>
 #include <QFileInfo>
+#include <QProcess>
 #include <QFile>
 #include <QCoreApplication>
 #include <QStandardPaths>
@@ -527,7 +528,7 @@ void NgActivity::saveProcesses()
             continue; // a child waiting with its parent's pid: it comes back with the parent
         }
         const QStringList fields{QString::number(it.value()), it.key(), m_entries.value(it.key()).text, m_progressFiles.value(it.key()),
-                                 m_watched.contains(it.key()) ? QStringLiteral("1") : QStringLiteral("0")};
+                                 m_watched.contains(it.key()) ? QStringLiteral("1") : QStringLiteral("0"), m_programs.value(it.key())};
         file.write(fields.join(QLatin1Char('\t')).toUtf8() + '\n');
     }
     // what the work has made so far, tied to its source: another Dolphin NG did not see those files appear
@@ -574,6 +575,9 @@ void NgActivity::loadProcesses()
                 continue; // known already: the lists are read again whenever one of them changes
             }
             setUntilProcessEnds(url, pid, f.at(2), f.at(3));
+            if (!f.value(5).isEmpty()) {
+                m_programs.insert(key(url), f.at(5)); // (so that the queue of this Dolphin NG waits for it too)
+            }
             if (f.at(4) == QLatin1String("1")) {
                 watchForChildren(url);
             }
@@ -883,7 +887,175 @@ bool NgActivity::isStopHovered(const QUrl &url) const
 bool NgActivity::canCancel(const QUrl &url) const
 {
     const QString k = key(url);
-    return m_entries.contains(k) && !m_links.contains(k) && (m_pids.contains(k) || m_cancellers.contains(k));
+    const bool waiting = std::any_of(m_queue.cbegin(), m_queue.cend(), [&k](const Waiting &job) {
+        return key(job.url) == k;
+    });
+    return m_entries.contains(k) && !m_links.contains(k) && (m_pids.contains(k) || m_cancellers.contains(k) || waiting);
+}
+
+static QString ngHistoryFile()
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(dir);
+    return dir + QStringLiteral("/ng-history.tsv");
+}
+
+void NgActivity::remember(const QString &k, qint64 pid)
+{
+    // one line for each ended work: id, started, ended, stopped, label, url, results. Every Dolphin NG sees the work
+    // end: the id (the process and when it started) keeps it to one line
+    const Entry entry = m_entries.value(k);
+    QString label = m_labels.value(k, entry.text);
+    while (label.endsWith(QChar(0x2026)) || label.endsWith(QLatin1Char('.'))) {
+        label.chop(1);
+    }
+    QStringList results;
+    for (auto it = m_links.cbegin(); it != m_links.cend(); ++it) {
+        if (key(it->second) == k) {
+            results.append(it->first.fileName());
+        }
+    }
+    const QString id = QStringLiteral("%1-%2").arg(pid).arg(entry.startedAt / 1000);
+    QFile file(ngHistoryFile());
+    if (file.open(QIODevice::ReadOnly)) {
+        const QByteArray known = file.readAll();
+        file.close();
+        const QByteArray mark = id.toUtf8() + '\t';
+        const QByteArray later = QByteArray("\n").append(mark);
+        if (known.startsWith(mark) || known.contains(later)) {
+            return;
+        }
+    }
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Append)) {
+        return;
+    }
+    const QStringList fields{id, QString::number(entry.startedAt), QString::number(QDateTime::currentMSecsSinceEpoch()), m_stopped.remove(k) ? QStringLiteral("1") : QStringLiteral("0"),
+                             label.trimmed(), k, results.join(QLatin1Char('|'))};
+    file.write(fields.join(QLatin1Char('\t')).toUtf8() + '\n');
+}
+
+QList<NgActivity::Done> NgActivity::history(int limit)
+{
+    QList<Done> out;
+    QFile file(ngHistoryFile());
+    if (!file.open(QIODevice::ReadOnly)) {
+        return out;
+    }
+    const QStringList lines = QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    for (auto it = lines.crbegin(); it != lines.crend() && out.count() < limit; ++it) {
+        const QStringList f = it->split(QLatin1Char('\t'));
+        if (f.size() < 7) {
+            continue;
+        }
+        Done done;
+        done.startedAt = f.at(1).toLongLong();
+        done.endedAt = f.at(2).toLongLong();
+        done.stopped = f.at(3) == QLatin1String("1");
+        done.label = f.at(4);
+        done.url = QUrl(f.at(5));
+        done.results = f.at(6).split(QLatin1Char('|'), Qt::SkipEmptyParts);
+        out.append(done);
+    }
+    return out;
+}
+
+void NgActivity::clearHistory()
+{
+    QFile::remove(ngHistoryFile());
+}
+
+QList<NgActivity::Job> NgActivity::jobs() const
+{
+    QList<Job> running, waiting;
+    for (auto it = m_entries.cbegin(); it != m_entries.cend(); ++it) {
+        if (m_links.contains(it.key()) || !m_pids.contains(it.key())) {
+            continue; // a result waiting with its source, or a copy or a move (those have Plasma's own list)
+        }
+        QString label = m_labels.value(it.key(), it->text);
+        while (label.endsWith(QChar(0x2026)) || label.endsWith(QLatin1Char('.'))) {
+            label.chop(1);
+        }
+        running.append({QUrl(it.key()), label, it->percent, it->startedAt, false, true});
+    }
+    std::sort(running.begin(), running.end(), [](const Job &a, const Job &b) {
+        return a.startedAt < b.startedAt;
+    });
+    for (const Waiting &job : m_queue) {
+        waiting.append({job.url, job.label, -1, 0, true, true});
+    }
+    return running + waiting;
+}
+
+bool NgActivity::start(const QUrl &url, const QString &label, const QString &program, const QStringList &arguments, const QString &folder)
+{
+    const Waiting job{url, label, program, folder, arguments};
+    const bool busy = std::any_of(m_programs.cbegin(), m_programs.cend(), [&program](const QString &running) {
+        return running == program;
+    });
+    if (busy) {
+        m_queue.append(job);
+        set(url, -1, ngTr("Queued", "In coda"));
+        return true;
+    }
+    return launch(job);
+}
+
+void NgActivity::startWaiting()
+{
+    for (int i = 0; i < m_queue.count();) {
+        const QString program = m_queue.at(i).program;
+        const bool busy = std::any_of(m_programs.cbegin(), m_programs.cend(), [&program](const QString &running) {
+            return running == program;
+        });
+        if (busy) {
+            ++i;
+            continue;
+        }
+        const Waiting job = m_queue.takeAt(i);
+        m_entries.remove(key(job.url)); // (its "queued" entry: the work starts with a fresh one)
+        if (!launch(job)) {
+            Q_EMIT changed();
+        }
+    }
+}
+
+bool NgActivity::launch(const Waiting &job)
+{
+    // detached, so a long job (a transcription) goes on if Dolphin is closed; the file shows it is busy with this
+    // action until the process is gone. A program that knows how far it is can write the percentage to
+    // $NG_PROGRESS_FILE (ng-transcribe does)
+    static int count = 0;
+    const QString progressFile = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)
+        + QStringLiteral("/dolphin-ng-progress-%1-%2").arg(QCoreApplication::applicationPid()).arg(++count);
+    QProcess process;
+    // through ng-job, when there: Plasma shows the work (with its percentage and a stop button) in the notifications
+    // and on the Dolphin NG icon, also after Dolphin NG is closed
+    static const QString jobRunner = [] {
+        QString p = QStandardPaths::findExecutable(QStringLiteral("ng-job"));
+        const QString local = QDir::homePath() + QStringLiteral("/.local/bin/ng-job");
+        return p.isEmpty() && QFileInfo(local).isExecutable() ? local : p;
+    }();
+    if (jobRunner.isEmpty()) {
+        process.setProgram(job.program);
+        process.setArguments(job.arguments);
+    } else {
+        process.setProgram(jobRunner);
+        process.setArguments(QStringList{QStringLiteral("--title"), job.label, QStringLiteral("--file"), job.url.toLocalFile(), QStringLiteral("--"), job.program} + job.arguments);
+    }
+    process.setWorkingDirectory(job.folder);
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("NG_PROGRESS_FILE"), progressFile);
+    process.setProcessEnvironment(environment);
+    qint64 pid = 0;
+    if (!process.startDetached(&pid)) {
+        return false;
+    }
+    m_programs.insert(key(job.url), job.program);
+    m_labels.insert(key(job.url), job.label);
+    setUntilProcessEnds(job.url, pid, job.label + QChar(0x2026), progressFile);
+    // what it makes (named after it, in the same folder) is tied to it and shown next to it
+    watchForChildren(job.url);
+    return true;
 }
 
 void NgActivity::setCanceller(const QUrl &url, const std::function<void()> &cancel)
@@ -894,7 +1066,16 @@ void NgActivity::setCanceller(const QUrl &url, const std::function<void()> &canc
 void NgActivity::cancel(const QUrl &url)
 {
     const QString k = key(url);
+    for (int i = 0; i < m_queue.count(); ++i) {
+        if (key(m_queue.at(i).url) == k) { // still waiting: taken off the queue
+            m_queue.removeAt(i);
+            m_entries.remove(k);
+            Q_EMIT changed();
+            return;
+        }
+    }
     if (m_pids.contains(k)) {
+        m_stopped.insert(k);
         // a quick action runs in its own session (detached): stop the whole group, the programs it started too
         const pid_t pid = static_cast<pid_t>(m_pids.value(k));
         ::kill(-pid, SIGTERM);
@@ -968,6 +1149,11 @@ void NgActivity::tick()
         slow = 0;
         for (auto it = m_pids.begin(); it != m_pids.end();) {
             if (::kill(static_cast<pid_t>(it.value()), 0) != 0) {
+                if (!m_links.contains(it.key())) {
+                    remember(it.key(), it.value()); // (a result waiting with its source's process is no work of its own)
+                }
+                m_programs.remove(it.key());
+                m_labels.remove(it.key());
                 m_entries.remove(it.key());
                 m_cancellers.remove(it.key());
                 parentDone(it.key());
@@ -995,6 +1181,7 @@ void NgActivity::tick()
     }
     if (saveLater) {
         saveProcesses();
+        startWaiting();
     }
     const bool grows = growing();
     if (grows) {

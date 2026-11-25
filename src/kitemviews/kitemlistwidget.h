@@ -17,6 +17,7 @@
 #include <QPalette>
 #include <QGraphicsWidget>
 #include <QStyle>
+#include <QSet>
 #include <QTimer>
 #include <functional>
 #include <QUrl>
@@ -186,12 +187,50 @@ public:
     void setHoveredStop(const QUrl &url);
     bool isStopHovered(const QUrl &url) const;
 
+    /* The queue and the history of quick actions. */
+    /** starts \a program on \a url, or queues it while the same program is already at work (two transcriptions
+     *  do not run together; an extraction beside a transcription does). False if it could not be started. */
+    bool start(const QUrl &url, const QString &label, const QString &program, const QStringList &arguments, const QString &folder);
+    struct Job {
+        QUrl url;
+        QString label;
+        int percent = -1;
+        qint64 startedAt = 0;
+        bool queued = false;
+        bool canStop = false;
+    };
+    /** the work of quick actions, of every Dolphin NG: what runs first, then what waits */
+    QList<Job> jobs() const;
+    struct Done {
+        QUrl url;
+        QString label;
+        QStringList results; // the names of the files it made
+        qint64 startedAt = 0;
+        qint64 endedAt = 0;
+        bool stopped = false;
+    };
+    /** the quick actions that ended, the last first (kept in the application's data directory) */
+    static QList<Done> history(int limit = 200);
+    static void clearHistory();
+
 Q_SIGNALS:
     void changed();
     void linksChanged();
 
 private:
     NgActivity();
+    struct Waiting {
+        QUrl url;
+        QString label, program, folder;
+        QStringList arguments;
+    };
+    QList<Waiting> m_queue;
+    QHash<QString, QString> m_programs; // key -> the program at work on it
+    QHash<QString, QString> m_labels; // key -> the action's name, as started
+    QSet<QString> m_stopped; // stopped by the user: said so in the history
+    bool launch(const Waiting &job);
+    void startWaiting();
+    void remember(const QString &k, qint64 pid);
     static QString key(const QUrl &url);
     void tick();
     QHash<QString, Entry> m_entries;

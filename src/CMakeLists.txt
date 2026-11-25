@@ -341,6 +341,7 @@ target_sources(dolphinstatic PRIVATE
     settings/contextmenu/contextmenusettingspage.cpp
     settings/settingspagebase.cpp
     settings/ng/ngsettingspage.cpp
+    ngjobs.cpp
     settings/ng/ngactionspage.cpp
     settings/servicemodel.cpp
     settings/trash/trashsettingspage.cpp

@@ -2987,37 +2987,8 @@ void DolphinView::ngRunQuickAction(const KFileItem &item, int number)
             KMessageBox::error(window(), ngTr("This needs the program “%1”, which is not installed.", "Serve il programma «%1», che non è installato.").arg(program));
             return;
         }
-        // detached, so a long job (a transcription) goes on if Dolphin is closed; the file shows it is busy
-        // with this action until the process is gone
-        // a program that knows how far it is can write the percentage to $NG_PROGRESS_FILE (ng-transcribe does)
-        static int count = 0;
-        const QString progressFile = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)
-            + QStringLiteral("/dolphin-ng-progress-%1-%2").arg(QCoreApplication::applicationPid()).arg(++count);
-        QProcess process;
-        // through ng-job, when there: Plasma shows the work (with its percentage and a stop button) in the
-        // notifications and on the Dolphin NG icon, also after Dolphin NG is closed
-        static const QString jobRunner = [] {
-            QString p = QStandardPaths::findExecutable(QStringLiteral("ng-job"));
-            const QString local = QDir::homePath() + QStringLiteral("/.local/bin/ng-job");
-            return p.isEmpty() && QFileInfo(local).isExecutable() ? local : p;
-        }();
-        if (jobRunner.isEmpty()) {
-            process.setProgram(program);
-            process.setArguments(arguments);
-        } else {
-            process.setProgram(jobRunner);
-            process.setArguments(QStringList{QStringLiteral("--title"), label, QStringLiteral("--file"), itemUrl.toLocalFile(), QStringLiteral("--"), program} + arguments);
-        }
-        process.setWorkingDirectory(folder);
-        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-        environment.insert(QStringLiteral("NG_PROGRESS_FILE"), progressFile);
-        process.setProcessEnvironment(environment);
-        qint64 pid = 0;
-        if (process.startDetached(&pid)) {
-            NgActivity::self()->setUntilProcessEnds(itemUrl, pid, label + QStringLiteral("…"), progressFile);
-            // what it makes (named after it, in the same folder) is tied to it and shown next to it
-            NgActivity::self()->watchForChildren(itemUrl);
-        } else {
+        // started, or queued behind the same program already at work (NgActivity::start)
+        if (!NgActivity::self()->start(itemUrl, label, program, arguments, folder)) {
             KMessageBox::error(window(), ngTr("“%1” could not be started.", "Impossibile avviare «%1».").arg(program));
         }
     };
