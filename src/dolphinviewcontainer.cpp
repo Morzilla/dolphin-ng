@@ -3869,6 +3869,12 @@ QString DolphinViewContainer::caption() const
 
     KFilePlacesModel *placesModel = DolphinPlacesModelSingleton::instance().placesModel();
 
+    // dolphin-ng: the list of what happened lately is shown from the place "Recent Files": its name
+    if (url().scheme() == QLatin1String("ngrecent")) {
+        const QModelIndex place = placesModel->closestItem(QUrl(QStringLiteral("recentlyused:/files")));
+        return place.isValid() ? placesModel->text(place) : ngTr("Recent", "Recenti");
+    }
+
     QModelIndex url_index = placesModel->closestItem(url());
 
     if (url_index.isValid() && placesModel->url(url_index).matches(url(), QUrl::StripTrailingSlash)) {

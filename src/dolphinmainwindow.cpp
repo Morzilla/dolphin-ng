@@ -3672,16 +3672,21 @@ void DolphinMainWindow::updateHamburgerMenu()
     hamburgerMenu->hideActionsOf(configureMenu);
 }
 
-void DolphinMainWindow::slotPlaceActivated(const QUrl &placeUrl)
+// dolphin-ng: "Recent Files" is what happened lately to files and folders (created, downloaded, moved, made by an action,
+// opened), from the ng-recent component where it is installed; the desktop's own list, only what applications opened,
+// with the setting RECENT_LEGACY. For every way the place is opened: here, in a tab, in a window, in the other view
+static QUrl ngRecentPlace(const QUrl &url)
 {
-    // dolphin-ng: "Recent Files" is what happened lately to files and folders (created, downloaded, moved, made by an
-    // action, opened), from the ng-recent component where it is installed; the desktop's own list, only what
-    // applications opened, with the setting RECENT_LEGACY
-    QUrl url = placeUrl;
     if (url.scheme() == QLatin1String("recentlyused") && url.path() == QLatin1String("/files") && ngSetting("RECENT_LEGACY") != QLatin1String("1")
         && KProtocolInfo::isKnownProtocol(QStringLiteral("ngrecent"))) {
-        url = QUrl(QStringLiteral("ngrecent:/"));
+        return QUrl(QStringLiteral("ngrecent:/"));
     }
+    return url;
+}
+
+void DolphinMainWindow::slotPlaceActivated(const QUrl &placeUrl)
+{
+    const QUrl url = ngRecentPlace(placeUrl);
     DolphinViewContainer *view = activeViewContainer();
 
     if (view->url() == url) {
@@ -4644,12 +4649,18 @@ void DolphinMainWindow::setupDockWidgets()
         };
         m_placesPanel->ngSetSections(ngCreateFilterPanel(m_ngSortBar, m_placesPanel, open, 1), ngCreateFilterPanel(m_ngSortBar, m_placesPanel, open, 2));
     }
-    connect(m_placesPanel, &PlacesPanel::tabRequested, this, &DolphinMainWindow::openNewTab);
-    connect(m_placesPanel, &PlacesPanel::activeTabRequested, this, &DolphinMainWindow::openNewTabAndActivate);
-    connect(m_placesPanel, &PlacesPanel::newWindowRequested, this, [this](const QUrl &url) {
-        Dolphin::openNewWindow({url}, this);
+    connect(m_placesPanel, &PlacesPanel::tabRequested, this, [this](const QUrl &url) {
+        openNewTab(ngRecentPlace(url));
     });
-    connect(m_placesPanel, &PlacesPanel::openInSplitViewRequested, this, &DolphinMainWindow::openInSplitView);
+    connect(m_placesPanel, &PlacesPanel::activeTabRequested, this, [this](const QUrl &url) {
+        openNewTabAndActivate(ngRecentPlace(url));
+    });
+    connect(m_placesPanel, &PlacesPanel::newWindowRequested, this, [this](const QUrl &url) {
+        Dolphin::openNewWindow({ngRecentPlace(url)}, this);
+    });
+    connect(m_placesPanel, &PlacesPanel::openInSplitViewRequested, this, [this](const QUrl &url) {
+        openInSplitView(ngRecentPlace(url));
+    });
     connect(m_placesPanel, &PlacesPanel::errorMessage, this, &DolphinMainWindow::showErrorMessage);
     connect(this, &DolphinMainWindow::urlChanged, m_placesPanel, &PlacesPanel::setUrl);
     connect(placesDock, &DolphinDockWidget::visibilityChanged, &DolphinUrlNavigatorsController::slotPlacesPanelVisibilityChanged);

@@ -61,6 +61,16 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
                           const QString &sizeText = QString(), const QFont *font = nullptr, int special = 0, bool whole = false, const QStringList &tags = {},
                           bool openTabs = false, const QStringList &inside = {}, QList<QRectF> *insidePlaced = nullptr);
 
+// dolphin-ng: what happened to an entry of the list of what happened lately ("Downloaded from kde.org"), or nothing for any
+// other item. The ng-recent component marks its entries in UDS_EXTRA + 7 (KDE's own recent files also fill UDS_EXTRA)
+static QString ngHappened(const KFileItem &item)
+{
+    if (item.isNull() || item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) != QLatin1String("ngrecent")) {
+        return QString();
+    }
+    return item.entry().stringValue(KIO::UDSEntry::UDS_COMMENT);
+}
+
 // dolphin-ng: the well-known folders of the home (xdg-user-dirs), recognised by where they are: 0 for any other
 // folder, else 1 desktop, 2 downloads, 3 documents, 4 pictures, 5 music, 6 videos, 7 templates, 8 public
 int ngSpecialFolder(const QString &path)
@@ -2977,6 +2987,14 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
             if (typeText.isEmpty()) {
                 typeText = isDir ? ngTr("Folder", "Cartella") : values.value("text").toString().section(QLatin1Char('.'), -1).toUpper();
             }
+            // in the list of what happened lately (ngrecent:/) the row says what happened, in place of the kind
+            if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
+                if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
+                    if (const QString happened = ngHappened(fileModel->fileItem(index())); !happened.isEmpty()) {
+                        typeText = happened;
+                    }
+                }
+            }
             chip(typeText, !m_ngObjectRow);
             if (m_ngObjectRow && isDir) {
                 // the folder's drawing is small in a row: its item count and size are said in words too
@@ -4302,10 +4320,8 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                     }
                 }
                 // in the list of what happened lately (ngrecent:/) the line says what happened: "Downloaded from kde.org"
-                if (fileItem.entry().contains(KIO::UDSEntry::UDS_EXTRA)) {
-                    if (const QString happened = fileItem.entry().stringValue(KIO::UDSEntry::UDS_COMMENT); !happened.isEmpty()) {
-                        kindWords = happened;
-                    }
+                if (const QString happened = ngHappened(fileItem); !happened.isEmpty()) {
+                    kindWords = happened;
                 }
                 m_ngCardInnerTags.clear();
                 m_ngCardInnerLabels.clear();

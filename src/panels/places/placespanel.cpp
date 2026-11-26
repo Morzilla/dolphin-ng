@@ -596,6 +596,11 @@ bool PlacesPanel::ngRowHiddenByNg(const KFilePlacesModel *placesModel, int row) 
     if (ngDeviceRowHidden(group)) {
         return true;
     }
+    // "Recent Locations" is not shown: the list of what happened lately ("Recent Files") has the folders too. The
+    // setting RECENT_LOCATIONS brings it back
+    if (placesModel->url(index) == QUrl(QStringLiteral("recentlyused:/locations")) && ngSetting("RECENT_LOCATIONS") != QLatin1String("1")) {
+        return true;
+    }
     if (!ngSectionCollapsed(ngGroupKey(group)) || (selectionModel() && selectionModel()->isSelected(index))) {
         return false; // an open section; or the entry of the open folder, which stays
     }
