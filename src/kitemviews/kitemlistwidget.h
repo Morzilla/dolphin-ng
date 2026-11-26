@@ -163,6 +163,8 @@ public:
     void watchForChildren(const QUrl &parent);
     /** told by the model about every file that appears: ties it to a watched parent, if it is one of its children */
     void offerNewFile(const QUrl &url);
+    /** a file that has just appeared: to the desktop's recent files (a few at a time, never a bulk copy) */
+    void offerRecent(const QUrl &url);
     void link(const QUrl &parent, const QUrl &child);
     /** the parent of \a child, or an empty URL */
     QUrl parentOf(const QUrl &child) const;
@@ -246,6 +248,8 @@ private:
     void parentDone(const QString &parentKey);
     QHash<QString, std::pair<QUrl, QUrl>> m_links; // child key -> (child, parent)
     QHash<QString, QUrl> m_watched; // parent key -> parent
+    QList<QUrl> m_recentBatch; // new files of this second, waiting to be offered to the recent files
+    QSet<QUrl> m_recentOffered;
     QHash<QString, qint64> m_linkedAt; // child key -> when it was tied (ms since epoch): it grows in
     QHash<QString, std::function<void()>> m_cancellers;
     QString m_hoveredStop;

@@ -48,6 +48,8 @@
 #include <QGuiApplication>
 #include <QKeyEvent>
 #include <KFileMetaData/UserMetaData>
+#include <KRecentDocument>
+#include <QTimer>
 #include <QMimeDatabase>
 #include <QRegularExpression>
 #include <climits>
@@ -652,6 +654,7 @@ void NgActivity::offerNewFile(const QUrl &url)
         const QFileInfo info(url.toLocalFile());
         const qint64 now = QDateTime::currentMSecsSinceEpoch(), made = info.lastModified().toMSecsSinceEpoch();
         if (info.isFile() && now - made < 120000 && now - made >= 0) {
+            offerRecent(url);
             const KFileMetaData::UserMetaData data(info.absoluteFilePath());
             const QUrl origin = data.isSupported() ? data.originUrl() : QUrl();
             if (origin.isValid() && !origin.host().isEmpty()) {
@@ -685,6 +688,44 @@ void NgActivity::offerNewFile(const QUrl &url)
             return;
         }
     }
+}
+
+void NgActivity::offerRecent(const QUrl &url)
+{
+    // A file that has just appeared in a folder on show (pasted from the clipboard, downloaded, a screenshot, the
+    // result of an action) goes to the desktop's recent files, so that the next "Open" dialog has it at hand: the
+    // desktop's own list only knows the files some application opened. The files of a second are taken together:
+    // a few are somebody's work, many are an extraction or a copy and would only push everything else out
+    const QString name = url.fileName();
+    static const QStringList unfinished{QStringLiteral(".part"), QStringLiteral(".crdownload"), QStringLiteral(".tmp"), QStringLiteral(".lock"), QStringLiteral("~")};
+    if (name.startsWith(QLatin1Char('.')) || std::any_of(unfinished.cbegin(), unfinished.cend(), [&name](const QString &end) {
+            return name.endsWith(end, Qt::CaseInsensitive);
+        })) {
+        return;
+    }
+    if (m_recentOffered.contains(url)) {
+        return;
+    }
+    m_recentBatch.append(url);
+    if (m_recentBatch.size() > 1) {
+        return;
+    }
+    QTimer::singleShot(1000, this, [this] {
+        const QList<QUrl> batch = m_recentBatch;
+        m_recentBatch.clear();
+        if (batch.size() > 12) {
+            return;
+        }
+        if (m_recentOffered.size() > 500) {
+            m_recentOffered.clear();
+        }
+        for (const QUrl &file : batch) {
+            if (QFileInfo::exists(file.toLocalFile())) {
+                m_recentOffered.insert(file);
+                KRecentDocument::add(file, QStringLiteral("org.kde.dolphin"));
+            }
+        }
+    });
 }
 
 void NgActivity::link(const QUrl &parent, const QUrl &child)
