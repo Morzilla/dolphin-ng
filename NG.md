@@ -24,6 +24,15 @@ sudo dnf install dolphin-ng breeze-ng
 
 Log out and in again afterwards. The same repository has the rest of the NG desktop: `breeze-ng`, `dolphin-ng`, `dialog-ng`, `neoline-icons` ([project page](https://copr.fedorainfracloud.org/coprs/morzilla/desktop-ng/)).
 
+**Kubuntu 26.04: there are packages in a PPA too**:
+
+```
+sudo add-apt-repository ppa:mori-daniele/desktop-ng
+sudo apt install dolphin-ng breeze-ng
+```
+
+The same PPA has `breeze-ng`, `dolphin-ng`, `dialog-ng` and `neoline-icons` ([project page](https://launchpad.net/~mori-daniele/+archive/ubuntu/desktop-ng)).
+
 **Try it with the graphical installer: [how it works and how to run it](https://github.com/Morzilla/breeze-ng/blob/ng/NG.md#everything-at-once).**
 It sets up Dolphin NG and lets you pick the other parts of the NG desktop (the Breeze NG style, the NeoLine icons,
 Dialog NG) and the look to start from:

@@ -7,6 +7,15 @@
 > 
 > It installs next to Fedora's Dolphin; open it with `dolphin-ng` or from the application menu. The same repository has the rest of the NG desktop: `breeze-ng`, `dolphin-ng`, `dialog-ng`, `neoline-icons` ([project page](https://copr.fedorainfracloud.org/coprs/morzilla/desktop-ng/)).
 >
+> **Kubuntu 26.04: there are packages in a PPA too**:
+>
+> ```
+> sudo add-apt-repository ppa:mori-daniele/desktop-ng
+> sudo apt install dolphin-ng
+> ```
+>
+> The same PPA has `breeze-ng`, `dolphin-ng`, `dialog-ng` and `neoline-icons` ([project page](https://launchpad.net/~mori-daniele/+archive/ubuntu/desktop-ng)).
+>
 > **This is dolphin-ng**, a fork of KDE's Dolphin that rethinks how you work with your files. File operations are
 > Dolphin's own; what changes is how files are shown and how quickly you get to what you need.
 >
@@ -36,7 +45,7 @@
 >
 > **Every feature in detail, with pictures: [NG.md](NG.md)** and the longer tour in [FEATURES.md](FEATURES.md).
 >
-> **Try it:** on Fedora with the COPR packages above; anywhere else with the graphical installer:
+> **Try it:** on Fedora and Kubuntu 26.04 with the packages above; anywhere else with the graphical installer:
 > [how it works and how to run it](https://github.com/Morzilla/breeze-ng/blob/ng/NG.md#everything-at-once) (it sets up
 > Dolphin NG and, if you want, the rest of the NG desktop, all in your home folder, next to the stock Dolphin).
 >
