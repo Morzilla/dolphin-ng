@@ -29,6 +29,7 @@
 #include <QLabel>
 #include <QLocale>
 #include <QMenu>
+#include <QMimeDatabase>
 #include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
@@ -397,6 +398,33 @@ void paintKind(QPainter *painter, const QRectF &rect, const QString &kind, const
     painter->drawText(rect, Qt::AlignCenter, kind);
 }
 
+// The file's icon from the icon theme, as the file views show it (worked out once for each file: by its name, and one
+// look at the disk to tell a folder); the coloured tile with the kind's letters only when the theme has no icon for it
+void paintFile(QPainter *painter, const QRectF &rect, const QUrl &url, const QFont &base)
+{
+    static QHash<QString, QIcon> known;
+    const QString path = url.isLocalFile() ? url.toLocalFile() : url.path();
+    auto it = known.constFind(path);
+    if (it == known.constEnd()) {
+        if (known.size() > 4000) {
+            known.clear();
+        }
+        QIcon icon;
+        if (url.isLocalFile() && QFileInfo(path).isDir()) {
+            icon = QIcon::fromTheme(QStringLiteral("folder"));
+        } else {
+            const QMimeType mime = QMimeDatabase().mimeTypeForFile(path, QMimeDatabase::MatchExtension);
+            icon = QIcon::fromTheme(mime.iconName(), QIcon::fromTheme(mime.genericIconName()));
+        }
+        it = known.insert(path, icon);
+    }
+    if (it->isNull()) {
+        paintKind(painter, rect, kindOf(url), base);
+        return;
+    }
+    it->paint(painter, rect.toAlignedRect());
+}
+
 // "Action  Home/Folder/name" on one line: the action and the name in the text colour, the folder fainter; the name is
 // what gives way when the line is too long
 void paintTitle(QPainter *painter, const QWidget *widget, const QRectF &rect, const QString &action, const QUrl &url, const QFont &font)
@@ -481,7 +509,7 @@ protected:
             painter.fillRect(QRectF(card.left(), card.top(), card.width() * percent / 100.0, card.height()), wash);
             painter.restore();
         }
-        paintKind(&painter, QRectF(14, (height() - 54) / 2.0, 54, 54), kindOf(m_url), font());
+        paintFile(&painter, QRectF(14, (height() - 54) / 2.0, 54, 54), m_url, font());
         const qreal left = 82, right = width() - m_room - 96;
         QFont large = font();
         large.setPointSizeF(font().pointSizeF() * 1.12);
@@ -588,7 +616,7 @@ protected:
         painter.setPen(inkOf(this, 0.60));
         painter.drawText(QRectF(36, 0, timeWidth, height()), Qt::AlignLeft | Qt::AlignVCenter, when);
         const qreal chip = 36 + timeWidth + 8;
-        paintKind(&painter, QRectF(chip, middle - 17, 34, 34), kindOf(m_done.url), font());
+        paintFile(&painter, QRectF(chip, middle - 18, 36, 36), m_done.url, font());
         const QString outcome = m_done.stopped ? ngTr("Stopped", "Fermato") : QStringLiteral("✓ ") + tookText(m_done.endedAt - m_done.startedAt);
         QFont bold = font();
         bold.setWeight(QFont::DemiBold);
