@@ -206,6 +206,7 @@ public:
         QUrl url;
         QString label;
         QStringList results; // the names of the files it made (for a copy or a move: where to, as shown)
+        QString id; // its line's id in the history ("io-…": a copy, a move or a deletion; "dl-…": a download)
         QUrl where; // a copy or a move: where it went (a folder, or the new file)
         qint64 startedAt = 0;
         qint64 endedAt = 0;

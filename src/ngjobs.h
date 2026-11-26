@@ -53,6 +53,8 @@ class NgHistoryPage : public QWidget
     Q_OBJECT
 public:
     explicit NgHistoryPage(QWidget *parent = nullptr);
+    /** only the jobs whose action, file or result contains \a text (the window's search field, next to the location) */
+    void setSearch(const QString &text);
 
 protected:
     void showEvent(QShowEvent *event) override;
@@ -63,7 +65,7 @@ private:
     void rebuild(bool force = false);
     void showInDolphin(const QUrl &url);
     QLabel *m_status;
-    class QLineEdit *m_search;
+    QString m_wanted;
     class QComboBox *m_grouping;
     QWidget *m_content;
     QVBoxLayout *m_rows;

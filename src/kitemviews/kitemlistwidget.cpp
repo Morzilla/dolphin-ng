@@ -1006,6 +1006,7 @@ QList<NgActivity::Done> NgActivity::history(int limit)
                     continue;
                 }
                 Done done;
+                done.id = f.at(0);
                 done.startedAt = f.at(1).toLongLong();
                 done.endedAt = f.at(2).toLongLong();
                 done.stopped = f.at(3) == QLatin1String("1");
@@ -1080,6 +1081,13 @@ void NgActivity::startWaiting()
         const Waiting job = m_queue.takeAt(i);
         m_entries.remove(key(job.url)); // (its "queued" entry: the work starts with a fresh one)
         if (!launch(job)) {
+            // (nobody waits for the answer any more: the history says it did not start)
+            Done failed;
+            failed.url = job.url;
+            failed.label = job.label + ngTr(" (could not start)", " (non avviata)");
+            failed.startedAt = failed.endedAt = QDateTime::currentMSecsSinceEpoch();
+            failed.stopped = true;
+            addToHistory(QStringLiteral("no-%1-%2").arg(QCoreApplication::applicationPid()).arg(failed.endedAt), failed);
             Q_EMIT changed();
         }
     }

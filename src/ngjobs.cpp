@@ -200,6 +200,9 @@ void NgJobsButton::rebuild()
     if (shape == m_shape) {
         // the same rows: only how far they are
         for (const auto &job : jobs) {
+            if (job.queued) {
+                continue; // (no bar of its own; one waiting on a file at work has that file's address)
+            }
             for (const auto &[key, bar] : std::as_const(m_bars)) {
                 if (key == job.url.toString()) {
                     bar->setRange(0, job.percent < 0 ? 0 : 100);
@@ -511,7 +514,10 @@ protected:
                 painter.drawRoundedRect(QRectF(bar.left(), bar.top(), qMax(6.0, bar.width() * percent / 100.0), bar.height()), 3, 3);
             } else {
                 // no figure: a piece that runs along the bar
-                const qreal at = NgActivity::self()->phase();
+                // (to the end and back, slowing at each end: started again from the left it jumped)
+                const qreal phase = NgActivity::self()->phase();
+                const qreal there = phase < 0.5 ? phase * 2 : 2 - phase * 2;
+                const qreal at = there * there * (3 - 2 * there);
                 painter.drawRoundedRect(QRectF(bar.left() + (bar.width() - 60) * at, bar.top(), 60, bar.height()), 3, 3);
             }
         }
@@ -564,11 +570,17 @@ protected:
         }
         // the line of time and this entry's dot on it
         const qreal middle = height() / 2.0;
-        painter.setPen(QPen(inkOf(this, 0.16), 2, Qt::SolidLine, Qt::RoundCap));
-        painter.drawLine(QPointF(10, m_first ? middle : 0), QPointF(10, m_last ? middle : height()));
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(m_done.stopped ? QColor(0xf0, 0xa0, 0x4b) : palette().color(QPalette::Highlight));
-        painter.drawEllipse(QPointF(10, middle), 5, 5);
+        painter.setPen(QPen(inkOf(this, 0.30), 2, Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(QPointF(11, m_first ? middle : 0), QPointF(11, m_last ? middle : height()));
+        // (a full dot with a light rim: on glass a small flat one was lost against the line and the background)
+        painter.setPen(QPen(ngIsDark(palette()) ? QColor(255, 255, 255, 60) : QColor(255, 255, 255, 235), 2));
+        // (the accent at full strength: Aurora's light scheme has a pale selection colour, a dot of it was a blank ring)
+        QColor dot = palette().color(QPalette::Highlight);
+        if (dot.hslSaturationF() >= 0.15) {
+            dot = QColor::fromHslF(dot.hslHueF(), qMax(dot.hslSaturationF(), 0.75), ngIsDark(palette()) ? 0.64 : 0.50);
+        }
+        painter.setBrush(m_done.stopped ? QColor(0xf0, 0xa0, 0x4b) : dot);
+        painter.drawEllipse(QPointF(11, middle), 6.5, 6.5);
         const QDateTime ended = QDateTime::fromMSecsSinceEpoch(m_done.endedAt);
         const QString when = m_withDay ? ngAgoText(ended) + QLatin1Char(' ') + QLocale().toString(ended.time(), QLocale::ShortFormat) : QLocale().toString(ended.time(), QLocale::ShortFormat);
         const qreal timeWidth = m_withDay ? 118 : 54;
@@ -582,12 +594,15 @@ protected:
         bold.setWeight(QFont::DemiBold);
         const qreal outcomeWidth = QFontMetricsF(bold).horizontalAdvance(outcome) + 8;
         const qreal left = chip + 46, right = width() - 44 - outcomeWidth;
-        paintTitle(&painter, this, QRectF(left, 6, right - left, 20), m_done.label, m_done.url, font());
+        // what it made under the title; a quick action that left nothing says so; a deletion has no second line, and
+        // its title stands level with the icon
+        const bool fileWork = m_done.id.startsWith(QLatin1String("io-")) || m_done.id.startsWith(QLatin1String("dl-"));
+        const QString made = !m_done.results.isEmpty() ? QStringLiteral("→ ") + m_done.results.join(QStringLiteral(", ")) : fileWork ? QString() : ngTr("nothing made", "nessun risultato");
+        paintTitle(&painter, this, QRectF(left, made.isEmpty() ? middle - 10 : 6, right - left, 20), m_done.label, m_done.url, font());
         QFont small = font();
         small.setPointSizeF(qMax(7.0, font().pointSizeF() - 0.5));
         painter.setFont(small);
         painter.setPen(inkOf(this, 0.60));
-        const QString made = m_done.results.isEmpty() ? (m_done.stopped ? ngTr("nothing made", "nessun risultato") : QString()) : QStringLiteral("→ ") + m_done.results.join(QStringLiteral(", "));
         painter.drawText(QRectF(left, 26, right - left, 18), Qt::AlignLeft | Qt::AlignVCenter, QFontMetricsF(small).elidedText(made, Qt::ElideRight, right - left));
         painter.setFont(bold);
         painter.setPen(m_done.stopped ? QColor(0xf0, 0xa0, 0x4b) : (ngIsDark(palette()) ? QColor(0x5a, 0xd1, 0x8f) : QColor(0x1f, 0x9a, 0x5c)));
@@ -634,11 +649,6 @@ NgHistoryPage::NgHistoryPage(QWidget *parent)
     m_status->setEnabled(false);
     top->addWidget(m_status);
     top->addStretch(1);
-    m_search = new QLineEdit(this);
-    m_search->setPlaceholderText(ngTr("Search the history…", "Cerca nello storico…"));
-    m_search->setClearButtonEnabled(true);
-    m_search->setMinimumWidth(220);
-    top->addWidget(m_search);
     m_grouping = new QComboBox(this);
     m_grouping->addItem(ngTr("By day", "Per giorno"));
     m_grouping->addItem(ngTr("By action", "Per azione"));
@@ -663,9 +673,6 @@ NgHistoryPage::NgHistoryPage(QWidget *parent)
         NgActivity::clearHistory();
         rebuild(true);
     });
-    connect(m_search, &QLineEdit::textChanged, this, [this] {
-        rebuild(true);
-    });
     connect(m_grouping, &QComboBox::currentIndexChanged, this, [this](int index) {
         KConfigGroup group = KSharedConfig::openConfig()->group(QStringLiteral("DolphinNG"));
         group.writeEntry("JOBS_GROUPING", index == 1 ? QStringLiteral("action") : QStringLiteral("day"));
@@ -679,6 +686,14 @@ NgHistoryPage::NgHistoryPage(QWidget *parent)
         }
     });
     rebuild(true);
+}
+
+void NgHistoryPage::setSearch(const QString &text)
+{
+    if (m_wanted != text.trimmed()) {
+        m_wanted = text.trimmed();
+        rebuild(true);
+    }
 }
 
 void NgHistoryPage::showEvent(QShowEvent *event)
@@ -765,7 +780,7 @@ void NgHistoryPage::rebuild(bool force)
         m_rows->addWidget(holder);
     }
     // the history: the last first, in groups (a day, or an action); within a group the last first as well
-    const QString wanted = m_search->text().trimmed();
+    const QString wanted = m_wanted;
     QList<NgActivity::Done> all;
     for (const auto &done : NgActivity::history(2000)) {
         if (wanted.isEmpty() || done.label.contains(wanted, Qt::CaseInsensitive) || done.url.toLocalFile().contains(wanted, Qt::CaseInsensitive)

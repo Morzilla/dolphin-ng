@@ -1498,6 +1498,56 @@ DolphinMainWindow::DolphinMainWindow()
             insertToolBarBreak(toolBar());
         }
         connect(m_tabWidget, &DolphinTabWidget::tabCountChanged, this, &DolphinMainWindow::ngUpdateTabsRow);
+        // the jobs tab has no file to tell about: the information panel gives its room to the page while that tab
+        // shows, and comes back with a tab of files (only if it was showing; put back before the window's state is
+        // saved, see closeEvent)
+        auto jobsTab = [this] {
+            auto *dock = findChild<QDockWidget *>(QStringLiteral("infoDock"));
+            DolphinTabPage *page = m_tabWidget->currentTabPage();
+            if (!dock) {
+                return;
+            }
+            const bool jobs = page && page->property("ngHistoryTab").toBool();
+            // the bar of sorting, grouping and filters has nothing to act on there; the buttons to go back and the
+            // location stay, and the search field next to the location looks through the jobs
+            if (m_ngSortBar) {
+                m_ngSortBar->setVisible(!jobs && ngTwoLineList());
+            }
+            KToolBar *bar = toolBar(QStringLiteral("mainToolBar"));
+            auto *field = bar && m_ngFilterAction ? qobject_cast<QLineEdit *>(bar->widgetForAction(m_ngFilterAction)) : nullptr;
+            if (field) {
+                if (field->property("_ng_jobs_tab").toBool() != jobs) {
+                    field->setProperty("_ng_jobs_tab", jobs);
+                    field->clear(); // (what was typed for a folder is not a search of the jobs, nor the other way)
+                    field->setPlaceholderText(jobs ? ngTr("Search the jobs", "Cerca nei lavori") : ngTr("Search in folder", "Cerca nella cartella"));
+                }
+                if (!field->property("_ng_jobs_watch").toBool()) {
+                    field->setProperty("_ng_jobs_watch", true);
+                    connect(field, &QLineEdit::textChanged, this, [this](const QString &text) {
+                        DolphinTabPage *current = m_tabWidget->currentTabPage();
+                        auto *history = current && current->property("ngHistoryTab").toBool() ? current->findChild<NgHistoryPage *>() : nullptr;
+                        if (history) {
+                            history->setSearch(text);
+                        }
+                    });
+                }
+            }
+            updateHistory();
+            // (noted in the settings too: the window's state is saved as it changes, and a Dolphin NG that ends while
+            // the jobs tab shows would start again without the panel; see below)
+            if (jobs && dock->isVisible()) {
+                dock->setProperty("_ng_hidden_for_jobs", true);
+                setNgSetting("JOBS_HID_INFO", QStringLiteral("1"));
+                dock->hide();
+            } else if (!jobs && dock->property("_ng_hidden_for_jobs").toBool()) {
+                dock->setProperty("_ng_hidden_for_jobs", QVariant());
+                setNgSetting("JOBS_HID_INFO", QStringLiteral("0"));
+                dock->show();
+            }
+        };
+        // (and put back at the next start: showEvent, after the saved state is laid)
+        connect(m_tabWidget, &DolphinTabWidget::ngHistoryChanged, this, jobsTab);
+        connect(m_tabWidget, &QTabWidget::currentChanged, this, jobsTab);
         ngUpdateTabsRow();
     }
     stateChanged(QStringLiteral("new_file"));
@@ -1668,6 +1718,9 @@ void DolphinMainWindow::changeUrl(const QUrl &url)
         return;
     }
 
+    // dolphin-ng: a folder asked for while the jobs tab shows (also the one its hidden view is at already, which
+    // changes no address): the tab is a tab of files again
+    m_tabWidget->ngLeaveHistory(m_tabWidget->currentTabPage());
     m_activeViewContainer->setUrl(url);
     updateFileAndEditActions();
     updatePasteAction();
@@ -1732,7 +1785,9 @@ void DolphinMainWindow::updateHistory()
     if (backAction) {
         backAction->setToolTip(i18nc("@info", "Go back"));
         backAction->setWhatsThis(i18nc("@info:whatsthis go back", "Return to the previously viewed folder."));
-        backAction->setEnabled(index < urlNavigator->historySize() - 1);
+        // (dolphin-ng: from the jobs tab, back is the tab that showed before it)
+        const bool jobsTab = m_tabWidget && m_tabWidget->currentTabPage() && m_tabWidget->currentTabPage()->property("ngHistoryTab").toBool();
+        backAction->setEnabled(jobsTab || index < urlNavigator->historySize() - 1);
     }
 
     QAction *forwardAction = actionCollection()->action(KStandardAction::name(KStandardAction::Forward));
@@ -2022,6 +2077,16 @@ void DolphinMainWindow::showEvent(QShowEvent *event)
     // leaves out the window's saved state: the sidebar came back at its first width whatever the user had dragged it
     // to. The state saved with the window's settings ("NG State") is laid again once, when the window first shows
     static bool ngStateApplied = false;
+    if (!ngStateApplied && ngSetting("JOBS_HID_INFO") == QLatin1String("1")) {
+        // the information panel was hidden for the jobs tab when Dolphin NG last ended (see where the tabs are set
+        // up): shown again, after the saved state below is laid (the timers fire in the order they are set)
+        QTimer::singleShot(50, this, [this] {
+            setNgSetting("JOBS_HID_INFO", QStringLiteral("0"));
+            if (auto *dock = findChild<QDockWidget *>(QStringLiteral("infoDock"))) {
+                dock->show();
+            }
+        });
+    }
     if (!ngStateApplied) {
         ngStateApplied = true;
         const QByteArray state = QByteArray::fromBase64(KConfigGroup(KSharedConfig::openStateConfig(), QStringLiteral("NG State")).readEntry("State", QByteArray()));
@@ -2593,6 +2658,12 @@ void DolphinMainWindow::ngApplyAuroraViews()
 
 void DolphinMainWindow::closeEvent(QCloseEvent *event)
 {
+    // dolphin-ng: the information panel hidden for the jobs tab is back before the window's state is saved
+    if (auto *dock = findChild<QDockWidget *>(QStringLiteral("infoDock")); dock && dock->property("_ng_hidden_for_jobs").toBool()) {
+        dock->setProperty("_ng_hidden_for_jobs", QVariant());
+        setNgSetting("JOBS_HID_INFO", QStringLiteral("0"));
+        dock->show();
+    }
     // Find out if Dolphin is closed directly by the user or
     // by the session manager because the session is closed
     bool closedByUser = true;
@@ -3219,6 +3290,10 @@ void DolphinMainWindow::slotPlacesPanelVisibilityChanged(bool visible)
 
 void DolphinMainWindow::goBack()
 {
+    if (m_tabWidget->currentTabPage() && m_tabWidget->currentTabPage()->property("ngHistoryTab").toBool()) {
+        m_tabWidget->ngHistoryBack(); // dolphin-ng
+        return;
+    }
     DolphinUrlNavigator *urlNavigator = m_activeViewContainer->urlNavigatorInternalWithHistory();
     urlNavigator->goBack();
 

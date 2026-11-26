@@ -169,6 +169,9 @@ public:
 
     void unregisterJob(KJob *job) override
     {
+        // (KJobTrackerInterface connects this to the job's end before finished(), and its own unregisterJob() takes
+        // the job's connections away: finished() below is not reached, so the history is written here)
+        remember(job);
         if (m_inner) {
             m_inner->unregisterJob(job);
         }

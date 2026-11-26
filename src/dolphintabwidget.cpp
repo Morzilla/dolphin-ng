@@ -724,8 +724,28 @@ void DolphinTabWidget::tabRemoved(int index)
     m_lastViewedTab->setActive(true);
 }
 
+void DolphinTabWidget::ngHistoryBack()
+{
+    DolphinTabPage *page = currentTabPage();
+    if (!page || !page->property("ngHistoryTab").toBool()) {
+        return;
+    }
+    if (count() < 2) {
+        ngLeaveHistory(page); // (the only tab: it shows its folder again)
+        return;
+    }
+    const int before = m_ngBeforeHistory ? indexOf(m_ngBeforeHistory) : -1;
+    if (before >= 0) {
+        setCurrentIndex(before);
+    }
+    closeTab(indexOf(page));
+}
+
 void DolphinTabWidget::ngOpenHistoryTab()
 {
+    if (currentTabPage() && !currentTabPage()->property("ngHistoryTab").toBool()) {
+        m_ngBeforeHistory = currentTabPage(); // (where the tool bar's Back leads from the jobs tab)
+    }
     for (int i = 0; i < count(); ++i) {
         if (tabPageAt(i)->property("ngHistoryTab").toBool()) {
             setCurrentIndex(i);
@@ -748,24 +768,35 @@ void DolphinTabWidget::ngOpenHistoryTab()
     tabBar()->setTabIcon(index, QIcon::fromTheme(QStringLiteral("view-history")));
     tabBar()->setTabToolTip(index, tabName(page));
     ngScheduleSync();
+    Q_EMIT ngHistoryChanged();
     // a folder chosen while the history shows: the tab is a tab of files again
     QPointer<DolphinTabPage> guard(page);
-    connect(page, &DolphinTabPage::activeViewUrlChanged, history, [this, guard, history, views] {
-        if (!guard) {
-            return;
-        }
-        guard->setProperty("ngHistoryTab", QVariant());
+    connect(page, &DolphinTabPage::activeViewUrlChanged, history, [this, guard] {
+        ngLeaveHistory(guard);
+    });
+}
+
+void DolphinTabWidget::ngLeaveHistory(DolphinTabPage *page)
+{
+    if (!page || !page->property("ngHistoryTab").toBool()) {
+        return;
+    }
+    page->setProperty("ngHistoryTab", QVariant());
+    if (auto *history = page->findChild<NgHistoryPage *>(QString(), Qt::FindDirectChildrenOnly)) {
         history->hide();
         history->deleteLater();
+    }
+    if (auto *views = page->findChild<QSplitter *>(QString(), Qt::FindDirectChildrenOnly)) {
         views->show();
-        const int at = indexOf(guard);
-        if (at >= 0) {
-            tabBar()->setTabIcon(at, QIcon());
-            tabBar()->setTabToolTip(at, QString());
-            updateTabName(at);
-            ngScheduleSync();
-        }
-    });
+    }
+    const int at = indexOf(page);
+    if (at >= 0) {
+        tabBar()->setTabIcon(at, QIcon());
+        tabBar()->setTabToolTip(at, QString());
+        updateTabName(at);
+        ngScheduleSync();
+    }
+    Q_EMIT ngHistoryChanged();
 }
 
 QString DolphinTabWidget::tabName(DolphinTabPage *tabPage) const

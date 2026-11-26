@@ -10,6 +10,7 @@
 #include "dolphinnavigatorswidgetaction.h"
 #include "dolphintabpage.h"
 
+#include <QPointer>
 #include <QTabWidget>
 #include <QUrl>
 
@@ -111,6 +112,9 @@ Q_SIGNALS:
      */
     void currentUrlChanged(const QUrl &url);
 
+    /** dolphin-ng: a tab became the jobs tab, or a tab of files again */
+    void ngHistoryChanged();
+
     /**
      * Is emitted when the url of any tab has been changed (including the current tab).
      */
@@ -132,6 +136,10 @@ public Q_SLOTS:
      *  made. It is a tab like the others with the history laid over its (hidden) view: going to a folder from it
      *  (the sidebar, the location bar) turns it back into a tab of files. */
     void ngOpenHistoryTab();
+    /** dolphin-ng: \a page shows its files again if it is the jobs tab (a folder was asked for) */
+    void ngLeaveHistory(DolphinTabPage *page);
+    /** dolphin-ng: from the jobs tab back to the tab that showed before it; the jobs tab is closed */
+    void ngHistoryBack();
 
     /**
      * Opens a new tab in the background showing the URL \a primaryUrl and the
@@ -308,6 +316,7 @@ private:
     const std::optional<const ViewIndex> viewShowingItem(const QUrl &item) const;
 
 private:
+    QPointer<QWidget> m_ngBeforeHistory; // dolphin-ng: the tab that showed before the jobs tab
     QPointer<DolphinTabPage> m_lastViewedTab;
     QPointer<DolphinNavigatorsWidgetAction> m_navigatorsWidget;
 
