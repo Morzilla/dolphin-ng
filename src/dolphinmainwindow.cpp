@@ -5629,10 +5629,11 @@ void DolphinMainWindow::ngMoveToolbarButtons()
         const bool glassLook = property("_breeze_ng_glass").toBool()
             || KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("org.kde.kdecoration2")).readEntry("theme", QString()).contains(QLatin1String("Glass"));
         const bool tonedLight = !dark && !ngAurora() && !glassLook;
-        const QString ink = (ngAurora() && !dark) ? ngAuroraFrostRgb() // (frost tinged by the accent)
-            : (dark || ngAurora() || tonedLight) ? QStringLiteral("255, 255, 255")
-                                                 : QStringLiteral("0, 0, 0");
-        const qreal veil = ngAurora() ? ngAuroraVeil(dark, true).alphaF() : tonedLight ? 0.78 : 0.06;
+        // (Aurora on a light scheme: white with a little of the glass through it, as Breeze NG draws the path of the
+        // location bar and a tool bar's field beside it: the whole row of one kind. It was the buttons' tinged frost)
+        const bool whiteRow = ngAurora() && !dark;
+        const QString ink = (dark || ngAurora() || tonedLight) ? QStringLiteral("255, 255, 255") : QStringLiteral("0, 0, 0");
+        const qreal veil = whiteRow ? 0.82 : ngAurora() ? ngAuroraVeil(dark, true).alphaF() : tonedLight ? 0.78 : 0.06;
         QList<QWidget *> pill;
         for (const char *name : {"go_back", "go_forward", "go_up"}) {
             QAction *action = actionCollection()->action(QString::fromLatin1(name));
