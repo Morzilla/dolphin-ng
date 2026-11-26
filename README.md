@@ -25,6 +25,8 @@
 > - **Quick actions** on each file: resize or convert an image, extract an archive, a PDF to images or text,
 >   transcribe audio and video on your computer, convert media… plus your own commands.
 > - **Work in progress on the file itself**: copies, conversions and transcriptions grow next to their source.
+> - **A pipeline of the work on your files**: one view of every operation, the ones running and the ones done
+>   (quick actions, copies, moves, deletions, downloads), shared by every Dolphin NG window.
 > - **A glass sidebar**: places, recent files, pinned items, filters with their counts, every disk with its usage.
 > - **Selections that read as one**: neighbouring selected items share one outline.
 > - **The same look in every app's Open/Save window** with [Dialog NG](https://github.com/Morzilla/dialog-ng), and

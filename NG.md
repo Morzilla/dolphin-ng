@@ -48,6 +48,7 @@ it can be removed the same way. A longer tour, with every setting: **[FEATURES.m
 - **[A bar for sorting, filters and groups](#the-bar)**: one click to sort, filter by kind of file, group.
 - **[Groups that follow the sorting](#groups)**: by date, by size (KB, MB, GB, TB), by name, by type.
 - **[Work in progress on the files](#work-in-progress-on-the-files)**: copies and conversions show on the file they concern.
+- **[The pipeline](#the-pipeline)**: one view of every operation on your files, running and done.
 - **[Pinned to the top](#pinned-to-the-top)**: files and folders that stay first, whatever the sorting.
 - **[Quick actions](#quick-actions)**: resize, convert, extract, transcribe… from the card, and your own commands.
 - **[A glass sidebar](#the-sidebar)**: the whole left side of the window, sections in the order you choose, filters by
@@ -117,6 +118,25 @@ folder, a converted copy) stands right after it in one tinted bubble while the w
 actions also show in Plasma's notifications and keep running when Dolphin NG is closed.
 
 <img src="ng/screenshots/readme/work.png" width="640" alt="Work in progress next to the files it comes from">
+
+## The pipeline
+
+Everything that is done to your files goes through one place. The **Jobs** button in the title bar shows how many
+operations are running; it opens the **Jobs tab**, a single view of the whole pipeline:
+
+- **At work**: every quick action that is running or waiting, as a card with the file, what it is making, how far it
+  is, a button to stop it and one to show the file in its folder.
+- **History**: every operation that ended, on a line of time, the last first: quick actions, copies, moves,
+  deletions and downloads seen arriving, each with the file, where it went or what it made, and how long it took.
+  Grouped by day or by action; the search field next to the location bar looks through it.
+
+The pipeline is **shared**: every Dolphin NG window and process sees the same operations, also the ones another
+window started, and a quick action keeps running (and stays in the list) when its window is closed. A file made
+by an action remembers where it came from: its card says "from talk.ogg · Transcribe".
+
+Quick actions run in parallel, or one at a time as a queue (Configure › NG › Quick actions).
+
+<img src="ng/screenshots/features/pipeline-jobs.png" width="720" alt="The Jobs tab: two conversions at work, then the history by day">
 
 ## Pinned to the top
 

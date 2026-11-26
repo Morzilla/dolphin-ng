@@ -7,6 +7,7 @@ A tour of Dolphin NG, one feature at a time, with how to reach it. For building 
 - [Files drawn, not iconised](#files-drawn-not-iconised)
 - [Quick actions](#quick-actions)
 - [Work in progress, on the files themselves](#work-in-progress-on-the-files-themselves)
+- [The pipeline: every operation on your files in one view](#the-pipeline-every-operation-on-your-files-in-one-view)
 - [Selection](#selection)
 - [Pinned to the top](#pinned-to-the-top)
 - [Sorting, filters and groups](#sorting-filters-and-groups)
@@ -111,6 +112,42 @@ closed.
 | Cards | Rows |
 |---|---|
 | ![Work in progress on cards](ng/screenshots/features/work-cards.png) | ![Work in progress on rows](ng/screenshots/features/work-rows.png) |
+
+## The pipeline: every operation on your files in one view
+
+Work on files is usually scattered: a copy in a notification, a conversion in a terminal, a download in the
+browser. Dolphin NG gathers it in one pipeline, with one view of what is going on and of what has been done.
+
+**The Jobs button** sits in the title bar (with the system's title bar: after the location bar, between the search
+and the menu). It shows a clock when nothing runs and "2 jobs" while something does; a click lists the work going
+on and today's last operations, and opens the Jobs tab (also Ctrl+Alt+J).
+
+**The Jobs tab** is a tab like any other:
+
+- **At work**, at the top: a card for every quick action running or waiting in the queue, with the file and its
+  path, what it is making, a bar with the percentage and the time left when the program tells them, a button to
+  show the file in Dolphin NG and one to stop the work (or to take it off the queue).
+- **History**, under it: a line of time with every operation that ended, the last first. Quick actions, copies,
+  moves, deletions, items sent to the trash and downloads seen arriving in a folder. Each line names the action
+  and the file with its path, then where it went or what it made, how long it took and whether it was stopped.
+  One click shows the result in its folder.
+- **By day or by action**: the same history grouped by what was done, still the last first.
+- **Search**: the field next to the location bar looks through the jobs while this tab shows.
+- Back leads to the tab you came from.
+
+**One pipeline for all windows.** Every Dolphin NG window and process shows the same list: an action started in
+one window is at work in all of them, and is written to the history once. Quick actions run on their own: close
+Dolphin NG and they go on; open it again and they are back in the list.
+
+**Where a file comes from.** A file made by a quick action remembers its source and the action that made it: the
+card says "from talk.ogg · Transcribe", the Information panel too.
+
+**In parallel or in a queue.** Quick actions start at once by default; with "one at a time" (Configure › NG ›
+Quick actions) they wait for each other. A second action on a file that is being worked on always waits.
+
+| The Jobs tab | In the folder, meanwhile |
+|---|---|
+| ![The Jobs tab: work going on and the history](ng/screenshots/features/pipeline-jobs.png) | ![Two conversions at work, each next to the file it is making](ng/screenshots/features/pipeline-files.png) |
 
 ## Selection
 
