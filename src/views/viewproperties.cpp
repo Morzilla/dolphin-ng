@@ -173,6 +173,9 @@ ViewProperties::ViewProperties(const QUrl &url)
     } else if (url.scheme() == QLatin1String("recentlyused")) {
         m_filePath = destinationDir(QStringLiteral("recentlyused"));
         useRecentDocumentsView = true;
+    } else if (url.scheme() == QLatin1String("ngrecent")) { // dolphin-ng: what happened lately (the ng-recent component)
+        m_filePath = destinationDir(QStringLiteral("ngrecent"));
+        useRecentDocumentsView = true;
     } else if (url.scheme() == QLatin1String("timeline")) {
         m_filePath = destinationDir(QStringLiteral("timeline"));
         useRecentDocumentsView = true;

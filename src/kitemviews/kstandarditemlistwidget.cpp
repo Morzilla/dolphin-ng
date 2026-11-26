@@ -4301,6 +4301,12 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                             + (made->madeBy.isEmpty() ? QString() : QStringLiteral(" · ") + made->madeBy);
                     }
                 }
+                // in the list of what happened lately (ngrecent:/) the line says what happened: "Downloaded from kde.org"
+                if (fileItem.entry().contains(KIO::UDSEntry::UDS_EXTRA)) {
+                    if (const QString happened = fileItem.entry().stringValue(KIO::UDSEntry::UDS_COMMENT); !happened.isEmpty()) {
+                        kindWords = happened;
+                    }
+                }
                 m_ngCardInnerTags.clear();
                 m_ngCardInnerLabels.clear();
                 m_ngInsideSheets.clear();

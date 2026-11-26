@@ -3672,8 +3672,16 @@ void DolphinMainWindow::updateHamburgerMenu()
     hamburgerMenu->hideActionsOf(configureMenu);
 }
 
-void DolphinMainWindow::slotPlaceActivated(const QUrl &url)
+void DolphinMainWindow::slotPlaceActivated(const QUrl &placeUrl)
 {
+    // dolphin-ng: "Recent Files" is what happened lately to files and folders (created, downloaded, moved, made by an
+    // action, opened), from the ng-recent component where it is installed; the desktop's own list, only what
+    // applications opened, with the setting RECENT_LEGACY
+    QUrl url = placeUrl;
+    if (url.scheme() == QLatin1String("recentlyused") && url.path() == QLatin1String("/files") && ngSetting("RECENT_LEGACY") != QLatin1String("1")
+        && KProtocolInfo::isKnownProtocol(QStringLiteral("ngrecent"))) {
+        url = QUrl(QStringLiteral("ngrecent:/"));
+    }
     DolphinViewContainer *view = activeViewContainer();
 
     if (view->url() == url) {

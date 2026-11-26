@@ -74,6 +74,7 @@ private:
     QCheckBox *m_sidebarFilters;
     QCheckBox *m_panelsFlush = nullptr; // the panels against the window's edges (PANELS_EDGE=flush)
     QCheckBox *m_sidebarPinned;
+    QCheckBox *m_recentLegacy = nullptr; // "Recent Files" stays the desktop's own list (RECENT_LEGACY)
     QCheckBox *m_sectionsFollow = nullptr; // the sections below the places right after the list (SIDEBAR_FOLLOW)
     QCheckBox *m_folderContentDate;
     // sidebar: picture

@@ -1193,6 +1193,8 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     });
     m_sectionsFollow = toggle(ngTr("The sections below the places come right after them, not at the foot of the panel",
                                    "Le sezioni sotto le risorse vengono subito dopo, non in fondo al pannello"));
+    m_recentLegacy = toggle(ngTr("\"Recent Files\" shows only the files applications opened, as in Dolphin (not what was created, downloaded, moved or made)",
+                                 "\"File recenti\" mostra solo i file aperti dalle applicazioni, come in Dolphin (non ciò che è stato creato, scaricato, spostato o prodotto)"));
     m_sidebarPinned = toggle(ngTr("Pinned folders and files", "Cartelle e file fissati in alto"));
     m_sidebarFilters = toggle(ngTr("Filters, at the bottom of the panel", "Filtri, in fondo al pannello"));
     m_sidebarPinned->hide(); // driven by the list above
@@ -1472,7 +1474,7 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     quickSideRow->setEnabled(m_quickView->isChecked());
 
     connect(m_dialogQuick, &QCheckBox::toggled, this, &NgSettingsPage::changed);
-    for (QCheckBox *box : {m_panelsFlush, m_sectionsFollow, m_glassPanel, m_motion, m_twoLines, m_icons, m_ago, m_tiles, m_hoverPreview, m_folderSizes, m_rowDates, m_float, m_sidebarFilters, m_sidebarPinned, m_rowWash, m_folderContentDate}) {
+    for (QCheckBox *box : {m_panelsFlush, m_sectionsFollow, m_recentLegacy, m_glassPanel, m_motion, m_twoLines, m_icons, m_ago, m_tiles, m_hoverPreview, m_folderSizes, m_rowDates, m_float, m_sidebarFilters, m_sidebarPinned, m_rowWash, m_folderContentDate}) {
         connect(box, &QCheckBox::toggled, this, &NgSettingsPage::changed);
     }
     connect(m_hoverDelay, &QSpinBox::valueChanged, this, &NgSettingsPage::changed);
@@ -1678,6 +1680,7 @@ void NgSettingsPage::loadSettings()
     m_panelsFlush->setChecked(ngPanelsFlush());
     m_sidebarPinned->setChecked(ngSetting("SIDEBAR_PINNED").toLower() != QLatin1String("hide"));
     m_sectionsFollow->setChecked(ngSetting("SIDEBAR_FOLLOW").toLower() == QLatin1String("list"));
+    m_recentLegacy->setChecked(ngSetting("RECENT_LEGACY") == QLatin1String("1"));
     m_folderContentDate->setChecked(ngSetting("SORT_FOLDERS_BY_CONTENT").toLower() != QLatin1String("off"));
 
     m_twoLines->setChecked(ngSetting("LIST").toLower() != QLatin1String("columns"));
@@ -1761,6 +1764,7 @@ void NgSettingsPage::applySettings()
     setNgSetting("DISKS_POS", m_disksPos->currentData().toString());
     setNgSetting("TABS", m_tabsPlace->currentData().toString());
     setNgSetting("SIDEBAR_FOLLOW", m_sectionsFollow->isChecked() ? QStringLiteral("list") : QString());
+    setNgSetting("RECENT_LEGACY", m_recentLegacy->isChecked() ? QStringLiteral("1") : QString());
     {
         QStringList order;
         bool disks = true;
@@ -1853,6 +1857,7 @@ void NgSettingsPage::restoreDefaults()
     m_barNames->setChecked(false);
     m_macButtons->setChecked(false);
     m_sectionsFollow->setChecked(false);
+    m_recentLegacy->setChecked(false);
     fillSectionOrder({QStringLiteral("places"), QStringLiteral("pinned"), QStringLiteral("filters"), QStringLiteral("disks")}, true, true, true);
     for (const auto &entry : std::as_const(m_deviceBoxes)) {
         entry.second->setChecked(true);

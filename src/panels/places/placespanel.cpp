@@ -941,6 +941,11 @@ void PlacesPanel::mouseMoveEvent(QMouseEvent *event)
 
 void PlacesPanel::setUrl(const QUrl &url)
 {
+    // dolphin-ng: the list of what happened lately is shown from "Recent Files": that is the place it belongs to
+    if (url.scheme() == QLatin1String("ngrecent")) {
+        KFilePlacesView::setUrl(QUrl(QStringLiteral("recentlyused:/files")));
+        return;
+    }
     KFilePlacesView::setUrl(url);
 }
 

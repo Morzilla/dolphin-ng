@@ -78,7 +78,7 @@ void DolphinContextMenu::addAllActions()
         m_context |= SearchContext;
     } else if (scheme.contains(QLatin1String("timeline"))) {
         m_context |= TimelineContext;
-    } else if (scheme == QStringLiteral("recentlyused")) {
+    } else if (scheme == QStringLiteral("recentlyused") || scheme == QStringLiteral("ngrecent")) {
         m_context |= RecentlyUsedContext;
     }
 

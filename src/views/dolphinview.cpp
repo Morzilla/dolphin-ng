@@ -3404,6 +3404,8 @@ void DolphinView::updatePlaceholderLabel()
 
     } else if (m_url.scheme() == QLatin1String("recentlyused")) {
         m_placeholderLabel->setText(i18n("No recently used items"));
+    } else if (m_url.scheme() == QLatin1String("ngrecent")) {
+        m_placeholderLabel->setText(ngTr("Nothing new in the last two weeks", "Niente di nuovo nelle ultime due settimane"));
     } else if (m_url.scheme() == QLatin1String("smb") && (m_url.host().isEmpty() || m_url.path().isEmpty() || m_url.path() == QLatin1String("/"))) {
         m_placeholderLabel->setText(i18n("No shared folders found"));
     } else if (m_url.scheme() == QLatin1String("network")) {
