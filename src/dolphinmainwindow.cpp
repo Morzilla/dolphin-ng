@@ -3989,6 +3989,18 @@ void DolphinMainWindow::setupActions()
         }
     });
 
+    // dolphin-ng: the jobs tab (what is at work, the queue, the history) also without the button of the title row:
+    // with the classic tabs, or when the row of the tabs is hidden, this is the way to it (Tools menu, a shortcut)
+    QAction *ngJobs = actionCollection()->addAction(QStringLiteral("ng_jobs"));
+    ngJobs->setText(ngTr("Jobs and History", "Lavori e storico"));
+    ngJobs->setIcon(QIcon::fromTheme(QStringLiteral("view-history")));
+    actionCollection()->setDefaultShortcut(ngJobs, Qt::CTRL | Qt::ALT | Qt::Key_J);
+    connect(ngJobs, &QAction::triggered, this, [this] {
+        if (m_tabWidget) {
+            m_tabWidget->ngOpenHistoryTab();
+        }
+    });
+
     QMenu *toggleSelectionModeActionMenu = new QMenu(this);
     toggleSelectionModeActionMenu->addAction(selectAllAction);
     toggleSelectionModeActionMenu->addAction(invertSelection);

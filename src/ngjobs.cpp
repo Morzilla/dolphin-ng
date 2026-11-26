@@ -296,8 +296,8 @@ void NgJobsButton::rebuild()
         stop->setAutoRaise(true);
         stop->setToolTip(job.queued ? ngTr("Take off the queue", "Togli dalla coda") : ngTr("Stop", "Ferma"));
         const QUrl url = job.url;
-        connect(stop, &QToolButton::clicked, this, [url] {
-            NgActivity::self()->cancel(url);
+        connect(stop, &QToolButton::clicked, this, [url, queued = job.queued] {
+            NgActivity::self()->cancel(url, queued);
         });
         line->addWidget(stop);
     }
@@ -753,8 +753,8 @@ void NgHistoryPage::rebuild(bool force)
             });
             buttons->addWidget(show);
             auto *stop = roundButton(card, QStringLiteral("dialog-cancel"), job.queued ? ngTr("Take off the queue", "Togli dalla coda") : ngTr("Stop", "Ferma"));
-            connect(stop, &QToolButton::clicked, this, [url] {
-                NgActivity::self()->cancel(url);
+            connect(stop, &QToolButton::clicked, this, [url, queued = job.queued] {
+                NgActivity::self()->cancel(url, queued);
             });
             buttons->addWidget(stop);
             card->m_room = 30 * 2 + 6 + 12;
@@ -796,10 +796,20 @@ void NgHistoryPage::rebuild(bool force)
             buttons->addStretch(1);
             const QUrl url = entries.at(i).url;
             const QStringList results = entries.at(i).results;
+            const QUrl where = entries.at(i).where;
             auto *show = roundButton(row, QStringLiteral("document-open-folder"), ngTr("Show in Dolphin NG", "Mostra in Dolphin NG"));
-            connect(show, &QToolButton::clicked, this, [this, url, results] {
-                // what it made, when it is still there (the first result, beside its source); otherwise the source
-                const QUrl made = results.isEmpty() ? QUrl() : QUrl::fromLocalFile(url.adjusted(QUrl::RemoveFilename).toLocalFile() + results.constFirst());
+            connect(show, &QToolButton::clicked, this, [this, url, results, where] {
+                // a copy or a move: the item where it went (in that folder under its own name, or the place itself)
+                if (where.isLocalFile()) {
+                    const QString inside = where.toLocalFile() + QLatin1Char('/') + url.fileName();
+                    if (QFileInfo::exists(inside) || QFileInfo::exists(where.toLocalFile())) {
+                        showInDolphin(QFileInfo::exists(inside) ? QUrl::fromLocalFile(inside) : where);
+                        return;
+                    }
+                }
+                // what a quick action made, when it is still there (the first result, beside its source); otherwise
+                // the source
+                const QUrl made = (results.isEmpty() || where.isValid()) ? QUrl() : QUrl::fromLocalFile(url.adjusted(QUrl::RemoveFilename).toLocalFile() + results.constFirst());
                 showInDolphin(made.isValid() && QFileInfo::exists(made.toLocalFile()) ? made : url);
             });
             buttons->addWidget(show);

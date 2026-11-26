@@ -179,7 +179,8 @@ public:
     /** the work on \a url can be stopped: a process of a quick action, or a job with a canceller */
     bool canCancel(const QUrl &url) const;
     void setCanceller(const QUrl &url, const std::function<void()> &cancel);
-    void cancel(const QUrl &url);
+    /** stops the work on \a url; \a queued: only takes off the queue an action still waiting on it */
+    void cancel(const QUrl &url, bool queued = false);
     /** the colour of a family's bubble: the colour of its parent's card, told by the parent when it paints */
     void setFamilyColour(const QString &family, const QColor &colour);
     QColor familyColour(const QString &family) const;
@@ -204,7 +205,8 @@ public:
     struct Done {
         QUrl url;
         QString label;
-        QStringList results; // the names of the files it made
+        QStringList results; // the names of the files it made (for a copy or a move: where to, as shown)
+        QUrl where; // a copy or a move: where it went (a folder, or the new file)
         qint64 startedAt = 0;
         qint64 endedAt = 0;
         bool stopped = false;
@@ -233,6 +235,7 @@ private:
     QSet<QString> m_stopped; // stopped by the user: said so in the history
     bool launch(const Waiting &job);
     void startWaiting();
+    void processEnded(const QString &k, qint64 pid);
     void remember(const QString &k, qint64 pid);
     static QString key(const QUrl &url);
     void tick();

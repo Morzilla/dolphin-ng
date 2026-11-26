@@ -214,6 +214,7 @@ private:
                     folder = QStringLiteral("Home") + folder.mid(QDir::homePath().size());
                 }
                 done.results = {folder};
+                done.where = to; // (the place itself, for "show": the text above is only what the history says)
             }
         } else if (auto *del = qobject_cast<KIO::DeleteJob *>(job)) {
             sources = del->urls();

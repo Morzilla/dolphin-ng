@@ -4248,15 +4248,6 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                     quickActions = ngQuickActionsFor(fileItem.localPath(), fileItem.mimetype());
                 }
                 kindWords = fileItem.isDir() ? ngTr("Folder", "Cartella") : fileItem.mimeComment();
-                if (look != NgCardStyle::Dossier && fileItem.isLocalFile()) {
-                    // Scheda: a file made by a quick action says so where its kind stands (the picture's band already
-                    // names the kind): "from talk.ogg · Transcribe"
-                    const NgMadeFrom made = ngFileMadeFrom(fileItem.localPath());
-                    if (!made.isEmpty()) {
-                        kindWords = QChar(0x21b3) + QLatin1Char(' ') + ngTr("from ", "da ") + QFileInfo(made.source).fileName()
-                            + (made.action.isEmpty() ? QString() : QStringLiteral(" · ") + made.action);
-                    }
-                }
                 m_ngTagsPath = fileItem.isLocalFile() ? fileItem.localPath() : QString();
                 if (look != NgCardStyle::Dossier) {
                     // drawn over the picture (see paintNgCardTags), not as a line of their own: they add to what the card
@@ -4287,6 +4278,27 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                                 update();
                             }
                         });
+                    }
+                }
+                if (look != NgCardStyle::Dossier && fileItem.isLocalFile() && !fileItem.isDir()) {
+                    // Scheda: a file made by a quick action says so where its kind stands (the picture's band already
+                    // names the kind): "from talk.ogg · Transcribe". From the facts, read in the background (no
+                    // attribute is read here: this runs for every card in view, also on a slow mount)
+                    const qint64 newest = qMax(fileItem.time(KFileItem::ModificationTime).toSecsSinceEpoch(), values.value("ngNewest").toLongLong());
+                    m_ngFactsPath = fileItem.localPath();
+                    const NgFileFacts *made = NgFacts::instance()->facts(m_ngFactsPath, fileItem.mimetype(), false, newest, qint64(fileItem.size()));
+                    if (!made && !m_ngFactsHooked) {
+                        m_ngFactsHooked = true;
+                        connect(NgFacts::instance(), &NgFacts::ready, this, [this](const QString &path) {
+                            if (path == m_ngFactsPath) {
+                                invalidateCache();
+                                update();
+                            }
+                        });
+                    }
+                    if (made && !made->madeFrom.isEmpty()) {
+                        kindWords = QChar(0x21b3) + QLatin1Char(' ') + ngTr("from ", "da ") + QFileInfo(made->madeFrom).fileName()
+                            + (made->madeBy.isEmpty() ? QString() : QStringLiteral(" · ") + made->madeBy);
                     }
                 }
                 m_ngCardInnerTags.clear();

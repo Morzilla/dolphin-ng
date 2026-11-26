@@ -828,6 +828,11 @@ const std::optional<const DolphinTabWidget::ViewIndex> DolphinTabWidget::viewOpe
     // loop over the tabs starting from the current one
     do {
         const auto tabPage = tabPageAt(i);
+        // (dolphin-ng: the jobs tab has a view of the home folder hidden under its page: not a view to show a file in)
+        if (tabPage->property("ngHistoryTab").toBool()) {
+            i = (i + 1) % count();
+            continue;
+        }
         if (tabPage->primaryViewContainer()->url() == directory) {
             return std::optional(ViewIndex{i, true});
         }
@@ -865,6 +870,10 @@ const std::optional<const DolphinTabWidget::ViewIndex> DolphinTabWidget::viewSho
     // loop over the tabs starting from the current one
     do {
         const auto tabPage = tabPageAt(i);
+        if (tabPage->property("ngHistoryTab").toBool()) {
+            i = (i + 1) % count();
+            continue;
+        }
         if (tabPage->primaryViewContainer()->url().isParentOf(item)) {
             const KFileItem fileItemContainingItem = tabPage->primaryViewContainer()->view()->items().findByUrl(dirContainingItem);
             if (!fileItemContainingItem.isNull() && tabPage->primaryViewContainer()->view()->isExpanded(fileItemContainingItem)) {
