@@ -21,6 +21,7 @@
 #include <QFrame>
 #include <QEvent>
 #include <QDir>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QStandardPaths>
 #include <QFileInfo>
@@ -677,6 +678,19 @@ NgHistoryPage::NgHistoryPage(QWidget *parent)
     m_status->setEnabled(false);
     top->addWidget(m_status);
     top->addStretch(1);
+    // one at a time or all together: the same setting as in the quick actions' page, at hand where the queue shows
+    auto *series = new QCheckBox(ngTr("One at a time", "Una alla volta"), this);
+    series->setToolTip(ngTr("On: a new quick action waits in the queue until the one at work has ended. Off: every action starts at once, side by side.",
+                            "Acceso: una nuova azione rapida aspetta in coda che quella al lavoro sia finita. Spento: ogni azione parte subito, in parallelo."));
+    series->setChecked(ngSetting("JOBS_SERIES") == QLatin1String("1"));
+    connect(series, &QCheckBox::toggled, this, [](bool on) {
+        setNgSetting("JOBS_SERIES", on ? QStringLiteral("1") : QStringLiteral("0"));
+    });
+    connect(NgSettings::instance(), &NgSettings::changed, series, [series] {
+        const QSignalBlocker blocker(series);
+        series->setChecked(ngSetting("JOBS_SERIES") == QLatin1String("1"));
+    });
+    top->addWidget(series);
     m_grouping = new QComboBox(this);
     m_grouping->addItem(ngTr("By day", "Per giorno"));
     m_grouping->addItem(ngTr("By action", "Per azione"));

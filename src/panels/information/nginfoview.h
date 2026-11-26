@@ -128,6 +128,8 @@ private:
     QLabel *m_who = nullptr;
     QLabel *m_whoLabel = nullptr;
     QToolButton *m_lastButton = nullptr;
+    QToolButton *m_madeButton = nullptr; // where the file comes from (a quick action made it): a card under the preview
+    QString m_madeFrom; // that file's path
     QLabel *m_lastArrow = nullptr; // its arrow (a file)
     QToolButton *m_lastOpen = nullptr; // "Open" (a folder) // a folder's "Changed last": a card that selects the item
     QWidget *m_stars = nullptr;

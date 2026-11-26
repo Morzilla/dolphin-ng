@@ -1785,6 +1785,22 @@ void NgInfoView::build()
     m_media->hide();
     m_layout->addWidget(m_media);
 
+    // where the file comes from, when a quick action made it: a card in the accent right under the preview, the
+    // source's icon, the action and the source's name; a click selects the source (in its folder, opened if another)
+    m_madeButton = new QToolButton(m_body);
+    m_madeButton->setObjectName(QStringLiteral("ngMadeFrom"));
+    m_madeButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_madeButton->setIconSize(QSize(30, 30));
+    m_madeButton->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    m_madeButton->setCursor(Qt::PointingHandCursor);
+    m_madeButton->hide();
+    connect(m_madeButton, &QToolButton::clicked, this, [this] {
+        if (!m_madeFrom.isEmpty() && QFileInfo::exists(m_madeFrom)) {
+            Q_EMIT selectRequested(QUrl::fromLocalFile(m_madeFrom));
+        }
+    });
+    m_layout->addWidget(m_madeButton);
+
     // the name, then the kind, the size and pinning on one line
     m_name = new QLabel(m_body);
     m_name->setWordWrap(true);
@@ -2071,6 +2087,13 @@ void NgInfoView::restyle()
                                                "QToolButton#ngLastChanged:hover { background: rgba(%2, 0.12); }"
                                                "QToolButton#ngLastChanged:pressed { background: rgba(%2, 0.18); }")
                                     .arg(veilCss, ink));
+    m_madeButton->setStyleSheet(QStringLiteral("QToolButton#ngMadeFrom { background: rgba(%1, %2, %3, 0.18); border: 1px solid rgba(%1, %2, %3, 0.45); border-radius: 12px;"
+                                               " padding: 8px 10px; text-align: left; }"
+                                               "QToolButton#ngMadeFrom:hover { background: rgba(%1, %2, %3, 0.28); }"
+                                               "QToolButton#ngMadeFrom:pressed { background: rgba(%1, %2, %3, 0.36); }")
+                                    .arg(accent.red())
+                                    .arg(accent.green())
+                                    .arg(accent.blue()));
     m_pin->setStyleSheet(QStringLiteral("QToolButton { border: 0; border-radius: 12px; padding: 3px; }"
                                         "QToolButton:hover { background: rgba(%1, 0.12); }"
                                         "QToolButton:checked { background: %2; }")
@@ -2567,6 +2590,7 @@ void NgInfoView::showFacts()
 {
     if (m_item.isNull() || !m_item.isLocalFile()) {
         m_lines->setVisible(false);
+        m_madeButton->hide();
         return;
     }
     const qint64 modified = m_item.time(KFileItem::ModificationTime).toSecsSinceEpoch();
@@ -2594,6 +2618,7 @@ void NgInfoView::showFacts()
         m_insideLabel->hide();
         m_insideTags->hide();
         m_lastButton->hide();
+        m_madeButton->hide();
         return; // being read: NgFacts::ready brings it here again
     }
     QList<std::pair<QString, QString>> shown;
@@ -2632,13 +2657,25 @@ void NgInfoView::showFacts()
     m_insideTags->setVisible(m_item.isDir() && !facts->innerTags.isEmpty());
     // (one row for where the file came from: the file a quick action made it from, or the site it was downloaded from)
     const bool made = !facts->madeFrom.isEmpty();
+    // made by a quick action: said in full view, in the card under the preview (the row below is for downloads)
+    m_madeFrom = made ? facts->madeFrom : QString();
+    if (made) {
+        const bool there = QFileInfo::exists(facts->madeFrom);
+        const QMimeType mime = QMimeDatabase().mimeTypeForFile(facts->madeFrom, QMimeDatabase::MatchExtension);
+        m_madeButton->setIcon(QIcon::fromTheme(mime.iconName(), QIcon::fromTheme(mime.genericIconName(), QIcon::fromTheme(QStringLiteral("unknown")))));
+        const QString lead = QChar(0x21b3) + QLatin1Char(' ') + (facts->madeBy.isEmpty() ? ngTr("Made from", "Generato da") : facts->madeBy + ngTr(" · from", " · da"));
+        const QString name = QFileInfo(facts->madeFrom).fileName() + (there ? QString() : ngTr(" (no longer there)", " (non c'è più)"));
+        m_madeButton->setText(lead + QLatin1Char('\n') + QFontMetrics(m_madeButton->font()).elidedText(name, Qt::ElideMiddle, qMax(120, m_body->width() - 90)));
+        m_madeButton->setToolTip(there ? ngTr("%1\nClick to select it", "%1\nUn clic lo seleziona").arg(facts->madeFrom) : facts->madeFrom);
+    }
+    m_madeButton->setVisible(made);
     m_originLabel->setText(made ? (facts->madeBy.isEmpty() ? ngTr("Made from", "Generato da") : facts->madeBy + ngTr(" · from", " · da"))
                                 : ngTr("Downloaded from", "Scaricato da"));
     m_origin->setText(ngBreakable(made ? QFileInfo(facts->madeFrom).fileName() + (QFileInfo::exists(facts->madeFrom) ? QString() : ngTr(" (no longer there)", " (non c'è più)"))
                                        : facts->origin));
     m_origin->setToolTip(made ? facts->madeFrom : QString());
-    m_origin->setVisible(made || !facts->origin.isEmpty());
-    m_originLabel->setVisible(made || !facts->origin.isEmpty());
+    m_origin->setVisible(!made && !facts->origin.isEmpty());
+    m_originLabel->setVisible(!made && !facts->origin.isEmpty());
     const QString whoCaption = facts->whoKind == NgFileFacts::Camera ? ngTr("Camera", "Fotocamera")
         : facts->whoKind == NgFileFacts::Artist                      ? ngTr("Artist", "Artista")
         : facts->whoKind == NgFileFacts::Author                      ? ngTr("Author", "Autore")
@@ -2799,6 +2836,7 @@ void NgInfoView::showMany()
     m_media->hide();
     m_facts->setFacts({});
     m_lines->setVisible(false);
+    m_madeButton->hide();
     m_activity->setVisible(false);
     m_dates->setDates({});
     m_actionList.clear();
