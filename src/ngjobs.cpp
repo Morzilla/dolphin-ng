@@ -821,7 +821,7 @@ void NgHistoryPage::rebuild(bool force)
             });
             buttons->addWidget(stop);
             card->m_room = 30 * 2 + 6 + 12;
-            m_narrow ? grid->addWidget(card, at, 0, 1, 2) : grid->addWidget(card, at / 2, at % 2);
+            grid->addWidget(card, at, 0, 1, 2); // (one work a row, whatever the width: side by side they read as a table)
             m_cards.append(card);
             ++at;
         }
