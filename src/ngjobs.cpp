@@ -224,8 +224,12 @@ void NgJobsButton::rebuild()
     m_bars.clear();
     m_figures.clear();
     while (QLayoutItem *item = m_rows->takeAt(0)) {
-        if (item->widget()) {
-            item->widget()->deleteLater();
+        if (QWidget *old = item->widget()) {
+            // (out of the list at once: deleted later, an old row could still be there, painted under the new
+            // ones, while the menu was open: the texts ran into each other until the menu was opened again)
+            old->hide();
+            old->setParent(nullptr);
+            old->deleteLater();
         }
         delete item;
     }
@@ -783,8 +787,10 @@ void NgHistoryPage::rebuild(bool force)
     m_shape = shape;
     m_cards.clear();
     while (QLayoutItem *item = m_rows->takeAt(0)) {
-        if (item->widget()) {
-            item->widget()->deleteLater();
+        if (QWidget *old = item->widget()) {
+            old->hide();
+            old->setParent(nullptr);
+            old->deleteLater();
         }
         delete item;
     }
