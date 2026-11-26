@@ -747,11 +747,24 @@ void NgActivity::sweepFamilies()
     // so the result is easy to find; then the bubble fades out and the files go back in order. Checked every
     // second, whatever way the family was made or its work ended
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    bool removed = false, ended = false;
+    // a result that is gone (thrown away, moved elsewhere) is no longer tied to its source: the source alone kept the
+    // bubble until the 30 s were over. (Not in its first moments: a program may write a file, remove it and write it again)
+    for (auto it = m_links.begin(); it != m_links.end();) {
+        if (it->first.isLocalFile() && now - m_linkedAt.value(it.key(), now) > 2000 && !QFileInfo::exists(it->first.toLocalFile())) {
+            m_entries.remove(it.key());
+            m_pids.remove(it.key());
+            m_linkedAt.remove(it.key());
+            it = m_links.erase(it);
+            removed = true;
+        } else {
+            ++it;
+        }
+    }
     QSet<QString> parents;
     for (const auto &l : std::as_const(m_links)) {
         parents.insert(key(l.second));
     }
-    bool removed = false, ended = false;
     for (const QString &parentKey : std::as_const(parents)) {
         // busy only while something is really at work: the parent's process (or job) or a child's process.
         // Being watched for late files does not count (the 30 s below cover them), and a process that is gone
