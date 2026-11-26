@@ -1473,7 +1473,8 @@ DolphinMainWindow::DolphinMainWindow()
             auto *room = new QWidget(m_ngTabsToolBar);
             room->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
             m_ngTabsToolBar->addWidget(room);
-            m_ngTabsToolBar->addWidget(new NgJobsButton(m_ngTabsToolBar));
+            // (the jobs button: this row hides with a single tab, so it stands with the buttons after the location
+            // instead, between the search and the menu; see ngMoveToolbarButtons)
         }
         if (m_ngTitleTabs || !m_ngCentralLayout) {
             insertToolBar(toolBar(), m_ngTabsToolBar);
@@ -5504,6 +5505,23 @@ void DolphinMainWindow::ngMoveToolbarButtons()
     QAction *navigator = actionCollection()->action(QStringLiteral("url_navigators"));
     if (!m_ngSortBar || !bar || !navigator || !bar->actions().contains(navigator)) {
         return;
+    }
+    if (!m_ngTitleTabs) {
+        // with the window manager's title bar the jobs button has no title row: it stands among the buttons after
+        // the location, right before the last one (the menu), and moves with them (to the sort bar's end, and back)
+        auto *jobs = findChild<NgJobsAction *>(QStringLiteral("ng_jobs_button"), Qt::FindDirectChildrenOnly);
+        if (!jobs) {
+            jobs = new NgJobsAction(this);
+        }
+        if (!bar->actions().contains(jobs) && !m_ngMovedTrailing.contains(jobs)) {
+            if (!m_ngMovedTrailing.isEmpty()) {
+                m_ngMovedTrailing.insert(m_ngMovedTrailing.size() - 1, jobs);
+                ngSortBarSetTrailingActions(m_ngSortBar, m_ngMovedTrailing);
+            } else {
+                QAction *last = bar->actions().constLast();
+                bar->insertAction(last != navigator && last != m_ngFilterAction && last != m_ngSearchAction ? last : nullptr, jobs);
+            }
+        }
     }
     if (!ngTwoLineList()) {
         if (!m_ngMovedActions.isEmpty()) {

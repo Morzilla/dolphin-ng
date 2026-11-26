@@ -6,6 +6,7 @@
 #define NGJOBS_H
 
 #include <QToolButton>
+#include <QWidgetAction>
 
 class QMenu;
 class QVBoxLayout;
@@ -40,6 +41,27 @@ private:
     QList<std::pair<QString, QLabel *>> m_figures;
     int m_running = 0;
     int m_waiting = 0;
+};
+
+/**
+ * dolphin-ng: the jobs button as an action, for a bar that lays out actions (the sort bar's right end, the tool bar):
+ * with the window manager's title bar there is no title row of ours to hold the button
+ */
+class NgJobsAction : public QWidgetAction
+{
+    Q_OBJECT
+public:
+    explicit NgJobsAction(QObject *parent)
+        : QWidgetAction(parent)
+    {
+        setObjectName(QStringLiteral("ng_jobs_button"));
+    }
+
+protected:
+    QWidget *createWidget(QWidget *parent) override
+    {
+        return new NgJobsButton(parent);
+    }
 };
 
 /**
