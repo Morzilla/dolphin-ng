@@ -967,34 +967,41 @@ void PlacesPanel::setUrl(const QUrl &url)
     ngRevealCurrent();
 }
 
+void PlacesPanel::ngScrollToCurrent()
+{
+    if (!currentIndex().isValid()) {
+        return;
+    }
+    scrollTo(currentIndex(), QAbstractItemView::EnsureVisible);
+    // (the list fades out at an edge it goes on beyond: the place is kept clear of the fade)
+    const QRect row = visualRect(currentIndex());
+    QScrollBar *bar = verticalScrollBar();
+    const int clear = 26;
+    if (row.bottom() > viewport()->height() - clear && bar->value() < bar->maximum()) {
+        bar->setValue(qMin(bar->maximum(), bar->value() + row.bottom() - (viewport()->height() - clear)));
+    } else if (row.top() < clear && bar->value() > bar->minimum()) {
+        bar->setValue(qMax(bar->minimum(), bar->value() - (clear - row.top())));
+    }
+}
+
 void PlacesPanel::ngRevealCurrent()
 {
     if (m_ngRevealQueued) {
         return;
     }
     m_ngRevealQueued = true;
-    // (a place that was hidden grows into the list over half a second: looked at again when it has its height)
-    QTimer::singleShot(600, this, [this] {
-        const QRect row = currentIndex().isValid() ? visualRect(currentIndex()) : QRect();
-        if (row.isValid() && (row.bottom() > viewport()->height() - 26 || row.top() < 0)) {
-            ngRevealCurrent();
-        }
-    });
     QTimer::singleShot(0, this, [this] {
         m_ngRevealQueued = false;
-        if (!currentIndex().isValid()) {
-            return;
-        }
-        scrollTo(currentIndex(), QAbstractItemView::EnsureVisible);
-        // (the list fades out at an edge it goes on beyond: the place is kept clear of the fade)
-        const QRect row = visualRect(currentIndex());
-        QScrollBar *bar = verticalScrollBar();
-        const int clear = 26;
-        if (row.bottom() > viewport()->height() - clear && bar->value() < bar->maximum()) {
-            bar->setValue(qMin(bar->maximum(), bar->value() + row.bottom() - (viewport()->height() - clear)));
-        } else if (row.top() < clear && bar->value() > bar->minimum()) {
-            bar->setValue(qMax(bar->minimum(), bar->value() - (clear - row.top())));
-        }
+        ngScrollToCurrent();
+        // A place that was hidden grows into the list over half a second: looked at once more when it has its
+        // height. Once, and only if the list was not scrolled meanwhile: bringing the place back whenever it was
+        // out of view pulled the list from under the user who was scrolling it
+        const int settled = verticalScrollBar()->value();
+        QTimer::singleShot(600, this, [this, settled] {
+            if (verticalScrollBar()->value() == settled && !m_ngRevealQueued) {
+                ngScrollToCurrent();
+            }
+        });
     });
 }
 
