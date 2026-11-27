@@ -2522,7 +2522,10 @@ QHash<QByteArray, QVariant> KFileItemModel::retrieveData(const KFileItem &item, 
         data.insert(sharedValue("deletiontime"), deletionTime);
     }
 
-    if (m_requestRole[IsExpandableRole] && isDir) {
+    // dolphin-ng: in the list of what happened lately only the lines that stand for many files open (things done
+    // in one go, kind 6); a folder listed there is an event, its contents are not part of the list
+    const bool recentEntry = item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) == QLatin1String("ngrecent");
+    if (m_requestRole[IsExpandableRole] && isDir && (!recentEntry || item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 8) == QLatin1String("6"))) {
         data.insert(sharedValue("isExpandable"), true);
     }
 

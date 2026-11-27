@@ -2741,6 +2741,14 @@ void DolphinView::loadDirectory(const QUrl &url, bool reload)
         return;
     }
 
+    // dolphin-ng: in the list of what happened lately the lines that stand for many files open like folders, also
+    // when folders are not set to open in place
+    const bool recentList = url.scheme() == QLatin1String("ngrecent");
+    if (m_view->property("_ng_recent_list").toBool() != recentList) {
+        m_view->setProperty("_ng_recent_list", recentList);
+        m_view->setSupportsItemExpanding(m_view->itemLayout() == KFileItemListView::DetailsLayout && (DetailsModeSettings::expandableFolders() || recentList));
+    }
+
     if (reload) {
         m_model->refreshDirectory(url);
     } else {
