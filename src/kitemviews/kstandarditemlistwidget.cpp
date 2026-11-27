@@ -2991,7 +2991,9 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
             if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
                 if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
                     if (const QString happened = ngHappened(fileModel->fileItem(index())); !happened.isEmpty()) {
-                        typeText = happened;
+                        // (shortened to the room there is: a chip that does not fit is left out, and this one is
+                        // what the row is for)
+                        typeText = chipMetrics.elidedText(happened, Qt::ElideRight, qMax(qreal(60), textRight - chipX - 18));
                     }
                 }
             }

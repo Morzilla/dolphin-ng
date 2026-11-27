@@ -1766,8 +1766,14 @@ void NgSettingsPage::applySettings()
     setNgSetting("DISKS_POS", m_disksPos->currentData().toString());
     setNgSetting("TABS", m_tabsPlace->currentData().toString());
     setNgSetting("SIDEBAR_FOLLOW", m_sectionsFollow->isChecked() ? QStringLiteral("list") : QString());
-    setNgSetting("RECENT_LEGACY", m_recentLegacy->isChecked() ? QStringLiteral("1") : QString());
-    setNgSetting("RECENT_LOCATIONS", m_recentLocations->isChecked() ? QStringLiteral("1") : QString());
+    // (not while the environment decides them: the switch then shows the environment's value, which is not a choice
+    // made here to be kept)
+    if (!ngSettingFromEnvironment("RECENT_LEGACY")) {
+        setNgSetting("RECENT_LEGACY", m_recentLegacy->isChecked() ? QStringLiteral("1") : QString());
+    }
+    if (!ngSettingFromEnvironment("RECENT_LOCATIONS")) {
+        setNgSetting("RECENT_LOCATIONS", m_recentLocations->isChecked() ? QStringLiteral("1") : QString());
+    }
     {
         QStringList order;
         bool disks = true;
