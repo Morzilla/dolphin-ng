@@ -646,6 +646,8 @@ protected:
     virtual void editedRoleChanged(const QByteArray &current, const QByteArray &previous);
     virtual void iconSizeChanged(int current, int previous);
     void resizeEvent(QGraphicsSceneResizeEvent *event) override;
+    /** dolphin-ng: the item's kept picture is drawn again when what it was drawn with changes (see the constructor) */
+    bool event(QEvent *event) override;
     void clearHoverCache();
 
     /**

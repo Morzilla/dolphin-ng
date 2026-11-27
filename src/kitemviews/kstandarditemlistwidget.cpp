@@ -801,6 +801,11 @@ QPixmap ngDitheredWash(const QColor &tint, int width, qreal start, qreal middle,
 
 void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
+    // dolphin-ng: painted into the item's kept picture (the cache mode set in the constructor) there is no widget: the
+    // view's own viewport stands for it (its palette, its focus)
+    if (!widget && scene() && !scene()->views().isEmpty()) {
+        widget = scene()->views().constFirst()->viewport();
+    }
     const_cast<KStandardItemListWidget *>(this)->triggerCacheRefreshing();
 
     // dolphin-ng: a cut file (waiting to be moved) is drawn whole in grey and see-through: the card or row is
