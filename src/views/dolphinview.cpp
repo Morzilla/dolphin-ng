@@ -2854,7 +2854,10 @@ void DolphinView::applyViewProperties(const ViewProperties &props)
     // dolphin-ng: the folder's own choice of columns (the Details view), if it has one. Before the header's widths: it
     // shows or hides the header, and a hidden one skipped the folder's saved widths below
     const QString ownColumns = ngFolderColumns(url());
-    m_view->ngSetRowColumns(ownColumns.isEmpty() ? QVariant() : QVariant(ownColumns == QLatin1String("on")));
+    // (the list of what happened lately starts with columns, one line for each entry: what happened, the size, when
+    // and where, side by side. It is a list to look through, and the tall rows showed a handful of entries)
+    const bool recentList = url().scheme() == QLatin1String("ngrecent");
+    m_view->ngSetRowColumns(ownColumns.isEmpty() ? (recentList ? QVariant(true) : QVariant()) : QVariant(ownColumns == QLatin1String("on")));
 
     KItemListView *itemListView = m_container->controller()->view();
     if (itemListView->isHeaderVisible()) {

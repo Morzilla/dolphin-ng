@@ -2766,12 +2766,13 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
         }
 
         // in the list of what happened lately the first date is the event's: "When", and for today its time
-        bool eventRow = false;
+        QString eventText;
         if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
             if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
-                eventRow = !ngHappened(fileModel->fileItem(index())).isEmpty();
+                eventText = ngHappened(fileModel->fileItem(index()));
             }
         }
+        const bool eventRow = !eventText.isEmpty();
 
         // ---- time column: "C  12/10/26 · 29 giorni fa" over "M  09/11/26 · ieri"; dropped on a narrow view (then chips)
         m_ngTime.clear();
@@ -2920,6 +2921,11 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
                 // in its column, vertically centred, elided to it; sizes and counts to the right, as in Dolphin
                 const qreal roleWidth = columnWidth(role);
                 QString text = roleText(role, values);
+                // (the list of what happened lately: the type column says what happened, one line for each entry also
+                // with the compact rows, which have no chips; the chip under the name keeps the kind)
+                if (eventRow && role == "type") {
+                    text = eventText;
+                }
                 const qreal available = qMax(qreal(0), roleWidth - columnWidthInc);
                 qreal width = m_customizedFontMetrics.horizontalAdvance(text);
                 if (width > available) {
@@ -3001,7 +3007,9 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
             // in the list of what happened lately (ngrecent:/) the row says what happened, in place of the kind
             if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
                 if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
-                    if (const QString happened = ngHappened(fileModel->fileItem(index())); !happened.isEmpty()) {
+                    // (not where the type column already says it)
+                    const bool inColumn = columns && m_sortedVisibleRoles.contains("type");
+                    if (const QString happened = ngHappened(fileModel->fileItem(index())); !happened.isEmpty() && !inColumn) {
                         // (shortened to the room there is: a chip that does not fit is left out, and this one is
                         // what the row is for)
                         typeText = chipMetrics.elidedText(happened, Qt::ElideRight, qMax(qreal(60), textRight - chipX - 18));

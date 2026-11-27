@@ -274,7 +274,7 @@ ViewProperties::ViewProperties(const QUrl &url)
                 setSortRole(QByteArrayLiteral("accesstime"));
                 setViewMode(DolphinView::DetailsView);
                 // (dolphin-ng: the list of what happened lately also has the size: the rows' drawings write it)
-                setVisibleRoles(url.scheme() == QLatin1String("ngrecent") ? QList<QByteArray>{"text", "size", "path", "accesstime"} : QList<QByteArray>{"text", "path", "accesstime"});
+                setVisibleRoles(url.scheme() == QLatin1String("ngrecent") ? QList<QByteArray>{"text", "type", "size", "accesstime", "path"} : QList<QByteArray>{"text", "path", "accesstime"});
             } else {
                 setSortRole(QByteArrayLiteral("modificationtime"));
             }
