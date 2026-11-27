@@ -885,6 +885,14 @@ void KFileItemModelRolesUpdater::applyChangedBalooRolesForItem(const KFileItem &
 #endif
 }
 
+// dolphin-ng: an entry of the list of what happened lately (ng-recent's mark in UDS_EXTRA + 7). Whether such a line
+// opens is the model's to say (the ones that stand for many files do, a folder listed as an event does not): what
+// the folder holds does not change it
+static bool ngRecentEntry(const KFileItem &item)
+{
+    return !item.isNull() && item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) == QLatin1String("ngrecent");
+}
+
 void KFileItemModelRolesUpdater::slotDirectoryContentsCountReceived(const QString &path, int count, long long size)
 {
     const bool getIsExpandableRole = m_roles.contains("isExpandable");
@@ -899,7 +907,7 @@ void KFileItemModelRolesUpdater::slotDirectoryContentsCountReceived(const QStrin
                 data.insert("count", count);
                 data.insert("size", QVariant::fromValue(size));
             }
-            if (getIsExpandableRole) {
+            if (getIsExpandableRole && !ngRecentEntry(m_model->fileItem(index))) {
                 data.insert("isExpandable", count > 0);
             }
 
@@ -1349,7 +1357,7 @@ void KFileItemModelRolesUpdater::startDirectorySizeCounting(const KFileItem &ite
 
             QHash<QByteArray, QVariant> newData;
             QVariant expandable = data.value("isExpandable");
-            if (expandable.isNull() || expandable.toBool() != (entryCount > 0)) {
+            if (!ngRecentEntry(m_model->fileItem(index)) && (expandable.isNull() || expandable.toBool() != (entryCount > 0))) {
                 // if expandable has changed
                 newData.insert("isExpandable", entryCount > 0);
             }

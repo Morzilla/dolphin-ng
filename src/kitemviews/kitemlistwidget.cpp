@@ -9,8 +9,11 @@
 #include "kitemlistwidget.h"
 
 #include "private/ngfacts.h"
+#include "kfileitemlistview.h"
 #include "kstandarditemlistview.h" // dolphin-ng: the layout, for the selection toggle
 #include <QUrl>
+#include <QGraphicsScene>
+#include <QGraphicsView>
 #include <QGraphicsObject>
 
 #include "kitemlistview.h"
@@ -21,6 +24,7 @@
 #include <KSharedConfig>
 
 #include <QDateTime>
+#include <QPixmapCache>
 #include <QHash>
 
 #include <QApplication>
@@ -84,6 +88,43 @@ KItemListWidget::KItemListWidget(KItemListWidgetInformant *informant, QGraphicsI
     , m_iconSize(-1)
 {
     connect(&m_hoverSequenceTimer, &QTimer::timeout, this, &KItemListWidget::slotHoverSequenceTimerTimeout);
+    // dolphin-ng: an item is drawn once and kept as a picture; while the view scrolls the picture is only moved.
+    // The drawn rows and cards (rounded sheets, the file's drawing, gradients, text) were painted again from nothing
+    // at every frame, for every item in view: scrolling kept two processor cores busy, eight times stock Dolphin.
+    // An item that changes (hover, selection, new data) is painted again as before. DOLPHIN_NG_ITEM_CACHE=off: as it was
+    static const bool cached = ngSetting("ITEM_CACHE").toLower() != QLatin1String("off"); // (dolphinrc [DolphinNG], or the environment)
+    if (cached) {
+        // (the pictures live in Qt's pixmap cache, 10 MiB by default: a window of large cards needs more than that,
+        // and a cache too small gives the pictures up and paints everything again)
+        static const bool roomy = [] {
+            if (QPixmapCache::cacheLimit() < 96 * 1024) {
+                QPixmapCache::setCacheLimit(96 * 1024);
+            }
+            return true;
+        }();
+        Q_UNUSED(roomy)
+        setCacheMode(QGraphicsItem::DeviceCoordinateCache);
+    }
+}
+
+bool KItemListWidget::event(QEvent *event)
+{
+    // The kept picture of the item (the cache mode of the constructor) is made again when the item says so with
+    // update(). What it is drawn with can also change without the item being told: the window becoming active or not
+    // (the rows dim), the palette, the style, the font. A plain repaint of the view drew it anew then; now the item asks
+    switch (event->type()) {
+    case QEvent::WindowActivate:
+    case QEvent::WindowDeactivate:
+    case QEvent::PaletteChange:
+    case QEvent::StyleChange:
+    case QEvent::FontChange:
+    case QEvent::LayoutDirectionChange:
+        update();
+        break;
+    default:
+        break;
+    }
+    return QGraphicsWidget::event(event);
 }
 
 KItemListWidget::~KItemListWidget()
@@ -2448,6 +2489,19 @@ bool ngRowColumns(const QGraphicsItem *item)
     return ngRowColumns();
 }
 
+// dolphin-ng: the rows drawn without Dolphin's icon (two lines, Details with columns) had one height whatever the
+// zoom, so zooming changed nothing one could see. What the zoom adds over the mode's default size (16 px icons, 48 px
+// previews: there the row is as it always was) is added to the row; the tile, the drawing and the icon follow it
+int ngRowZoomRoom(const KItemListView *view)
+{
+    if (!view) {
+        return 0;
+    }
+    const auto *files = qobject_cast<const KFileItemListView *>(view);
+    const int base = files && files->previewsShown() ? 48 : 22;
+    return qBound(0, view->styleOption().iconSize - base, 96);
+}
+
 bool ngDetailsPlain()
 {
     return ngSetting("DETAILS_LOOK").toLower() != QLatin1String("tiles");
@@ -2460,6 +2514,11 @@ bool ngDetailsCompact()
 
 void KItemListWidget::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
+    // dolphin-ng: painted into the item's kept picture (the cache mode set in the constructor) there is no widget: the
+    // view's own viewport stands for it (its palette, its focus)
+    if (!widget && scene() && !scene()->views().isEmpty()) {
+        widget = scene()->views().constFirst()->viewport();
+    }
     Q_UNUSED(option)
 
     // dolphin-ng: with any style but "stripe" the view sets m_alternateBackground on every row

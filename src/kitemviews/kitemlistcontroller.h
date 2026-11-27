@@ -351,6 +351,7 @@ private:
     bool m_selectionMode;
     bool m_selectionTogglePressed;
     bool m_ngGroupPressed = false; // dolphin-ng: the press selected a group (on its title)
+    bool m_ngOverGroupTitle = false; // dolphin-ng: the pointer is over a group's title (it is a hand there)
     int m_ngActionPressed = 0; // dolphin-ng: inline row action under the last press (1 open, 2 menu)
     int m_ngActionHovered = 0; // dolphin-ng: inline row action under the pointer
     int m_ngActionHoveredIndex = -1;

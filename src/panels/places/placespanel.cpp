@@ -573,7 +573,18 @@ bool PlacesPanel::ngRowShown(const KFilePlacesModel *placesModel, int row) const
     if (!allPlacesShown() && (placesModel->isHidden(index) || placesModel->isGroupHidden(group))) {
         return false;
     }
-    return !ngDeviceRowHidden(group);
+    // ("Recent Locations", when it is not shown, is not a row of its group: the one after it carries the title)
+    return !ngDeviceRowHidden(group) && !ngRecentLocationsHidden(placesModel, index);
+}
+
+bool PlacesPanel::ngRecentLocationsHidden(const KFilePlacesModel *placesModel, const QModelIndex &index) const
+{
+    // "Recent Locations" is not shown: the list of what happened lately ("Recent Files") has the folders too. The
+    // setting RECENT_LOCATIONS brings it back
+    // (only where that list is shown: without the ng-recent component, or with the desktop's own "Recent Files", the
+    // place stays as it was)
+    return placesModel->url(index) == QUrl(QStringLiteral("recentlyused:/locations")) && ngSetting("RECENT_LOCATIONS") != QLatin1String("1")
+        && ngSetting("RECENT_LEGACY") != QLatin1String("1") && KProtocolInfo::isKnownProtocol(QStringLiteral("ngrecent"));
 }
 
 bool PlacesPanel::ngFirstOfGroup(const KFilePlacesModel *placesModel, int row) const
@@ -597,12 +608,7 @@ bool PlacesPanel::ngRowHiddenByNg(const KFilePlacesModel *placesModel, int row) 
     if (ngDeviceRowHidden(group)) {
         return true;
     }
-    // "Recent Locations" is not shown: the list of what happened lately ("Recent Files") has the folders too. The
-    // setting RECENT_LOCATIONS brings it back
-    // (only where that list is shown: without the ng-recent component, or with the desktop's own "Recent Files", the
-    // place stays as it was)
-    if (placesModel->url(index) == QUrl(QStringLiteral("recentlyused:/locations")) && ngSetting("RECENT_LOCATIONS") != QLatin1String("1")
-        && ngSetting("RECENT_LEGACY") != QLatin1String("1") && KProtocolInfo::isKnownProtocol(QStringLiteral("ngrecent"))) {
+    if (ngRecentLocationsHidden(placesModel, index)) {
         return true;
     }
     if (!ngSectionCollapsed(ngGroupKey(group)) || (selectionModel() && selectionModel()->isSelected(index))) {
@@ -953,9 +959,43 @@ void PlacesPanel::setUrl(const QUrl &url)
     // dolphin-ng: the list of what happened lately is shown from "Recent Files": that is the place it belongs to
     if (url.scheme() == QLatin1String("ngrecent")) {
         KFilePlacesView::setUrl(QUrl(QStringLiteral("recentlyused:/files")));
+    } else {
+        KFilePlacesView::setUrl(url);
+    }
+    // the place of the folder shown is brought into view: one below the fold (or half under a section's edge) was
+    // selected where nobody saw it. Once the list is laid out (a place may just have been shown or hidden)
+    ngRevealCurrent();
+}
+
+void PlacesPanel::ngRevealCurrent()
+{
+    if (m_ngRevealQueued) {
         return;
     }
-    KFilePlacesView::setUrl(url);
+    m_ngRevealQueued = true;
+    // (a place that was hidden grows into the list over half a second: looked at again when it has its height)
+    QTimer::singleShot(600, this, [this] {
+        const QRect row = currentIndex().isValid() ? visualRect(currentIndex()) : QRect();
+        if (row.isValid() && (row.bottom() > viewport()->height() - 26 || row.top() < 0)) {
+            ngRevealCurrent();
+        }
+    });
+    QTimer::singleShot(0, this, [this] {
+        m_ngRevealQueued = false;
+        if (!currentIndex().isValid()) {
+            return;
+        }
+        scrollTo(currentIndex(), QAbstractItemView::EnsureVisible);
+        // (the list fades out at an edge it goes on beyond: the place is kept clear of the fade)
+        const QRect row = visualRect(currentIndex());
+        QScrollBar *bar = verticalScrollBar();
+        const int clear = 26;
+        if (row.bottom() > viewport()->height() - clear && bar->value() < bar->maximum()) {
+            bar->setValue(qMin(bar->maximum(), bar->value() + row.bottom() - (viewport()->height() - clear)));
+        } else if (row.top() < clear && bar->value() > bar->minimum()) {
+            bar->setValue(qMax(bar->minimum(), bar->value() - (clear - row.top())));
+        }
+    });
 }
 
 QList<QAction *> PlacesPanel::customContextMenuActions() const
@@ -1453,6 +1493,12 @@ void PlacesPanel::ngLayoutBottom()
         if (content > 0 && content < room) {
             follow = room - content;
         }
+    }
+    if (const QMargins margins(16, 12 + topTotal, 16, 12 + bottomTotal + follow); margins != viewportMargins() || height() != m_ngRevealHeight) {
+        // the room of the list changed (the window opened or was resized, a section came or went): the place of the
+        // folder shown may have ended up outside it
+        m_ngRevealHeight = height();
+        ngRevealCurrent();
     }
     setViewportMargins(16, 12 + topTotal, 16, 12 + bottomTotal + follow); // (16 at the sides: the pill of the selected entry keeps clear of the card's edges)
     ngPlaceScrollBar();

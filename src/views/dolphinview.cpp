@@ -85,6 +85,7 @@
 #include <QScrollBar>
 #include <QSize>
 #include <QGraphicsView>
+#include <KIO/StatJob>
 #include <QTimer>
 #include <QToolTip>
 #include <QVBoxLayout>
@@ -326,6 +327,33 @@ DolphinView::DolphinView(const QUrl &url, QWidget *parent)
     connect(m_selectionChangedTimer, &QTimer::timeout, this, &DolphinView::emitSelectionChangedSignal);
 
     m_model = new KFileItemModel(this);
+    // dolphin-ng: the list of what happened lately is made when it is asked for, and nobody tells when there is
+    // more: while it is on show in the active window it is asked again every few seconds (an update of what
+    // is there, not a new listing: nothing flickers, the selection stays)
+    auto *recentRefresh = new QTimer(this);
+    recentRefresh->setInterval(10000);
+    connect(recentRefresh, &QTimer::timeout, this, [this] {
+        if (m_url.scheme() != QLatin1String("ngrecent") || !isVisible() || !window() || !window()->isActiveWindow() || m_loadingState == LoadingState::Loading) {
+            return;
+        }
+        // (asked first whether anything is different: ng-recent says what the list holds in a few figures. Asking
+        // for the list itself every time made the view flicker for nothing)
+        const QUrl url = m_url;
+        KIO::StatJob *job = KIO::stat(url, KIO::HideProgressInfo);
+        connect(job, &KJob::result, this, [this, job, url] {
+            if (job->error() || url != m_url) {
+                return;
+            }
+            const QString stamp = url.toString() + QLatin1Char(' ') + job->statResult().stringValue(KIO::UDSEntry::UDS_EXTRA + 15);
+            const QString before = property("_ng_recent_stamp").toString();
+            setProperty("_ng_recent_stamp", stamp);
+            // (the first answer for a list is what was just listed)
+            if (before.startsWith(url.toString() + QLatin1Char(' ')) && before != stamp) {
+                m_model->refreshDirectory(m_url);
+            }
+        });
+    });
+    recentRefresh->start();
     m_view = new DolphinItemListView();
     m_view->setEnabledSelectionToggles(DolphinItemListView::SelectionTogglesEnabled::FollowSetting);
     m_view->setVisibleRoles({"text"});
@@ -2728,6 +2756,14 @@ void DolphinView::loadDirectory(const QUrl &url, bool reload)
             Q_EMIT errorMessage(i18nc("@info:status", "The location '%1' is invalid.", location), KIO::ERR_UNKNOWN);
         }
         return;
+    }
+
+    // dolphin-ng: in the list of what happened lately the lines that stand for many files open like folders, also
+    // when folders are not set to open in place
+    const bool recentList = url.scheme() == QLatin1String("ngrecent");
+    if (m_view->property("_ng_recent_list").toBool() != recentList) {
+        m_view->setProperty("_ng_recent_list", recentList);
+        m_view->setSupportsItemExpanding(m_view->itemLayout() == KFileItemListView::DetailsLayout && (DetailsModeSettings::expandableFolders() || recentList));
     }
 
     if (reload) {
