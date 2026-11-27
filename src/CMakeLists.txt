@@ -115,6 +115,7 @@ target_sources(dolphinprivate PRIVATE
     views/dolphinnewfilemenuobserver.cpp
     views/dolphinremoteencoding.cpp
     views/dolphinview.cpp
+    views/ngrecentview.cpp
     views/dolphinviewactionhandler.cpp
     views/draganddrophelper.cpp
     views/versioncontrol/updateitemstatesthread.cpp

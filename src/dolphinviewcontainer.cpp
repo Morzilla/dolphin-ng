@@ -5,6 +5,8 @@
  */
 
 #include "dolphinviewcontainer.h"
+#include "views/ngrecentview.h"
+#include "kitemviews/kitemlistcontainer.h"
 
 #include "admin/bar.h"
 #include "admin/workerintegration.h"
@@ -3474,6 +3476,34 @@ DolphinViewContainer::DolphinViewContainer(const QUrl &url, QWidget *parent)
         });
     }
     m_topLayout->addWidget(m_view, positionFor.view, 0);
+
+    // dolphin-ng: the list of what happened lately has a view of its own (NgRecentView: cards by day, operations that
+    // open in place), which stands in for the items while that list is on show. RECENT_LOOK=classic: the item view
+    auto showRecent = [this] {
+        const QUrl url = m_view->url();
+        const bool recent = url.scheme() == QLatin1String("ngrecent") && !url.path().startsWith(QLatin1String("/op/"))
+            && ngSetting("RECENT_LOOK").toLower() != QLatin1String("classic");
+        auto *recentView = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly);
+        if (recent && !recentView) {
+            recentView = new NgRecentView(m_view);
+            m_view->layout()->addWidget(recentView);
+            connect(recentView, &NgRecentView::folderRequested, this, [this](const QUrl &folder) {
+                setUrl(folder);
+            });
+        }
+        // (the item view goes on listing underneath: the filters, the status bar and the sidebar count on it)
+        if (auto *items = m_view->findChild<KItemListContainer *>()) {
+            items->setVisible(!recent);
+        }
+        if (recentView) {
+            recentView->setVisible(recent);
+            if (recent) {
+                recentView->setUrl(url);
+            }
+        }
+    };
+    connect(m_view, &DolphinView::urlChanged, this, showRecent);
+    QTimer::singleShot(0, this, showRecent);
     m_topLayout->addWidget(m_filterBar, positionFor.filterBar, 0);
     if (GeneralSettings::showStatusBar() == GeneralSettings::EnumShowStatusBar::FullWidth) {
         m_topLayout->addWidget(m_statusBar, positionFor.statusBar, 0);
