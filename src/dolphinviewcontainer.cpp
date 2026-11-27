@@ -97,6 +97,7 @@
 #include <QScrollBar>
 #include <QStyle>
 #include <QScopeGuard>
+#include <QCheckBox>
 #include <QTimer>
 #include <QVariantAnimation>
 #include <QUrl>
@@ -1560,12 +1561,26 @@ private:
                 segments->addWidget(button);
                 return button;
             };
+            // what can be on together is a box to tick, with its icon: several at once, as boxes say by themselves
+            auto tick = [this](QHBoxLayout *segments, const QString &text, const char *icon, bool on) {
+                auto *box = new QCheckBox(text, segments->parentWidget());
+                box->setIcon(QIcon::fromTheme(QString::fromLatin1(icon)));
+                box->setChecked(on);
+                box->setFocusPolicy(Qt::TabFocus);
+                box->setCursor(Qt::PointingHandCursor);
+                segments->setContentsMargins(12, 0, 12, 0);
+                segments->setSpacing(16);
+                segments->addWidget(box);
+                return box;
+            };
             caption(ngTr("Show", "Mostra"));
-            QHBoxLayout *what = pillOf();
-            m_sortPill = what->parentWidget();
-            connect(toggle(what, ngTr("Everything", "Tutto"), "view-list-details", events == 0 && kinds == 0, true), &QToolButton::clicked, this, [choose] {
+            // ("Everything" is a button: it clears the boxes)
+            QHBoxLayout *all = pillOf();
+            m_sortPill = all->parentWidget();
+            connect(toggle(all, ngTr("Everything", "Tutto"), "view-list-details", events == 0 && kinds == 0, true), &QToolButton::clicked, this, [choose] {
                 choose(0, 0);
             });
+            QHBoxLayout *what = pillOf();
             const struct {
                 int bit;
                 QString text;
@@ -1573,17 +1588,17 @@ private:
             } happened[] = {{1, ngTr("Created", "Creati"), "document-new"}, {2, ngTr("Modified", "Modificati"), "document-edit"}, {4, ngTr("Opened", "Aperti"), "document-open"}};
             for (const auto &one : happened) {
                 const int bit = one.bit;
-                connect(toggle(what, one.text, one.icon, events & bit, true), &QToolButton::clicked, this, [choose, events, kinds, bit] {
+                connect(tick(what, one.text, one.icon, events & bit), &QCheckBox::clicked, this, [choose, events, kinds, bit] {
                     choose(events ^ bit, kinds);
                 });
             }
             // by whom: the user, or things that work on their own (a synchronisation, an updater, the desktop's own
             // services; ng-fsevents tells them apart). One of the two is always on
             QHBoxLayout *byWhom = pillOf();
-            connect(toggle(byWhom, ngTr("By me", "Da me"), "user-identity", who & 1, true), &QToolButton::clicked, this, [choose, events, kinds, who] {
+            connect(tick(byWhom, ngTr("By me", "Da me"), "user-identity", who & 1), &QCheckBox::clicked, this, [choose, events, kinds, who] {
                 choose(events, kinds, (who ^ 1) == 0 ? 2 : (who ^ 1));
             });
-            connect(toggle(byWhom, ngTr("By others", "Da altri"), "system-run", who & 2, true), &QToolButton::clicked, this, [choose, events, kinds, who] {
+            connect(tick(byWhom, ngTr("By others", "Da altri"), "system-run", who & 2), &QCheckBox::clicked, this, [choose, events, kinds, who] {
                 choose(events, kinds, (who ^ 2) == 0 ? 1 : (who ^ 2));
             });
             // the kinds of file there are in the list (the ones chosen stay, also when the list no longer has any)
@@ -1600,7 +1615,7 @@ private:
                     if (!(present & bit)) {
                         continue;
                     }
-                    connect(toggle(which, labels[category], icons[category], kinds & bit, true), &QToolButton::clicked, this, [choose, events, kinds, bit] {
+                    connect(tick(which, labels[category], icons[category], kinds & bit), &QCheckBox::clicked, this, [choose, events, kinds, bit] {
                         choose(events, kinds ^ bit);
                     });
                 }
