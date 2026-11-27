@@ -24,6 +24,15 @@ sudo dnf install dolphin-ng breeze-ng
 
 Log out and in again afterwards. The same repository has the rest of the NG desktop: `breeze-ng`, `dolphin-ng`, `dialog-ng`, `neoline-icons` ([project page](https://copr.fedorainfracloud.org/coprs/morzilla/desktop-ng/)).
 
+**Kubuntu 26.04: there are packages in a PPA too**:
+
+```
+sudo add-apt-repository ppa:mori-daniele/desktop-ng
+sudo apt install dolphin-ng breeze-ng
+```
+
+The same PPA has `breeze-ng`, `dolphin-ng`, `dialog-ng` and `neoline-icons` ([project page](https://launchpad.net/~mori-daniele/+archive/ubuntu/desktop-ng)).
+
 **Try it with the graphical installer: [how it works and how to run it](https://github.com/Morzilla/breeze-ng/blob/ng/NG.md#everything-at-once).**
 It sets up Dolphin NG and lets you pick the other parts of the NG desktop (the Breeze NG style, the NeoLine icons,
 Dialog NG) and the look to start from:
@@ -48,6 +57,7 @@ it can be removed the same way. A longer tour, with every setting: **[FEATURES.m
 - **[A bar for sorting, filters and groups](#the-bar)**: one click to sort, filter by kind of file, group.
 - **[Groups that follow the sorting](#groups)**: by date, by size (KB, MB, GB, TB), by name, by type.
 - **[Work in progress on the files](#work-in-progress-on-the-files)**: copies and conversions show on the file they concern.
+- **[The pipeline](#the-pipeline)**: one view of every operation on your files, running and done.
 - **[Pinned to the top](#pinned-to-the-top)**: files and folders that stay first, whatever the sorting.
 - **[Quick actions](#quick-actions)**: resize, convert, extract, transcribe… from the card, and your own commands.
 - **[A glass sidebar](#the-sidebar)**: the whole left side of the window, sections in the order you choose, filters by
@@ -118,6 +128,25 @@ actions also show in Plasma's notifications and keep running when Dolphin NG is 
 
 <img src="ng/screenshots/readme/work.png" width="640" alt="Work in progress next to the files it comes from">
 
+## The pipeline
+
+Everything that is done to your files goes through one place. The **Jobs** button in the title bar shows how many
+operations are running; it opens the **Jobs tab**, a single view of the whole pipeline:
+
+- **At work**: every quick action that is running or waiting, as a card with the file, what it is making, how far it
+  is, a button to stop it and one to show the file in its folder.
+- **History**: every operation that ended, on a line of time, the last first: quick actions, copies, moves,
+  deletions and downloads seen arriving, each with the file, where it went or what it made, and how long it took.
+  Grouped by day or by action; the search field next to the location bar looks through it.
+
+The pipeline is **shared**: every Dolphin NG window and process sees the same operations, also the ones another
+window started, and a quick action keeps running (and stays in the list) when its window is closed. A file made
+by an action remembers where it came from: its card says "from talk.ogg · Transcribe".
+
+Quick actions run in parallel, or one at a time as a queue (Configure › NG › Quick actions).
+
+<img src="ng/screenshots/features/pipeline-jobs.png" width="720" alt="The Jobs tab: two conversions at work, then the history by day">
+
 ## Pinned to the top
 
 The pushpin in the quick actions, right-click → Pin to the Top, or Ctrl+Alt+P keep files and folders first in
@@ -157,6 +186,26 @@ The window has no title bar of its own: the sidebar button, the tabs and the win
 and the sidebar takes the whole left side of the window, with back, forward and up between it and the location bar.
 NG settings → Sidebar → Window puts the tabs back above the location bar (under the system's title bar) or above
 the files, as in Dolphin.
+
+## Recent Files
+
+With [ng-recent](https://github.com/Morzilla/ng-recent) installed, "Recent Files" is the story of what happened
+lately, not only what an application opened: one card per file with what happened to it, the application that did
+it, its size and the time, under the day it happened. Things done in one go (an archive unpacked, a
+synchronisation) are one card that opens in place on its files, with what can be done about it underneath: open
+the folder, hide the operation, always leave that folder out.
+
+The bar has, in place of sorting and view, what to see: **Everything**, **Created**, **Modified**, **Opened**
+(each on or off, they add up) and the kinds of file the list holds. What was done by things that work on their
+own (a synchronisation, an updater) is a list apart, "Automatic" among the sidebar's filters. With the
+[ng-fsevents](https://github.com/Morzilla/ng-fsevents) service the list has what programs changed anywhere in the
+home, and which program.
+
+An operation shows its first four files from the start, so that what changed is in sight at a glance;
+`RECENT_GROUPS=closed` keeps each one line until it is clicked.
+
+Settings (Configure › NG › Sidebar, or `dolphinrc [DolphinNG]`): `RECENT_LOOK=classic` shows the list in the item
+view, `RECENT_LEGACY=1` brings KDE's own "Recent Files" back, `RECENT_LOCATIONS=1` its "Recent Locations".
 
 ## Folder sizes
 
@@ -210,6 +259,9 @@ quick actions have a page of their own. Settings are stored in `dolphinrc` (grou
 forced with a `DOLPHIN_NG_*` variable, see [`ng/dolphin-ng.conf.example`](ng/dolphin-ng.conf.example).
 
 <img src="ng/screenshots/features/settings.png" width="420" alt="The NG settings page">
+
+One switch has no control, being there to compare: `ITEM_CACHE=off` (`dolphinrc [DolphinNG]`, or
+`DOLPHIN_NG_ITEM_CACHE=off`) draws every item again at every frame, as before the items were kept as pictures.
 
 ## State of things
 

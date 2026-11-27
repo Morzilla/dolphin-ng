@@ -53,7 +53,18 @@ public:
 
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget = nullptr) override;
 
+    /**
+     * dolphin-ng: where the group's title is written, in the header's coordinates. A click there selects the
+     * group's items, and the pointer is a hand over it (KItemListController); the rest of the header's row is plain
+     * background.
+     */
+    QRectF ngLabelRect() const;
+
 protected:
+    /** dolphin-ng: how wide the title is as drawn (the whole row unless the derived class says) */
+    virtual qreal ngLabelWidth() const;
+    virtual bool ngLabelIsPicture() const; // (drawn from the left whatever the direction of the text)
+
     virtual void paintRole(QPainter *painter, const QRectF &roleBounds, const QColor &color) = 0;
     virtual void paintSeparator(QPainter *painter, const QColor &color) = 0;
 

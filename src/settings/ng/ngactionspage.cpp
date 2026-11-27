@@ -7,6 +7,7 @@
 
 #include <KConfigGroup>
 #include <KDesktopFile>
+#include <KShell>
 #include <KIconButton>
 #include <KOpenWithDialog>
 #include <KService>
@@ -77,12 +78,44 @@ QIcon dot(const QColor &colour)
     return QIcon(pixmap);
 }
 
-// %f %F %u %U of a desktop file's Exec line -> {file}; the other field codes go
-QString commandFromExec(QString exec)
+// The field codes of a desktop file's Exec line (the Desktop Entry specification, "The Exec key"), for a quick
+// action: it runs on one file, the card's, so %f and %u are that file and %F and %U a list of one. %i is the
+// icon's option (--icon NAME, nothing without an icon), %c the name, %k the desktop file's location, %% a percent
+// sign; the deprecated codes (%d %D %n %N %v %m) and unknown ones are removed, as the specification asks
+QString commandFromExec(const QString &exec, const QString &icon, const QString &name, const QString &location)
 {
-    exec.replace(QRegularExpression(QStringLiteral("%[fFuU]")), QStringLiteral("{file}"));
-    exec.remove(QRegularExpression(QStringLiteral("\\s*%[ickdDnNvm]")));
-    return exec.trimmed();
+    QString command;
+    for (qsizetype i = 0; i < exec.size(); ++i) {
+        if (exec.at(i) != QLatin1Char('%') || i + 1 >= exec.size()) {
+            command += exec.at(i);
+            continue;
+        }
+        switch (exec.at(++i).toLatin1()) {
+        case 'f':
+        case 'F':
+        case 'u':
+        case 'U':
+            command += QStringLiteral("{file}");
+            break;
+        case 'i':
+            if (!icon.isEmpty()) {
+                command += QStringLiteral("--icon ") + KShell::quoteArg(icon);
+            }
+            break;
+        case 'c':
+            command += KShell::quoteArg(name);
+            break;
+        case 'k':
+            command += KShell::quoteArg(location);
+            break;
+        case '%':
+            command += QLatin1Char('%');
+            break;
+        default:
+            break;
+        }
+    }
+    return command.trimmed();
 }
 } // namespace
 
@@ -179,6 +212,16 @@ NgActionsPage::NgActionsPage(QWidget *parent)
     intro->setWordWrap(true);
     intro->setEnabled(false);
     outer->addWidget(intro);
+
+    // how the work of quick actions runs: all together (as it starts), or one after the other
+    m_oneAtATime = new QCheckBox(ngTr("Run quick actions one at a time (the others wait in the queue)", "Esegui le azioni rapide una alla volta (le altre aspettano in coda)"), this);
+    m_oneAtATime->setToolTip(ngTr("Off: every action starts at once, side by side. On: a new action waits until the one at work has ended; the title bar's jobs button shows the queue.",
+                                  "Spento: ogni azione parte subito, in parallelo. Acceso: una nuova azione aspetta che quella al lavoro sia finita; il pulsante dei lavori nella barra del titolo mostra la coda."));
+    m_oneAtATime->setChecked(ngSetting("JOBS_SERIES") == QLatin1String("1"));
+    connect(m_oneAtATime, &QCheckBox::toggled, this, [this] {
+        Q_EMIT changed();
+    });
+    outer->addWidget(m_oneAtATime);
 
     auto *panes = new QHBoxLayout();
     panes->setSpacing(14);
@@ -722,7 +765,7 @@ void NgActionsPage::addFromServiceMenu()
                 NgActionInfo info;
                 info.label = action.readEntry("Name");
                 info.icon = action.readEntry("Icon", desktop.readIcon());
-                info.command = commandFromExec(action.readEntry("Exec"));
+                info.command = commandFromExec(action.readEntry("Exec"), info.icon, desktop.readName(), desktop.fileName());
                 if (!info.label.isEmpty() && !info.command.isEmpty()) {
                     found.append({desktop.readName().isEmpty() ? file : desktop.readName(), info});
                 }
@@ -753,7 +796,7 @@ void NgActionsPage::addFromApplication()
     NgActionInfo info;
     info.label = ngTr("Open with %1", "Apri con %1").arg(service->name());
     info.icon = service->icon();
-    info.command = commandFromExec(service->exec());
+    info.command = commandFromExec(service->exec(), service->icon(), service->name(), service->entryPath());
     if (!info.command.contains(QLatin1String("{file}"))) {
         info.command += QStringLiteral(" {file}");
     }
@@ -819,6 +862,9 @@ void NgActionsPage::applySettings()
     }
     m_deleted.clear();
     group.sync();
+    KConfigGroup general = KSharedConfig::openConfig()->group(QStringLiteral("DolphinNG"));
+    general.writeEntry("JOBS_SERIES", m_oneAtATime->isChecked() ? QStringLiteral("1") : QStringLiteral("0"));
+    general.sync();
     ngQuickActionsChanged();
     ngSettingsInvalidate();
 }
@@ -848,6 +894,7 @@ void NgActionsPage::restoreDefaults()
         }
     }
     m_deleted = deleted;
+    m_oneAtATime->setChecked(false); // (in parallel)
     m_row = 0;
     showKinds();
     showList();

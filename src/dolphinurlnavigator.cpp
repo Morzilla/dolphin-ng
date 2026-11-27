@@ -83,6 +83,10 @@ DolphinUrlNavigator::DolphinUrlNavigator(const QUrl &url, QWidget *parent)
     root->setFocusPolicy(Qt::NoFocus);
     root->setIcon(QIcon::fromTheme(QStringLiteral("folder-root")));
     root->setIconSize(QSize(16, 16));
+    // (no key of its own inside the field: on a light Aurora a tool button is a white key, a white square in the bar)
+    root->setStyleSheet(QStringLiteral("QToolButton { background: transparent; border: none; border-radius: 6px; padding: 3px; }"
+                                       "QToolButton:hover { background: rgba(128, 128, 128, 0.22); }"
+                                       "QToolButton:pressed { background: rgba(128, 128, 128, 0.34); }"));
     root->setToolTip(ngTr("Root folder (/)", "Cartella radice (/)"));
     root->setAccessibleName(ngTr("Root folder", "Cartella radice"));
     connect(root, &QToolButton::clicked, this, [this] {

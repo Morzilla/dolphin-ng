@@ -7,6 +7,15 @@
 > 
 > It installs next to Fedora's Dolphin; open it with `dolphin-ng` or from the application menu. The same repository has the rest of the NG desktop: `breeze-ng`, `dolphin-ng`, `dialog-ng`, `neoline-icons` ([project page](https://copr.fedorainfracloud.org/coprs/morzilla/desktop-ng/)).
 >
+> **Kubuntu 26.04: there are packages in a PPA too**:
+>
+> ```
+> sudo add-apt-repository ppa:mori-daniele/desktop-ng
+> sudo apt install dolphin-ng
+> ```
+>
+> The same PPA has `breeze-ng`, `dolphin-ng`, `dialog-ng` and `neoline-icons` ([project page](https://launchpad.net/~mori-daniele/+archive/ubuntu/desktop-ng)).
+>
 > **This is dolphin-ng**, a fork of KDE's Dolphin that rethinks how you work with your files. File operations are
 > Dolphin's own; what changes is how files are shown and how quickly you get to what you need.
 >
@@ -25,6 +34,15 @@
 > - **Quick actions** on each file: resize or convert an image, extract an archive, a PDF to images or text,
 >   transcribe audio and video on your computer, convert media… plus your own commands.
 > - **Work in progress on the file itself**: copies, conversions and transcriptions grow next to their source.
+> - **A pipeline of the work on your files**: one view of every operation, the ones running and the ones done
+>   (quick actions, copies, moves, deletions, downloads), shared by every Dolphin NG window.
+> - **Recent Files that tell what happened**: not only what an application opened, but what was downloaded, made,
+>   added or modified lately, and by which program ("Downloaded from kubuntu.org with Firefox", "Modified with
+>   GIMP"), with [ng-recent](https://github.com/Morzilla/ng-recent) and, for changes anywhere in the home, the
+>   [ng-fsevents](https://github.com/Morzilla/ng-fsevents) service. KDE's own list is an option away.
+>
+>   ![Recent Files: the event and the program under each file](ng/screenshots/readme/recent-list.png)
+>
 > - **A glass sidebar**: places, recent files, pinned items, filters with their counts, every disk with its usage.
 > - **Selections that read as one**: neighbouring selected items share one outline.
 > - **The same look in every app's Open/Save window** with [Dialog NG](https://github.com/Morzilla/dialog-ng), and
@@ -34,7 +52,7 @@
 >
 > **Every feature in detail, with pictures: [NG.md](NG.md)** and the longer tour in [FEATURES.md](FEATURES.md).
 >
-> **Try it:** on Fedora with the COPR packages above; anywhere else with the graphical installer:
+> **Try it:** on Fedora and Kubuntu 26.04 with the packages above; anywhere else with the graphical installer:
 > [how it works and how to run it](https://github.com/Morzilla/breeze-ng/blob/ng/NG.md#everything-at-once) (it sets up
 > Dolphin NG and, if you want, the rest of the NG desktop, all in your home folder, next to the stock Dolphin).
 >

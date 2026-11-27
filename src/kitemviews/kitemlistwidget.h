@@ -17,6 +17,7 @@
 #include <QPalette>
 #include <QGraphicsWidget>
 #include <QStyle>
+#include <QSet>
 #include <QTimer>
 #include <functional>
 #include <QUrl>
@@ -52,6 +53,19 @@ DOLPHIN_EXPORT QString ngAgoText(const QDateTime &when);
 DOLPHIN_EXPORT QColor ngTagColour(const QString &tag);
 // dolphin-ng: the tags of a local file, read from its extended attributes (as KDE writes them, without Baloo)
 DOLPHIN_EXPORT QStringList ngFileTags(const QString &path);
+// dolphin-ng: where a file made by a quick action came from, kept in the file itself (extended attributes
+// user.dolphin-ng.made-from, the source's path, and user.dolphin-ng.made-by, the action's name), so that it travels with
+// the file when it is moved or renamed. Empty strings when the file says nothing
+struct NgMadeFrom {
+    QString source; // the path of the file it was made from
+    QString action; // "Transcribe", "Extract"
+    bool isEmpty() const
+    {
+        return source.isEmpty();
+    }
+};
+DOLPHIN_EXPORT NgMadeFrom ngFileMadeFrom(const QString &path);
+DOLPHIN_EXPORT void ngSetFileMadeFrom(const QString &path, const QString &source, const QString &action);
 DOLPHIN_EXPORT QString ngSetting(const char *name, const QString &fallback = QString());
 DOLPHIN_EXPORT int ngSettingInt(const char *name, int fallback);
 /** dolphin-ng: the interface text, in Italian when the desktop language is Italian and in English otherwise. */
@@ -149,6 +163,8 @@ public:
     void watchForChildren(const QUrl &parent);
     /** told by the model about every file that appears: ties it to a watched parent, if it is one of its children */
     void offerNewFile(const QUrl &url);
+    /** a file that has just appeared: to the desktop's recent files (a few at a time, never a bulk copy) */
+    void offerRecent(const QUrl &url);
     void link(const QUrl &parent, const QUrl &child);
     /** the parent of \a child, or an empty URL */
     QUrl parentOf(const QUrl &child) const;
@@ -165,7 +181,8 @@ public:
     /** the work on \a url can be stopped: a process of a quick action, or a job with a canceller */
     bool canCancel(const QUrl &url) const;
     void setCanceller(const QUrl &url, const std::function<void()> &cancel);
-    void cancel(const QUrl &url);
+    /** stops the work on \a url; \a queued: only takes off the queue an action still waiting on it */
+    void cancel(const QUrl &url, bool queued = false);
     /** the colour of a family's bubble: the colour of its parent's card, told by the parent when it paints */
     void setFamilyColour(const QString &family, const QColor &colour);
     QColor familyColour(const QString &family) const;
@@ -173,12 +190,56 @@ public:
     void setHoveredStop(const QUrl &url);
     bool isStopHovered(const QUrl &url) const;
 
+    /* The queue and the history of quick actions. */
+    /** starts \a program on \a url: at once, or (with the setting "one at a time") queued while another quick
+     *  action is at work. False if it could not be started. */
+    bool start(const QUrl &url, const QString &label, const QString &program, const QStringList &arguments, const QString &folder);
+    struct Job {
+        QUrl url;
+        QString label;
+        int percent = -1;
+        qint64 startedAt = 0;
+        bool queued = false;
+        bool canStop = false;
+    };
+    /** the work of quick actions, of every Dolphin NG: what runs first, then what waits */
+    QList<Job> jobs() const;
+    struct Done {
+        QUrl url;
+        QString label;
+        QStringList results; // the names of the files it made (for a copy or a move: where to, as shown)
+        QString id; // its line's id in the history ("io-…": a copy, a move or a deletion; "dl-…": a download)
+        QUrl where; // a copy or a move: where it went (a folder, or the new file)
+        qint64 startedAt = 0;
+        qint64 endedAt = 0;
+        bool stopped = false;
+    };
+    /** the quick actions that ended, the last first (kept in the application's data directory) */
+    static QList<Done> history(int limit = 200);
+    static void clearHistory();
+    /** one more line of the history, for work that is not a quick action (a copy, a move, a download seen
+     *  arriving); \a id keeps it to one line when more than one Dolphin NG sees it */
+    void addToHistory(const QString &id, const Done &done);
+
 Q_SIGNALS:
     void changed();
     void linksChanged();
 
 private:
     NgActivity();
+    struct Waiting {
+        QUrl url;
+        QString label, program, folder;
+        QStringList arguments;
+    };
+    QList<Waiting> m_queue;
+    QHash<QString, QString> m_programs; // key -> the program at work on it
+    QHash<QString, QString> m_labels; // key -> the action's name, as started
+    QSet<QString> m_stopped; // stopped by the user: said so in the history
+    bool launch(const Waiting &job);
+    void startWaiting();
+    void processEnded(const QString &k, qint64 pid);
+    void remember(const QString &k, qint64 pid);
     static QString key(const QUrl &url);
     void tick();
     QHash<QString, Entry> m_entries;
@@ -187,6 +248,8 @@ private:
     void parentDone(const QString &parentKey);
     QHash<QString, std::pair<QUrl, QUrl>> m_links; // child key -> (child, parent)
     QHash<QString, QUrl> m_watched; // parent key -> parent
+    QList<QUrl> m_recentBatch; // new files of this second, waiting to be offered to the recent files
+    QSet<QUrl> m_recentOffered;
     QHash<QString, qint64> m_linkedAt; // child key -> when it was tied (ms since epoch): it grows in
     QHash<QString, std::function<void()>> m_cancellers;
     QString m_hoveredStop;
@@ -235,6 +298,8 @@ DOLPHIN_EXPORT bool ngNoIcons();
 DOLPHIN_EXPORT bool ngNoIcons(const QGraphicsItem *item);
 // dolphin-ng: the drawn rows with columns of attributes after the name (ROW_COLUMNS=on), under Dolphin's own header
 DOLPHIN_EXPORT bool ngRowColumns();
+class KItemListView;
+DOLPHIN_EXPORT int ngRowZoomRoom(const KItemListView *view); // what the zoom adds to the height of a drawn row
 
 /** dolphin-ng: is this a dark colour scheme? The fork's own painting picks its shades from the answer. */
 DOLPHIN_EXPORT bool ngIsDark(const QPalette &palette);
@@ -583,6 +648,8 @@ protected:
     virtual void editedRoleChanged(const QByteArray &current, const QByteArray &previous);
     virtual void iconSizeChanged(int current, int previous);
     void resizeEvent(QGraphicsSceneResizeEvent *event) override;
+    /** dolphin-ng: the item's kept picture is drawn again when what it was drawn with changes (see the constructor) */
+    bool event(QEvent *event) override;
     void clearHoverCache();
 
     /**

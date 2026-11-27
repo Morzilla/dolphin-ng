@@ -5,6 +5,8 @@
  */
 
 #include "dolphinviewcontainer.h"
+#include "views/ngrecentview.h"
+#include "kitemviews/kitemlistcontainer.h"
 
 #include "admin/bar.h"
 #include "admin/workerintegration.h"
@@ -95,6 +97,7 @@
 #include <QScrollBar>
 #include <QStyle>
 #include <QScopeGuard>
+#include <QCheckBox>
 #include <QTimer>
 #include <QVariantAnimation>
 #include <QUrl>
@@ -712,6 +715,122 @@ private:
     const QColor *m_sheet;
 };
 
+// dolphin-ng: a choice that can be on with others (the filters of the recent list), as a word: nothing round it; off
+// it is dimmed, on it is in the accent, a little bolder, on a faint fill and with a tick before it. (The colours
+// come from the application's palette: this bar's own may be another one, and gave black on a dark window)
+class NgWordChip : public QAbstractButton
+{
+public:
+    NgWordChip(const QString &text, QWidget *parent)
+        : QAbstractButton(parent)
+    {
+        setText(text);
+        setCheckable(true);
+        setCursor(Qt::PointingHandCursor);
+        setFocusPolicy(Qt::TabFocus);
+        setAttribute(Qt::WA_Hover);
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    }
+
+    QSize sizeHint() const override
+    {
+        // (as wide as it is written: on, it is bolder and has its tick. The bar is laid out again when one is
+        // clicked, so the others make room)
+        QFont shown = font();
+        shown.setWeight(isChecked() ? QFont::DemiBold : QFont::Normal);
+        return QSize(7 + (isChecked() ? 13 : 0) + QFontMetrics(shown).horizontalAdvance(label()) + 7, qMax(28, QFontMetrics(shown).height() + 10));
+    }
+
+    // (the desktop writes a keyboard accelerator into a button's text, "&Modified": not drawn here)
+    QString label() const
+    {
+        QString shown = text();
+        shown.replace(QLatin1String("&&"), QStringLiteral("\x01")).remove(QLatin1Char('&')).replace(QLatin1Char('\x01'), QLatin1Char('&'));
+        return shown;
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const QPalette pal = QApplication::palette();
+        const bool dark = ngIsDark(pal);
+        const QColor ink = pal.color(QPalette::WindowText);
+        const QColor accent = ngAccent(pal.color(QPalette::Highlight), dark);
+        const bool hovered = underMouse();
+        const QRectF body = QRectF(rect()).adjusted(0.5, 2.5, -0.5, -2.5);
+        if (isChecked() || hovered) {
+            QColor fill = isChecked() ? accent : ink;
+            fill.setAlphaF(isChecked() ? (hovered ? 0.22 : 0.15) : 0.07);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(fill);
+            painter.drawRoundedRect(body, 8, 8);
+        }
+        QFont f = font();
+        f.setWeight(isChecked() ? QFont::DemiBold : QFont::Normal);
+        painter.setFont(f);
+        QColor textInk = isChecked() ? accent : ink;
+        textInk.setAlphaF(isChecked() ? 1.0 : (hovered ? 0.92 : 0.66));
+        qreal x = 7;
+        if (isChecked()) {
+            painter.setPen(QPen(accent, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            const qreal mid = height() / 2.0;
+            painter.drawPolyline(QPolygonF{QPointF(x, mid + 0.5), QPointF(x + 3.2, mid + 3.8), QPointF(x + 9, mid - 3.5)});
+            x += 13;
+        } else {
+            x = 7;
+        }
+        painter.setPen(textInk);
+        painter.drawText(QRectF(x, 0, width() - x, height()), Qt::AlignVCenter | Qt::AlignLeft, label());
+        if (hasFocus()) {
+            QColor ring = accent;
+            ring.setAlphaF(0.8);
+            painter.setPen(QPen(ring, 1.4));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRoundedRect(body, 8, 8);
+        }
+    }
+};
+
+// A hairline between two groups of such words
+class NgWordSeparator : public QWidget
+{
+public:
+    explicit NgWordSeparator(QWidget *parent)
+        : QWidget(parent)
+    {
+        setFixedSize(7, 28);
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        QColor line = QApplication::palette().color(QPalette::WindowText);
+        line.setAlphaF(0.16);
+        painter.fillRect(QRectF(3, 7, 1, height() - 14), line);
+    }
+};
+
+// A menu that stays open while its boxes are ticked: several kinds are chosen in one go
+class NgStayMenu : public QMenu
+{
+public:
+    using QMenu::QMenu;
+
+protected:
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        QAction *action = activeAction();
+        if (action && action->isCheckable() && action->isEnabled()) {
+            action->trigger();
+            return;
+        }
+        QMenu::mouseReleaseEvent(event);
+    }
+};
+
 class NgSortBar : public QWidget
 {
 public:
@@ -838,6 +957,11 @@ public:
             if (m_filter && !m_filter->text().isEmpty()) {
                 m_filter->clear(); // a new folder starts unfiltered
             }
+            // (into the list of what happened lately, or out of it: the bar is another one there, see rebuild())
+            const bool recent = recentStory();
+            if (recent != m_recentBar) {
+                rebuild();
+            }
         });
 
         connect(view, &DolphinView::sortRoleChanged, this, [this] {
@@ -926,7 +1050,7 @@ private:
     bool m_sheetApplying = false;
     QColor m_openSheet; // Aurora: the sheet of an open menu's button, see NgOpenSheet (invalid: the style sheet paints it)
     // what the filter shows: everything, files only (no folders), or one NgKind::Category
-    enum { All = -1, FilesOnly = NgKind::CategoryCount };
+    enum { All = -1, FilesOnly = NgKind::CategoryCount, ByHand = 1000, OnItsOwn = 1001 };
 
     // The chips and the search box draw themselves, the same under every widget style: a translucent
     // pill for the checked one, a fainter one on hover, no outlines that depend on the style's hover tracking.
@@ -1099,6 +1223,8 @@ public:
     QList<FilterEntry> filters() const
     {
         QList<FilterEntry> entries;
+        // (the list of what happened lately: by whom, the user or things that work on their own, is chosen in the
+        // bar, with what happened and the kinds of file)
         if (!m_view || m_total == 0 || m_total > 4000) {
             return entries;
         }
@@ -1118,11 +1244,29 @@ public:
     }
     void setFilter(int id)
     {
+        if (id == ByHand || id == OnItsOwn) {
+            // (not a filter of what is listed: the other of the two lists)
+            QUrl url(id == OnItsOwn ? QStringLiteral("ngrecent:/automatic") : QStringLiteral("ngrecent:/"));
+            url.setQuery(QStringLiteral("title=") + QString::fromLatin1(QUrl::toPercentEncoding(id == OnItsOwn ? ngTr("Automatic", "Automatici") : ngTr("Recent Files", "File recenti"))));
+            if (onOpenUrl && m_view && url.path() != (m_view->url().path().isEmpty() ? QStringLiteral("/") : m_view->url().path())) {
+                onOpenUrl(url);
+            }
+            return;
+        }
         setActive(id);
     }
+    std::function<void(const QUrl &)> onOpenUrl;
     std::function<void()> onFiltersChanged;
 
 private:
+    // whether the view shows the list of what happened lately in its own view (not the item view)
+    bool recentStory() const
+    {
+        return m_view && m_view->url().scheme() == QLatin1String("ngrecent") && !m_view->url().path().startsWith(QLatin1String("/op/"))
+            && ngSetting("RECENT_LOOK").toLower() != QLatin1String("classic");
+    }
+    bool m_recentBar = false;
+
     // A button that opens a menu: while the menu is open the button loses its own highlight and takes the colour
     // of the menu, so that the two read as one piece (the style joins them, see Breeze NG).
     void menuButton(QToolButton *button)
@@ -1487,6 +1631,121 @@ private:
             fitSorting();
         });
         if (!m_view) {
+            m_flow->invalidate();
+            return;
+        }
+        // The list of what happened lately in its own view (NgRecentView): there is nothing to sort, group or lay
+        // out. In the place of all that, well in sight, what to see: everything that was made or changed, only
+        // what is new, only what was modified, or what was only opened
+        m_recentBar = recentStory();
+        if (m_recentBar) {
+            auto *recentView = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly);
+            const int events = m_view->property("_ng_recent_events").toInt();
+            const int kinds = m_view->property("_ng_recent_kinds").toInt();
+            const int who = m_view->property("_ng_recent_who").toInt() == 0 ? 1 : m_view->property("_ng_recent_who").toInt();
+            auto choose = [this, who](int newEvents, int newKinds, int newWho = 0) {
+                newWho = newWho == 0 ? who : newWho;
+                m_view->setProperty("_ng_recent_events", newEvents);
+                m_view->setProperty("_ng_recent_kinds", newKinds);
+                m_view->setProperty("_ng_recent_who", newWho);
+                if (auto *view = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly)) {
+                    view->setFilters(newEvents, newKinds, newWho);
+                }
+                rebuild();
+            };
+            // Words, no frames: "Everything" clears; then what happened, by whom, and the kinds of file one looks
+            // for most; the other kinds in a menu
+            auto word = [this](const QString &text, bool on) {
+                auto *chip = new NgWordChip(text, this);
+                chip->setChecked(on);
+                m_flow->addWidget(chip);
+                return chip;
+            };
+            auto separator = [this] {
+                m_flow->addWidget(new NgWordSeparator(this));
+            };
+            m_sortPill = nullptr;
+            connect(word(ngTr("Everything", "Tutto"), events == 0 && kinds == 0), &QAbstractButton::clicked, this, [choose] {
+                choose(0, 0);
+            });
+            separator();
+            const struct {
+                int bit;
+                QString text;
+            } happened[] = {{1, ngTr("Created", "Creati")}, {2, ngTr("Modified", "Modificati")}, {4, ngTr("Opened", "Aperti")}};
+            for (const auto &one : happened) {
+                const int bit = one.bit;
+                connect(word(one.text, events & bit), &QAbstractButton::clicked, this, [choose, events, kinds, bit] {
+                    choose(events ^ bit, kinds);
+                });
+            }
+            separator();
+            // by whom: the user, or things that work on their own (a synchronisation, an updater, the desktop's own
+            // services; ng-fsevents tells them apart). One of the two is always on
+            connect(word(ngTr("By me", "Da me"), who & 1), &QAbstractButton::clicked, this, [choose, events, kinds, who] {
+                choose(events, kinds, (who ^ 1) == 0 ? 2 : (who ^ 1));
+            });
+            connect(word(ngTr("By others", "Da altri"), who & 2), &QAbstractButton::clicked, this, [choose, events, kinds, who] {
+                choose(events, kinds, (who ^ 2) == 0 ? 1 : (who ^ 2));
+            });
+            separator();
+            const QString labels[NgKind::CategoryCount] = {ngTr("Folders", "Cartelle"),       ngTr("Images", "Immagini"),          ngTr("Documents", "Documenti"),
+                                                           ngTr("Spreadsheets", "Fogli"),     ngTr("Archives", "Archivi"),         ngTr("Audio and video", "Audio e video"),
+                                                           ngTr("Code and data", "Codice e dati"), ngTr("Packages", "Pacchetti"), ngTr("Other", "Altro")};
+            for (const NgKind::Category category : {NgKind::Document, NgKind::Sheet, NgKind::Image, NgKind::Folder}) {
+                const int bit = 1 << int(category);
+                connect(word(labels[category], kinds & bit), &QAbstractButton::clicked, this, [choose, events, kinds, bit] {
+                    choose(events, kinds ^ bit);
+                });
+            }
+            // the kinds asked for less often: a menu of boxes, which says on its button what is chosen
+            const QList<NgKind::Category> rare{NgKind::Archive, NgKind::Media, NgKind::Data, NgKind::Package, NgKind::Other};
+            auto rareTitle = [labels, rare](int chosenKinds) {
+                QStringList chosen;
+                for (const NgKind::Category category : rare) {
+                    if (chosenKinds & (1 << int(category))) {
+                        chosen.append(labels[category]);
+                    }
+                }
+                return chosen.isEmpty() ? ngTr("Other kinds", "Altri tipi") : chosen.size() == 1 ? chosen.constFirst() : ngTr("Other kinds: %1", "Altri tipi: %1").arg(chosen.size());
+            };
+            auto *more = new QToolButton(this);
+            more->setAutoRaise(true);
+            more->setProperty("ngPill", true);
+            more->setToolButtonStyle(Qt::ToolButtonTextOnly);
+            more->setPopupMode(QToolButton::InstantPopup);
+            more->setText(rareTitle(kinds));
+            auto *menu = new NgStayMenu(more);
+            for (const NgKind::Category category : rare) {
+                const int bit = 1 << int(category);
+                QAction *action = menu->addAction(labels[category]);
+                action->setCheckable(true);
+                action->setChecked(kinds & bit);
+                // (no rebuild of the bar here: the menu would go with it. The view is told, the button says what is on)
+                connect(action, &QAction::toggled, this, [this, more, rareTitle, bit](bool on) {
+                    const int now = on ? (m_view->property("_ng_recent_kinds").toInt() | bit) : (m_view->property("_ng_recent_kinds").toInt() & ~bit);
+                    m_view->setProperty("_ng_recent_kinds", now);
+                    if (auto *view = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly)) {
+                        view->setFilters(m_view->property("_ng_recent_events").toInt(), now, m_view->property("_ng_recent_who").toInt());
+                    }
+                    more->setText(rareTitle(now));
+                    more->setChecked(false);
+                });
+            }
+            more->setMenu(menu);
+            menuButton(more);
+            m_flow->addWidget(more);
+            // (the words of "Everything" and the rest follow what the menu did when it closes)
+            connect(menu, &QMenu::aboutToHide, this, [this, kinds] {
+                if (m_view && m_view->property("_ng_recent_kinds").toInt() != kinds) {
+                    QTimer::singleShot(0, this, [this] {
+                        rebuild();
+                    });
+                }
+            });
+            const int present = 0;
+            Q_UNUSED(present)
+            Q_UNUSED(recentView)
             m_flow->invalidate();
             return;
         }
@@ -1861,7 +2120,7 @@ private:
                 current = label;
             }
             connect(action, &QAction::triggered, this, [this, what] {
-                setActive(what);
+                setFilter(what); // ("Yours" and "Automatic" are not kinds of file: they open the other recent list)
             });
         };
         for (const FilterEntry &filter : filters()) {
@@ -3452,6 +3711,36 @@ DolphinViewContainer::DolphinViewContainer(const QUrl &url, QWidget *parent)
         });
     }
     m_topLayout->addWidget(m_view, positionFor.view, 0);
+
+    // dolphin-ng: the list of what happened lately has a view of its own (NgRecentView: cards by day, operations that
+    // open in place), which stands in for the items while that list is on show. RECENT_LOOK=classic: the item view
+    auto showRecent = [this] {
+        const QUrl url = m_view->url();
+        const bool recent = url.scheme() == QLatin1String("ngrecent") && !url.path().startsWith(QLatin1String("/op/"))
+            && ngSetting("RECENT_LOOK").toLower() != QLatin1String("classic");
+        auto *recentView = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly);
+        if (recent && !recentView) {
+            recentView = new NgRecentView(m_view);
+            m_view->layout()->addWidget(recentView);
+            connect(recentView, &NgRecentView::folderRequested, this, [this](const QUrl &folder) {
+                setUrl(folder);
+            });
+        }
+        // (the item view goes on listing underneath: the filters, the status bar and the sidebar count on it)
+        if (auto *items = m_view->findChild<KItemListContainer *>()) {
+            items->setVisible(!recent);
+        }
+        if (recentView) {
+            recentView->setVisible(recent);
+            if (recent) {
+                recentView->setFilters(m_view->property("_ng_recent_events").toInt(), m_view->property("_ng_recent_kinds").toInt(),
+                                       m_view->property("_ng_recent_who").toInt());
+                recentView->setUrl(url);
+            }
+        }
+    };
+    connect(m_view, &DolphinView::urlChanged, this, showRecent);
+    QTimer::singleShot(0, this, showRecent);
     m_topLayout->addWidget(m_filterBar, positionFor.filterBar, 0);
     if (GeneralSettings::showStatusBar() == GeneralSettings::EnumShowStatusBar::FullWidth) {
         m_topLayout->addWidget(m_statusBar, positionFor.statusBar, 0);
@@ -3836,6 +4125,10 @@ QString DolphinViewContainer::placesText() const
 void DolphinViewContainer::reload()
 {
     view()->reload();
+    // (the list of what happened lately in its own view: read again too)
+    if (auto *recentView = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly); recentView && recentView->isVisible()) {
+        recentView->refresh();
+    }
     m_messageWidget->hide();
     m_statusBar->updateSpaceInfo();
 }
@@ -3868,6 +4161,12 @@ QString DolphinViewContainer::caption() const
     }
 
     KFilePlacesModel *placesModel = DolphinPlacesModelSingleton::instance().placesModel();
+
+    // dolphin-ng: the list of what happened lately is shown from the place "Recent Files": its name
+    if (url().scheme() == QLatin1String("ngrecent")) {
+        const QModelIndex place = placesModel->closestItem(QUrl(QStringLiteral("recentlyused:/files")));
+        return place.isValid() ? placesModel->text(place) : ngTr("Recent", "Recenti");
+    }
 
     QModelIndex url_index = placesModel->closestItem(url());
 
@@ -4612,6 +4911,9 @@ public:
         , m_open(std::move(open))
         , m_part(part)
     {
+        if (bar && m_open) {
+            bar->onOpenUrl = m_open; // ("Yours" and "Automatic" in the recent list are two lists, not a filter)
+        }
         setAttribute(Qt::WA_NoSystemBackground);
         setMouseTracking(true);
         setCursor(Qt::PointingHandCursor);

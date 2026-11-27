@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-%global commit      812dca07c19b8871eb0b462df80515b618c0f6fe
+%global commit      d97811a881ebf9fa13898aa592dae2d7b551d014
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    202611241328
+%global snapdate    202611261359
 # installed apart from the system, next to Fedora's own Dolphin
 %global ngprefix    /opt/ng/dolphin-ng
 # its programs find its libraries through an RPATH to /opt/ng/dolphin-ng: on purpose, since they have the same names
@@ -132,6 +132,12 @@ fi
 %{_datadir}/icons/hicolor/scalable/apps/dolphin-ng.svg
 
 %changelog
+* Thu Nov 26 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611261359gitd97811a-1
+- The pipeline: a Jobs button and a Jobs tab with what is at work, the queue and the history of quick actions, copies, moves, deletions and downloads, shared by every window
+- A file made by a quick action says where it comes from, on its card and in the information panel
+- Quick actions: Exec field codes in custom commands; one at a time as an option
+- Work in progress shown in every Dolphin NG window
+
 * Tue Nov 24 2026 Morzilla <3956663+Morzilla@users.noreply.github.com> - 26.08.1^202611241328git812dca0-1
 - Sort bar: the menu button centred in a narrow window
 - Details: the pin of a pinned row in the middle of the row

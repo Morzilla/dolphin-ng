@@ -956,6 +956,25 @@ bool KItemListController::hoverMoveEvent(QGraphicsSceneHoverEvent *event, const 
         return false;
     }
 
+    // dolphin-ng: the pointer is a hand over a group's title: a click there selects the group
+    {
+        bool overTitle = false;
+        QHashIterator<KItemListWidget *, KItemListGroupHeader *> it(m_view->m_visibleGroups);
+        while (it.hasNext() && !overTitle) {
+            it.next();
+            const KItemListGroupHeader *header = it.value();
+            overTitle = header && header->isVisible() && header->ngLabelRect().contains(header->mapFromItem(m_view, event->pos()));
+        }
+        if (overTitle != m_ngOverGroupTitle) {
+            m_ngOverGroupTitle = overTitle;
+            if (overTitle) {
+                m_view->setCursor(Qt::PointingHandCursor);
+            } else {
+                m_view->unsetCursor();
+            }
+        }
+    }
+
     // We identify the widget whose expansionArea had been hovered before this hoverMoveEvent() triggered.
     // we can't use hoveredWidget() here (it handles the icon+text rect, not the expansion rect)
     // like hoveredWidget(), we find the hovered widget for the expansion rect
@@ -1046,6 +1065,10 @@ bool KItemListController::hoverLeaveEvent(QGraphicsSceneHoverEvent *event, const
 {
     Q_UNUSED(event)
     Q_UNUSED(transform)
+    if (m_ngOverGroupTitle && m_view) { // dolphin-ng: the hand of a group's title goes with the pointer
+        m_ngOverGroupTitle = false;
+        m_view->unsetCursor();
+    }
 
     m_mousePress = false;
     m_isTouchEvent = false;
@@ -1652,7 +1675,9 @@ bool KItemListController::onPress(const QPointF &pos, const Qt::KeyboardModifier
         while (it.hasNext()) {
             it.next();
             KItemListGroupHeader *header = it.value();
-            if (!header || !header->isVisible() || !header->contains(header->mapFromItem(m_view, pressedMousePos))) {
+            // (on the title itself, not anywhere on its row: a click on the empty part of the row is a click on the
+            // background, which clears the selection or starts a rubber band, and selected a whole group by mistake)
+            if (!header || !header->isVisible() || !header->ngLabelRect().contains(header->mapFromItem(m_view, pressedMousePos))) {
                 continue;
             }
             const int first = it.key()->index();

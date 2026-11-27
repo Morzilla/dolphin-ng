@@ -8,8 +8,9 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
+    # (stacked pull requests too: a branch on top of another one is reviewed like one on the main branch)
     base_branches:
-      - "ng"
+      - ".*"
   path_filters:
     - "!po/**"
     - "!doc/**"

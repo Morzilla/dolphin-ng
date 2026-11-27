@@ -173,6 +173,9 @@ ViewProperties::ViewProperties(const QUrl &url)
     } else if (url.scheme() == QLatin1String("recentlyused")) {
         m_filePath = destinationDir(QStringLiteral("recentlyused"));
         useRecentDocumentsView = true;
+    } else if (url.scheme() == QLatin1String("ngrecent")) { // dolphin-ng: what happened lately (the ng-recent component)
+        m_filePath = destinationDir(QStringLiteral("ngrecent"));
+        useRecentDocumentsView = true;
     } else if (url.scheme() == QLatin1String("timeline")) {
         m_filePath = destinationDir(QStringLiteral("timeline"));
         useRecentDocumentsView = true;
@@ -270,7 +273,8 @@ ViewProperties::ViewProperties(const QUrl &url)
             if (useRecentDocumentsView) {
                 setSortRole(QByteArrayLiteral("accesstime"));
                 setViewMode(DolphinView::DetailsView);
-                setVisibleRoles({"text", "path", "accesstime"});
+                // (dolphin-ng: the list of what happened lately also has the size: the rows' drawings write it)
+                setVisibleRoles(url.scheme() == QLatin1String("ngrecent") ? QList<QByteArray>{"text", "type", "size", "accesstime", "path"} : QList<QByteArray>{"text", "path", "accesstime"});
             } else {
                 setSortRole(QByteArrayLiteral("modificationtime"));
             }

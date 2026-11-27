@@ -109,6 +109,28 @@ Qt::Orientation KItemListGroupHeader::scrollOrientation() const
     return m_scrollOrientation;
 }
 
+QRectF KItemListGroupHeader::ngLabelRect() const
+{
+    if (m_dirtyCache) {
+        const_cast<KItemListGroupHeader *>(this)->updateCache(); // (not painted yet: the title's place is not known)
+    }
+    // (a little air round the words, so that the target is not as thin as the letters)
+    const qreal width = qMin(ngLabelWidth(), m_roleBounds.width());
+    // (right to left the words are drawn against the right edge; a picture, the stars of a rating, always from the left)
+    const qreal left = layoutDirection() == Qt::RightToLeft && !ngLabelIsPicture() ? m_roleBounds.right() - width : m_roleBounds.left();
+    return QRectF(left, m_roleBounds.top(), width, m_roleBounds.height()).adjusted(-8, -4, 8, 4);
+}
+
+qreal KItemListGroupHeader::ngLabelWidth() const
+{
+    return m_roleBounds.width();
+}
+
+bool KItemListGroupHeader::ngLabelIsPicture() const
+{
+    return false;
+}
+
 void KItemListGroupHeader::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
     Q_UNUSED(painter)

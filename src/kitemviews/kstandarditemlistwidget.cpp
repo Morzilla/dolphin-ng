@@ -61,6 +61,101 @@ void ngPaintContentSketch(QPainter *painter, const QRectF &band, int category, c
                           const QString &sizeText = QString(), const QFont *font = nullptr, int special = 0, bool whole = false, const QStringList &tags = {},
                           bool openTabs = false, const QStringList &inside = {}, QList<QRectF> *insidePlaced = nullptr);
 
+// dolphin-ng: what happened to an entry of the list of what happened lately ("Downloaded from kde.org"), or nothing for any
+// other item. The ng-recent component marks its entries in UDS_EXTRA + 7 (KDE's own recent files also fill UDS_EXTRA)
+static QString ngHappened(const KFileItem &item)
+{
+    if (item.isNull() || item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) != QLatin1String("ngrecent")) {
+        return QString();
+    }
+    return item.entry().stringValue(KIO::UDSEntry::UDS_COMMENT);
+}
+
+// dolphin-ng: the list of what happened lately reads at a glance by colour: what kind of thing happened to an entry
+// (ng-recent's kind in UDS_EXTRA + 8; for things done in one go, 6, what they did in + 14; + 11 when it was done by
+// something that works on its own). -1 for any other item; else 0 new, 1 added, 2 modified, 3 downloaded, 4 made by
+// an action, 5 opened, 7 automatic
+static int ngRecentHue(const KFileItem &item, bool *group = nullptr)
+{
+    if (group) {
+        *group = false;
+    }
+    if (item.isNull() || item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) != QLatin1String("ngrecent")) {
+        return -1;
+    }
+    int kind = item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 8).toInt();
+    if (kind == 6) {
+        if (group) {
+            *group = true;
+        }
+        const int made = item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 14).toInt();
+        kind = made == 1 ? 0 : made == 2 ? 1 : 2;
+    }
+    return item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 11) == QLatin1String("automatic") ? 7 : kind;
+}
+
+static QColor ngRecentColor(int hue, bool dark)
+{
+    switch (hue) {
+    case 0:
+        return dark ? QColor(0xE6, 0xB2, 0x5C) : QColor(0xA8, 0x6A, 0x12); // new: amber
+    case 1:
+        return dark ? QColor(0xB9, 0x9C, 0xF0) : QColor(0x7A, 0x4F, 0xC0); // added: violet
+    case 2:
+        return dark ? QColor(0x86, 0xB6, 0xF2) : QColor(0x2C, 0x6F, 0xC7); // modified: blue
+    case 3:
+        return dark ? QColor(0x6F, 0xD0, 0x8F) : QColor(0x2A, 0x8A, 0x4A); // downloaded: green
+    case 4:
+        return dark ? QColor(0xF0, 0x8A, 0x7C) : QColor(0xC0, 0x39, 0x2B); // made by an action: red
+    case 7:
+        return dark ? QColor(0x6F, 0xD0, 0xD0) : QColor(0x1A, 0x8A, 0x8A); // on its own: teal
+    default:
+        return QColor();
+    }
+}
+
+// Things done in one go, a line that opens on its files: not a folder's icon but a badge in the colour of what was
+// done, with a second sheet behind it (many files) and a sign: + new files, an arrow for files added, a pencil for
+// files modified, a turning arrow for what worked on its own
+static void ngPaintRecentBadge(QPainter *painter, const QRectF &box, int hue, bool dark)
+{
+    const QColor ink = ngRecentColor(hue, dark);
+    QColor fill = ink, edge = ink, back = ink, backEdge = ink;
+    fill.setAlphaF(dark ? 0.22 : 0.15);
+    edge.setAlphaF(0.50);
+    back.setAlphaF(dark ? 0.12 : 0.08);
+    backEdge.setAlphaF(0.28);
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing);
+    const qreal radius = box.width() * 0.26;
+    const QRectF front = box.adjusted(0.5, 3.5, -3.5, -0.5);
+    painter->setPen(QPen(backEdge, 1));
+    painter->setBrush(back);
+    painter->drawRoundedRect(front.translated(3, -3), radius, radius);
+    painter->setPen(QPen(edge, 1));
+    painter->setBrush(fill);
+    painter->drawRoundedRect(front, radius, radius);
+    painter->setBrush(Qt::NoBrush);
+    painter->setPen(QPen(ink, qMax(1.6, box.width() / 18.0), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    const QPointF c = front.center();
+    const qreal r = front.width() * 0.22;
+    if (hue == 0) {
+        painter->drawLine(QPointF(c.x() - r, c.y()), QPointF(c.x() + r, c.y()));
+        painter->drawLine(QPointF(c.x(), c.y() - r), QPointF(c.x(), c.y() + r));
+    } else if (hue == 1) {
+        painter->drawLine(QPointF(c.x() - r, c.y()), QPointF(c.x() + r, c.y()));
+        painter->drawPolyline(QPolygonF{QPointF(c.x() + r * 0.3, c.y() - r * 0.7), QPointF(c.x() + r, c.y()), QPointF(c.x() + r * 0.3, c.y() + r * 0.7)});
+    } else if (hue == 7) {
+        const QRectF circle(c.x() - r, c.y() - r, 2 * r, 2 * r);
+        painter->drawArc(circle, 60 * 16, 270 * 16);
+        painter->drawPolyline(QPolygonF{QPointF(c.x() + r * 0.15, c.y() - r * 1.5), QPointF(c.x() + r * 0.62, c.y() - r * 0.86), QPointF(c.x() - r * 0.15, c.y() - r * 0.5)});
+    } else {
+        painter->drawLine(QPointF(c.x() - r * 0.75, c.y() + r * 0.75), QPointF(c.x() + r * 0.75, c.y() - r * 0.75));
+        painter->drawLine(QPointF(c.x() - r, c.y() + r * 1.15), QPointF(c.x() + r, c.y() + r * 1.15));
+    }
+    painter->restore();
+}
+
 // dolphin-ng: the well-known folders of the home (xdg-user-dirs), recognised by where they are: 0 for any other
 // folder, else 1 desktop, 2 downloads, 3 documents, 4 pictures, 5 music, 6 videos, 7 templates, 8 public
 int ngSpecialFolder(const QString &path)
@@ -650,7 +745,7 @@ void KStandardItemListWidgetInformant::calculateDetailsLayoutItemSizeHints(QVect
         : details                                    ? option.padding * 2 + textHeight + 12
         : ngNoIcons(view) ? option.padding * 2 + textHeight + (ngMark() == NgMark::Object ? 44 : 24) // no icon: as tall as its two lines (a little more for the drawing)
                           : option.padding * 2 + qMax(option.iconSize, textHeight);
-    logicalHeightHints.fill(std::make_pair(height, false));
+    logicalHeightHints.fill(std::make_pair(height + (ngNoIcons(view) ? ngRowZoomRoom(view) : 0), false));
     logicalWidthHint = -1.0;
 }
 
@@ -791,6 +886,11 @@ QPixmap ngDitheredWash(const QColor &tint, int width, qreal start, qreal middle,
 
 void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
+    // dolphin-ng: painted into the item's kept picture (the cache mode set in the constructor) there is no widget: the
+    // view's own viewport stands for it (its palette, its focus)
+    if (!widget && scene() && !scene()->views().isEmpty()) {
+        widget = scene()->views().constFirst()->viewport();
+    }
     const_cast<KStandardItemListWidget *>(this)->triggerCacheRefreshing();
 
     // dolphin-ng: a cut file (waiting to be moved) is drawn whole in grey and see-through: the card or row is
@@ -955,7 +1055,23 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
             }
         }
         const NgMark mark = m_ngDetailsRow ? NgMark::Tile : ngMark(); // (the Details view: the small tile)
-        if (m_ngObjectRow) {
+        // the list of what happened lately: things done in one go have their badge in place of a folder
+        bool recentGroup = false;
+        int recentHue = -1;
+        if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
+            if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
+                recentHue = ngRecentHue(fileModel->fileItem(index()), &recentGroup);
+            }
+        }
+        if (recentGroup && recentHue >= 0) {
+            const qreal side = qMin(size().height() - 12, qreal(44));
+            const TextInfo *nameInfo = m_textInfo.value("text");
+            const qreal room = (nameInfo ? nameInfo->pos.x() : x0 + side + 12) - x0 - 10;
+            const qreal fitted = qMin(side, room);
+            if (fitted >= 16) {
+                ngPaintRecentBadge(painter, QRectF(x0 + 6, (size().height() - fitted) / 2.0, fitted, fitted), recentHue, ngIsDark(styleOption().palette));
+            }
+        } else if (m_ngObjectRow) {
             // the drawing of the card, small: type and size written on it; a real preview becomes the object
             // (a print, a page, a film strip). Resting on a preview opens the quick view, as on the cards
             // (with expandable folders, after the expansion arrow and the tree lines of the parents, not under them)
@@ -1231,6 +1347,24 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
             continue; // dolphin-ng: the hover actions take the place of the date
         }
         const TextInfo *textInfo = m_textInfo.value(m_sortedVisibleRoles[i]);
+        // the list of what happened lately: what happened, in its colour (see ngRecentHue)
+        bool eventInk = false;
+        if (ngRow && m_sortedVisibleRoles[i] == "type" && !isSelected()) {
+            if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
+                if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
+                    const QColor ink = ngRecentColor(ngRecentHue(fileModel->fileItem(index())), ngIsDark(styleOption().palette));
+                    if (ink.isValid()) {
+                        painter->setPen(ink);
+                        painter->drawStaticText(textInfo->pos, textInfo->staticText);
+                        painter->setPen(infoInk);
+                        eventInk = true;
+                    }
+                }
+            }
+        }
+        if (eventInk) {
+            continue;
+        }
         if (ngHalo) {
             ngPaintTextHalo(
                 painter,
@@ -2090,11 +2224,14 @@ void KStandardItemListWidget::updateExpansionArea()
         const QHash<QByteArray, QVariant> values = data();
         const int expandedParentsCount = values.value("expandedParentsCount", 0).toInt();
         if (expandedParentsCount >= 0) {
-            const int widgetIconSize = styleOption().iconSize;
-            const qreal widgetHeight = size().height();
+            // dolphin-ng: a drawn row grows with the zoom (ngRowZoomRoom); the arrow and the step of a level stay as
+            // they are at the default size, or the whole row would move right as one zooms in
+            const int zoomRoom = ngNoIcons(this) ? ngRowZoomRoom(qobject_cast<const KItemListView *>(parentObject())) : 0;
+            const int widgetIconSize = styleOption().iconSize - zoomRoom;
+            const qreal widgetHeight = size().height() - zoomRoom;
             const qreal inc = (widgetHeight - widgetIconSize) / 2;
             const qreal x = expandedParentsCount * widgetHeight + inc;
-            const qreal y = inc;
+            const qreal y = inc + zoomRoom / 2.0;
             if (layoutDirection() == Qt::LeftToRight) {
                 const qreal leftPaddingWidth = m_highlightEntireRow ? leftPadding() : 0;
                 m_expansionArea = QRectF(leftPaddingWidth + x, y, widgetIconSize, widgetIconSize);
@@ -2755,6 +2892,15 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
             }
         }
 
+        // in the list of what happened lately the first date is the event's: "When", and for today its time
+        QString eventText;
+        if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
+            if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
+                eventText = ngHappened(fileModel->fileItem(index()));
+            }
+        }
+        const bool eventRow = !eventText.isEmpty();
+
         // ---- time column: "C  12/10/26 · 29 giorni fa" over "M  09/11/26 · ieri"; dropped on a narrow view (then chips)
         m_ngTime.clear();
         const bool roomForTime = size().width() >= fontHeight * 42;
@@ -2769,15 +2915,18 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
             QFont small = m_customizedFont;
             small.setPointSizeF(small.pointSizeF() * 0.9);
             const QFontMetricsF smallMetrics(small);
-            const QString createdLabel = usedFirst ? (m_ngObjectRow ? ngTr("Used", "Usato") : QStringLiteral("U"))
+            const QString createdLabel = (usedFirst && eventRow) ? (m_ngObjectRow ? ngTr("When", "Quando") : QStringLiteral("Q"))
+                : usedFirst ? (m_ngObjectRow ? ngTr("Used", "Usato") : QStringLiteral("U"))
                                                    : (m_ngObjectRow ? ngTr("Created", "Creato") : QStringLiteral("C"));
             const QString modifiedLabel = m_ngObjectRow ? ngTr("Modified", "Modificato") : QStringLiteral("M");
             const qreal letterWidth = m_ngObjectRow ? qMax(smallMetrics.horizontalAdvance(createdLabel), smallMetrics.horizontalAdvance(modifiedLabel)) + 10
                                                     : monoMetrics.horizontalAdvance(QStringLiteral("M")) + 8;
-            auto line = [&](const QString &letter, const QDateTime &when, qreal y) {
+            auto line = [&](const QString &letter, const QDateTime &when, qreal y, bool clock = false) {
                 NgTimeLine entry;
                 entry.letter = letter;
-                entry.text = QStringLiteral("%1 · %2").arg(locale.toString(when.date(), QLocale::ShortFormat), ngAgoText(when));
+                // (an event of today: its time, which is what tells two of them apart)
+                const bool today = clock && when.date() == QDate::currentDate();
+                entry.text = QStringLiteral("%1 · %2").arg(today ? locale.toString(when.time(), QLocale::ShortFormat) : locale.toString(when.date(), QLocale::ShortFormat), ngAgoText(when));
                 entry.text = smallMetrics.elidedText(entry.text, Qt::ElideRight, timeWidth - letterWidth);
                 entry.letterPos = m_ngObjectRow ? QPointF(timeLeft, y + smallMetrics.ascent())
                                                 : QPointF(timeLeft, y + monoMetrics.ascent() + (smallMetrics.height() - monoMetrics.height()) / 2);
@@ -2787,7 +2936,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
             const qreal rowsHeight = 2 * smallMetrics.height() + 1;
             const qreal top = (widgetHeight - rowsHeight) / 2.0;
             if (created.isValid()) {
-                line(createdLabel, created, top);
+                line(createdLabel, created, top, usedFirst && eventRow);
                 line(modifiedLabel, modified, top + smallMetrics.height() + 1);
             } else {
                 line(modifiedLabel, modified, top + (smallMetrics.height() + 1) / 2.0);
@@ -2899,6 +3048,11 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
                 // in its column, vertically centred, elided to it; sizes and counts to the right, as in Dolphin
                 const qreal roleWidth = columnWidth(role);
                 QString text = roleText(role, values);
+                // (the list of what happened lately: the type column says what happened, one line for each entry also
+                // with the compact rows, which have no chips; the chip under the name keeps the kind)
+                if (eventRow && role == "type") {
+                    text = eventText;
+                }
                 const qreal available = qMax(qreal(0), roleWidth - columnWidthInc);
                 qreal width = m_customizedFontMetrics.horizontalAdvance(text);
                 if (width > available) {
@@ -2976,6 +3130,23 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
             }
             if (typeText.isEmpty()) {
                 typeText = isDir ? ngTr("Folder", "Cartella") : values.value("text").toString().section(QLatin1Char('.'), -1).toUpper();
+            }
+            // in the list of what happened lately (ngrecent:/) the row says what happened, in place of the kind
+            if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
+                if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
+                    // (not where the type column already says it)
+                    const bool inColumn = columns && m_sortedVisibleRoles.contains("type");
+                    const KFileItem recentItem = fileModel->fileItem(index());
+                    if (const QString happened = ngHappened(recentItem); !happened.isEmpty() && !inColumn) {
+                        // (shortened to the room there is: a chip that does not fit is left out, and this one is
+                        // what the row is for)
+                        typeText = chipMetrics.elidedText(happened, Qt::ElideRight, qMax(qreal(60), textRight - chipX - 18));
+                    } else if (!happened.isEmpty() && recentItem.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 8) == QLatin1String("6")) {
+                        // things done in one go: not "Folder", how many files it opens on
+                        const int files = recentItem.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 10).toInt();
+                        typeText = QLocale().toString(files) + QLatin1Char(' ') + (files == 1 ? ngTr("file", "file") : ngTr("files", "file"));
+                    }
+                }
             }
             chip(typeText, !m_ngObjectRow);
             if (m_ngObjectRow && isDir) {
@@ -3190,7 +3361,8 @@ void KStandardItemListWidget::drawSiblingsInformation(QPainter *painter)
         const QBitArray siblings = siblingsInformation();
         const int own = siblings.count() - 1; // the item's own level; 0: the first level
         const qreal h = size().height();
-        const qreal step = h; // one level further in
+        // one level further in: the row's height without what the zoom adds to it, as updateExpansionArea() steps
+        const qreal step = h - ngRowZoomRoom(qobject_cast<const KItemListView *>(parentObject()));
         const qreal mid = h / 2.0;
         const qreal ownX = (m_expansionArea.left() + m_expansionArea.right()) / 2.0; // the expansion arrow
         // where the tile is (as paint() places it): a level's children hang from under the centre of its tile
@@ -4225,6 +4397,14 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
         if (used.isValid()) {
             created = used;
             createdCaption = ngTr("Used", "Usato");
+            // (in the list of what happened lately that date is the event's, of whatever kind)
+            if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
+                if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
+                    if (!ngHappened(fileModel->fileItem(index())).isEmpty()) {
+                        createdCaption = ngTr("When", "Quando");
+                    }
+                }
+            }
         }
     }
     QList<NgQuickAction> quickActions;
@@ -4279,6 +4459,31 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
                             }
                         });
                     }
+                }
+                if (look != NgCardStyle::Dossier && fileItem.isLocalFile() && !fileItem.isDir()) {
+                    // Scheda: a file made by a quick action says so where its kind stands (the picture's band already
+                    // names the kind): "from talk.ogg · Transcribe". From the facts, read in the background (no
+                    // attribute is read here: this runs for every card in view, also on a slow mount)
+                    const qint64 newest = qMax(fileItem.time(KFileItem::ModificationTime).toSecsSinceEpoch(), values.value("ngNewest").toLongLong());
+                    m_ngFactsPath = fileItem.localPath();
+                    const NgFileFacts *made = NgFacts::instance()->facts(m_ngFactsPath, fileItem.mimetype(), false, newest, qint64(fileItem.size()));
+                    if (!made && !m_ngFactsHooked) {
+                        m_ngFactsHooked = true;
+                        connect(NgFacts::instance(), &NgFacts::ready, this, [this](const QString &path) {
+                            if (path == m_ngFactsPath) {
+                                invalidateCache();
+                                update();
+                            }
+                        });
+                    }
+                    if (made && !made->madeFrom.isEmpty()) {
+                        kindWords = QChar(0x21b3) + QLatin1Char(' ') + ngTr("from ", "da ") + QFileInfo(made->madeFrom).fileName()
+                            + (made->madeBy.isEmpty() ? QString() : QStringLiteral(" · ") + made->madeBy);
+                    }
+                }
+                // in the list of what happened lately (ngrecent:/) the line says what happened: "Downloaded from kde.org"
+                if (const QString happened = ngHappened(fileItem); !happened.isEmpty()) {
+                    kindWords = happened;
                 }
                 m_ngCardInnerTags.clear();
                 m_ngCardInnerLabels.clear();
@@ -4548,6 +4753,15 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
             bool monospace;
         };
         QList<Line> lines;
+        // in the list of what happened lately (ngrecent:/) the first line says what happened, as the rows and the other
+        // cards do in place of the kind
+        if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
+            if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
+                if (const QString happened = ngHappened(fileModel->fileItem(index())); !happened.isEmpty()) {
+                    lines.append({ngTr("Event", "Evento"), happened, false});
+                }
+            }
+        }
         if (created.isValid()) {
             lines.append({createdCaption, dateLine(created), false});
         }
@@ -4728,7 +4942,7 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
         const qreal originHeight = qMax(smallFm.height(), chipHeight);
         // the facts and the origin line sit in the middle of the room between the header and the dates
         const bool hasOrigin = facts
-            && ((!facts->lastName.isEmpty() && facts->lastWhen.isValid()) || !facts->origin.isEmpty() || !facts->who.isEmpty() || facts->rating > 0
+            && ((!facts->lastName.isEmpty() && facts->lastWhen.isValid()) || !facts->origin.isEmpty() || !facts->madeFrom.isEmpty() || !facts->who.isEmpty() || facts->rating > 0
                 || !facts->tags.isEmpty());
         {
             const qreal factsHeight = !facts ? 0 : !facts->mix.isEmpty() ? 2 + 7 + 6 + smallFm.height() : valueFm.height() + wordFm.height();
@@ -4796,6 +5010,12 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
             if (!facts->lastName.isEmpty() && facts->lastWhen.isValid()) {
                 line = ngTr("Last changed: ", "Ultimo toccato: ") + QStringLiteral("\x01") + facts->lastName + QStringLiteral("\x02 · ") + ngAgoText(facts->lastWhen);
                 sign = QStringLiteral("chronometer");
+            } else if (!facts->madeFrom.isEmpty()) {
+                // made by a quick action from another file: its name, struck out by its absence in the folder left to
+                // the Information panel
+                line = (facts->madeBy.isEmpty() ? QString() : facts->madeBy + QStringLiteral(" · ")) + ngTr("from ", "da ") + QStringLiteral("\x01")
+                    + QFileInfo(facts->madeFrom).fileName() + QStringLiteral("\x02");
+                sign = QStringLiteral("go-next");
             } else if (!facts->origin.isEmpty()) {
                 line = ngTr("Downloaded from ", "Scaricato da ") + QStringLiteral("\x01") + facts->origin + QStringLiteral("\x02");
                 sign = QStringLiteral("download");
@@ -4897,7 +5117,10 @@ qreal KStandardItemListWidget::ngSelectionRadius() const
 QRectF KStandardItemListWidget::boundingRect() const
 {
     const QRectF r = KItemListWidget::boundingRect();
-    return m_layout == CardsLayout || m_ngObjectRow ? r.adjusted(-6, -6, 6, 6) : r;
+    // (cards of one family share a background drawn out to the middle of the gap between them: within the bounds,
+    // or the picture an item is kept as cuts it off)
+    // (20: half of the widest gap paintNgFamily() joins across, 40 px, which a stretched grid can reach)
+    return m_layout == CardsLayout ? r.adjusted(-20, -20, 20, 20) : m_ngObjectRow ? r.adjusted(-6, -6, 6, 6) : r;
 }
 
 void KStandardItemListWidget::moveEvent(QGraphicsSceneMoveEvent *event)
@@ -5471,25 +5694,35 @@ void KStandardItemListWidget::paintNgActivity(QPainter *painter)
             const qreal pillHeight = fm.height() * 1.7;
             const qreal stopRoom = stoppable ? pillHeight - 4 + 4 : 0;
             const qreal w = qMin(fm.horizontalAdvance(caption) + 22 + stopRoom, row.width() * 0.45);
-            // solid, over the end of the row: it covers the date while the work runs
-            // (drawn rows: before the dates, where the quick actions come)
-            const qreal pillRight = m_ngObjectRow && !m_ngTime.isEmpty() ? m_ngTime.first().letterPos.x() - 16 : row.right() - 8;
+            // (drawn rows: before the dates, where the quick actions come; rows with columns: right after the name,
+            // in the empty part of its column, or at that column's end when the name is long; at the end of the row
+            // it stood half over the date and cut its words)
+            qreal pillRight = m_ngObjectRow && !m_ngTime.isEmpty() ? m_ngTime.first().letterPos.x() - 16 : row.right() - 8;
+            if (ngRowColumns(this) && columnWidth("text") > w + 60) {
+                const qreal columnEnd = leftPadding() + columnWidth("text") - 10;
+                pillRight = qMin(columnEnd, m_textRect.right() + 14 + w);
+            }
             const QRectF pill(pillRight - w, row.center().y() - pillHeight / 2, w, pillHeight);
-            painter->setPen(QPen(QColor(accent.red(), accent.green(), accent.blue(), 110), 1));
-            painter->setBrush(QColor(16, 17, 21));
-            painter->drawRoundedRect(pill, pill.height() / 2, pill.height() / 2);
+            // a sheet of the row's own kind with the accent round it: white on a light scheme, a dark glass on a dark
+            // one. It was a black capsule on both, the one of the cards (which lies over pictures and has to be dark):
+            // on a light row it read as a hole
+            const bool darkRow = ngIsDark(styleOption().palette);
+            const QColor accentInk = darkRow ? accent.lighter(135) : QColor::fromHslF(accent.hslHueF() < 0 ? 0.55 : accent.hslHueF(), qMin<qreal>(accent.hslSaturationF(), 0.80), 0.36);
+            painter->setPen(QPen(QColor(accent.red(), accent.green(), accent.blue(), darkRow ? 110 : 170), 1));
+            painter->setBrush(darkRow ? QColor(16, 17, 21, 215) : QColor(255, 255, 255, 235));
+            painter->drawRoundedRect(pill.adjusted(0.5, 0.5, -0.5, -0.5), pill.height() / 2, pill.height() / 2);
             painter->setFont(f);
-            painter->setPen(accent.lighter(135));
+            painter->setPen(accentInk);
             const QRectF textBox = pill.adjusted(0, 0, -stopRoom, 0);
             painter->drawText(textBox, Qt::AlignCenter, fm.elidedText(caption, Qt::ElideRight, textBox.width() - 14));
             if (stoppable) {
                 const QRectF stop(pill.right() - pill.height() + 2, pill.top() + 2, pill.height() - 4, pill.height() - 4);
                 const bool hot = activity->isStopHovered(url);
                 painter->setPen(Qt::NoPen);
-                painter->setBrush(hot ? QColor(214, 72, 66) : QColor(255, 255, 255, 18));
+                painter->setBrush(hot ? QColor(214, 72, 66) : darkRow ? QColor(255, 255, 255, 18) : QColor(0, 0, 0, 20));
                 painter->drawEllipse(stop);
                 const qreal c = stop.width() * 0.18;
-                painter->setPen(QPen(hot ? QColor(255, 255, 255) : QColor(222, 226, 232), 1.6, Qt::SolidLine, Qt::RoundCap));
+                painter->setPen(QPen(hot ? QColor(255, 255, 255) : darkRow ? QColor(222, 226, 232) : QColor(60, 64, 72), 1.6, Qt::SolidLine, Qt::RoundCap));
                 painter->drawLine(stop.center() + QPointF(-c, -c), stop.center() + QPointF(c, c));
                 painter->drawLine(stop.center() + QPointF(c, -c), stop.center() + QPointF(-c, c));
                 m_ngCancelRect = stop;

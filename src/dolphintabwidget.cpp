@@ -5,6 +5,12 @@
  */
 
 #include "dolphintabwidget.h"
+#include "kitemviews/kitemlistwidget.h"
+#include <QDir>
+#include <QPointer>
+#include <QSplitter>
+#include <QGridLayout>
+#include "ngjobs.h"
 
 #include "dolphin_generalsettings.h"
 #include "dolphintabbar.h"
@@ -718,10 +724,88 @@ void DolphinTabWidget::tabRemoved(int index)
     m_lastViewedTab->setActive(true);
 }
 
+void DolphinTabWidget::ngHistoryBack()
+{
+    DolphinTabPage *page = currentTabPage();
+    if (!page || !page->property("ngHistoryTab").toBool()) {
+        return;
+    }
+    if (count() < 2) {
+        ngLeaveHistory(page); // (the only tab: it shows its folder again)
+        return;
+    }
+    const int before = m_ngBeforeHistory ? indexOf(m_ngBeforeHistory) : -1;
+    if (before >= 0) {
+        setCurrentIndex(before);
+    }
+    closeTab(indexOf(page));
+}
+
+void DolphinTabWidget::ngOpenHistoryTab()
+{
+    if (currentTabPage() && !currentTabPage()->property("ngHistoryTab").toBool()) {
+        m_ngBeforeHistory = currentTabPage(); // (where the tool bar's Back leads from the jobs tab)
+    }
+    for (int i = 0; i < count(); ++i) {
+        if (tabPageAt(i)->property("ngHistoryTab").toBool()) {
+            setCurrentIndex(i);
+            return;
+        }
+    }
+    openNewActivatedTab(QUrl::fromLocalFile(QDir::homePath()));
+    DolphinTabPage *page = currentTabPage();
+    auto *grid = page ? qobject_cast<QGridLayout *>(page->layout()) : nullptr;
+    auto *views = page ? page->findChild<QSplitter *>(QString(), Qt::FindDirectChildrenOnly) : nullptr;
+    if (!grid || !views) {
+        return;
+    }
+    page->setProperty("ngHistoryTab", true);
+    views->hide();
+    auto *history = new NgHistoryPage(page);
+    grid->addWidget(history, 2, 0, 1, 2);
+    const int index = currentIndex();
+    updateTabName(index);
+    tabBar()->setTabIcon(index, QIcon::fromTheme(QStringLiteral("view-history")));
+    tabBar()->setTabToolTip(index, tabName(page));
+    ngScheduleSync();
+    Q_EMIT ngHistoryChanged();
+    // a folder chosen while the history shows: the tab is a tab of files again
+    QPointer<DolphinTabPage> guard(page);
+    connect(page, &DolphinTabPage::activeViewUrlChanged, history, [this, guard] {
+        ngLeaveHistory(guard);
+    });
+}
+
+void DolphinTabWidget::ngLeaveHistory(DolphinTabPage *page)
+{
+    if (!page || !page->property("ngHistoryTab").toBool()) {
+        return;
+    }
+    page->setProperty("ngHistoryTab", QVariant());
+    if (auto *history = page->findChild<NgHistoryPage *>(QString(), Qt::FindDirectChildrenOnly)) {
+        history->hide();
+        history->deleteLater();
+    }
+    if (auto *views = page->findChild<QSplitter *>(QString(), Qt::FindDirectChildrenOnly)) {
+        views->show();
+    }
+    const int at = indexOf(page);
+    if (at >= 0) {
+        tabBar()->setTabIcon(at, QIcon());
+        tabBar()->setTabToolTip(at, QString());
+        updateTabName(at);
+        ngScheduleSync();
+    }
+    Q_EMIT ngHistoryChanged();
+}
+
 QString DolphinTabWidget::tabName(DolphinTabPage *tabPage) const
 {
     if (!tabPage) {
         return QString();
+    }
+    if (tabPage->property("ngHistoryTab").toBool()) {
+        return ngTr("History", "Storico");
     }
     // clang-format off
     QString name;
@@ -775,6 +859,11 @@ const std::optional<const DolphinTabWidget::ViewIndex> DolphinTabWidget::viewOpe
     // loop over the tabs starting from the current one
     do {
         const auto tabPage = tabPageAt(i);
+        // (dolphin-ng: the jobs tab has a view of the home folder hidden under its page: not a view to show a file in)
+        if (tabPage->property("ngHistoryTab").toBool()) {
+            i = (i + 1) % count();
+            continue;
+        }
         if (tabPage->primaryViewContainer()->url() == directory) {
             return std::optional(ViewIndex{i, true});
         }
@@ -812,6 +901,10 @@ const std::optional<const DolphinTabWidget::ViewIndex> DolphinTabWidget::viewSho
     // loop over the tabs starting from the current one
     do {
         const auto tabPage = tabPageAt(i);
+        if (tabPage->property("ngHistoryTab").toBool()) {
+            i = (i + 1) % count();
+            continue;
+        }
         if (tabPage->primaryViewContainer()->url().isParentOf(item)) {
             const KFileItem fileItemContainingItem = tabPage->primaryViewContainer()->view()->items().findByUrl(dirContainingItem);
             if (!fileItemContainingItem.isNull() && tabPage->primaryViewContainer()->view()->isExpanded(fileItemContainingItem)) {

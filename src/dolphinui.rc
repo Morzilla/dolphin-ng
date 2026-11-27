@@ -70,6 +70,7 @@
             <Action name="closed_tabs" />
         </Menu>
         <Menu name="tools">
+            <Action name="ng_jobs" />
             <Action name="open_preferred_search_tool" />
             <Action name="open_terminal" />
             <Action name="open_terminal_here" />

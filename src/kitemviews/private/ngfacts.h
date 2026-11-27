@@ -41,6 +41,8 @@ struct NgFileFacts {
     QString lastName; // folders: the entry changed last
     QDateTime lastWhen;
     QString origin; // the site it was downloaded from
+    QString madeFrom; // the path of the file a quick action made it from (ngFileMadeFrom)
+    QString madeBy; // that action's name
     enum Who { Nobody, Camera, Artist, Author, Program };
     Who whoKind = Nobody;
     QString who; // "Pixel 8", "Artist · Album (2025)", "Finance team"

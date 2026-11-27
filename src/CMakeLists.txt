@@ -115,6 +115,7 @@ target_sources(dolphinprivate PRIVATE
     views/dolphinnewfilemenuobserver.cpp
     views/dolphinremoteencoding.cpp
     views/dolphinview.cpp
+    views/ngrecentview.cpp
     views/dolphinviewactionhandler.cpp
     views/draganddrophelper.cpp
     views/versioncontrol/updateitemstatesthread.cpp
@@ -341,6 +342,7 @@ target_sources(dolphinstatic PRIVATE
     settings/contextmenu/contextmenusettingspage.cpp
     settings/settingspagebase.cpp
     settings/ng/ngsettingspage.cpp
+    ngjobs.cpp
     settings/ng/ngactionspage.cpp
     settings/servicemodel.cpp
     settings/trash/trashsettingspage.cpp

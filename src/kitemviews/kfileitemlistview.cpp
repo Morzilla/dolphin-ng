@@ -334,6 +334,9 @@ void KFileItemListView::updateSelectedWidgets()
 {
     const auto visibleWidgets = visibleItemListWidgets();
     for (KItemListWidget *widget : visibleWidgets) {
+        // dolphin-ng: an item is kept as a picture (see KItemListWidget), and the text of one that is not selected
+        // also takes the colour of the view with or without the focus: drawn again when the focus moves
+        widget->update();
         if (widget->isSelected()) {
             auto w = qobject_cast<KFileItemListWidget *>(widget);
             if (w) {

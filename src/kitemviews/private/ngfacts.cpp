@@ -343,6 +343,8 @@ NgFileFacts readFacts(const QString &path, const QString &mime, bool isDir, qint
     }
     out.tags = user.tags();
     out.rating = user.rating();
+    out.madeFrom = user.attribute(QStringLiteral("dolphin-ng.made-from"));
+    out.madeBy = user.attribute(QStringLiteral("dolphin-ng.made-by"));
     if (isDir) {
         folderFacts(path, &out);
         return out;

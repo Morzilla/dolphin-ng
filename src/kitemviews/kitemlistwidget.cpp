@@ -7,8 +7,13 @@
  */
 
 #include "kitemlistwidget.h"
+
+#include "private/ngfacts.h"
+#include "kfileitemlistview.h"
 #include "kstandarditemlistview.h" // dolphin-ng: the layout, for the selection toggle
 #include <QUrl>
+#include <QGraphicsScene>
+#include <QGraphicsView>
 #include <QGraphicsObject>
 
 #include "kitemlistview.h"
@@ -19,6 +24,7 @@
 #include <KSharedConfig>
 
 #include <QDateTime>
+#include <QPixmapCache>
 #include <QHash>
 
 #include <QApplication>
@@ -27,7 +33,9 @@
 #include <KApplicationTrader>
 #include <KService>
 #include <QDir>
+#include <QFileSystemWatcher>
 #include <QFileInfo>
+#include <QProcess>
 #include <QFile>
 #include <QCoreApplication>
 #include <QStandardPaths>
@@ -44,6 +52,8 @@
 #include <QGuiApplication>
 #include <QKeyEvent>
 #include <KFileMetaData/UserMetaData>
+#include <KRecentDocument>
+#include <QTimer>
 #include <QMimeDatabase>
 #include <QRegularExpression>
 #include <climits>
@@ -78,6 +88,43 @@ KItemListWidget::KItemListWidget(KItemListWidgetInformant *informant, QGraphicsI
     , m_iconSize(-1)
 {
     connect(&m_hoverSequenceTimer, &QTimer::timeout, this, &KItemListWidget::slotHoverSequenceTimerTimeout);
+    // dolphin-ng: an item is drawn once and kept as a picture; while the view scrolls the picture is only moved.
+    // The drawn rows and cards (rounded sheets, the file's drawing, gradients, text) were painted again from nothing
+    // at every frame, for every item in view: scrolling kept two processor cores busy, eight times stock Dolphin.
+    // An item that changes (hover, selection, new data) is painted again as before. DOLPHIN_NG_ITEM_CACHE=off: as it was
+    static const bool cached = ngSetting("ITEM_CACHE").toLower() != QLatin1String("off"); // (dolphinrc [DolphinNG], or the environment)
+    if (cached) {
+        // (the pictures live in Qt's pixmap cache, 10 MiB by default: a window of large cards needs more than that,
+        // and a cache too small gives the pictures up and paints everything again)
+        static const bool roomy = [] {
+            if (QPixmapCache::cacheLimit() < 96 * 1024) {
+                QPixmapCache::setCacheLimit(96 * 1024);
+            }
+            return true;
+        }();
+        Q_UNUSED(roomy)
+        setCacheMode(QGraphicsItem::DeviceCoordinateCache);
+    }
+}
+
+bool KItemListWidget::event(QEvent *event)
+{
+    // The kept picture of the item (the cache mode of the constructor) is made again when the item says so with
+    // update(). What it is drawn with can also change without the item being told: the window becoming active or not
+    // (the rows dim), the palette, the style, the font. A plain repaint of the view drew it anew then; now the item asks
+    switch (event->type()) {
+    case QEvent::WindowActivate:
+    case QEvent::WindowDeactivate:
+    case QEvent::PaletteChange:
+    case QEvent::StyleChange:
+    case QEvent::FontChange:
+    case QEvent::LayoutDirectionChange:
+        update();
+        break;
+    default:
+        break;
+    }
+    return QGraphicsWidget::event(event);
 }
 
 KItemListWidget::~KItemListWidget()
@@ -480,6 +527,28 @@ NgActivity::NgActivity()
     m_sweep.setInterval(1000);
     connect(&m_sweep, &QTimer::timeout, this, &NgActivity::sweepFamilies);
     QTimer::singleShot(0, this, &NgActivity::loadProcesses);
+    // Every Dolphin NG sees the work of the others: each keeps its list in a file of the runtime directory, and reads
+    // the others' again whenever one of them changes (a moment later: a file is written in more than one step)
+    auto *again = new QTimer(this);
+    again->setSingleShot(true);
+    again->setInterval(250);
+    connect(again, &QTimer::timeout, this, &NgActivity::loadProcesses);
+    auto *watcher = new QFileSystemWatcher(this);
+    const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    watcher->addPath(runtime);
+    auto follow = [watcher, runtime, again] {
+        const QStringList files = QDir(runtime).entryList({QStringLiteral("dolphin-ng-activity-*")}, QDir::Files);
+        for (const QString &name : files) {
+            const QString path = runtime + QLatin1Char('/') + name;
+            if (!watcher->files().contains(path)) {
+                watcher->addPath(path);
+            }
+        }
+        again->start();
+    };
+    connect(watcher, &QFileSystemWatcher::directoryChanged, this, follow);
+    connect(watcher, &QFileSystemWatcher::fileChanged, this, follow);
+    QTimer::singleShot(0, this, follow);
 }
 
 static QString ngActivityStateFile(qint64 owner)
@@ -498,14 +567,23 @@ void NgActivity::saveProcesses()
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         return;
     }
-    // pid, url, label, progress file, whether its results are tied to it: one line each, tab separated
+    // pid, url, label, progress file, whether its results are tied to it, its program, when it started: one line
+    // each, tab separated
     for (auto it = m_pids.cbegin(); it != m_pids.cend(); ++it) {
         if (m_links.contains(it.key())) {
             continue; // a child waiting with its parent's pid: it comes back with the parent
         }
         const QStringList fields{QString::number(it.value()), it.key(), m_entries.value(it.key()).text, m_progressFiles.value(it.key()),
-                                 m_watched.contains(it.key()) ? QStringLiteral("1") : QStringLiteral("0")};
+                                 m_watched.contains(it.key()) ? QStringLiteral("1") : QStringLiteral("0"), m_programs.value(it.key()),
+                                 QString::number(m_entries.value(it.key()).startedAt)};
         file.write(fields.join(QLatin1Char('\t')).toUtf8() + '\n');
+    }
+    // what the work has made so far, tied to its source: another Dolphin NG did not see those files appear
+    // ("link", parent, child: a line an older Dolphin NG skips, its first field is no process)
+    for (const auto &[child, parent] : std::as_const(m_links)) {
+        if (m_pids.contains(key(parent))) {
+            file.write(QStringList{QStringLiteral("link"), parent.toString(), child.toString()}.join(QLatin1Char('\t')).toUtf8() + '\n');
+        }
     }
 }
 
@@ -528,16 +606,37 @@ void NgActivity::loadProcesses()
         if (owner <= 0 || ::kill(static_cast<pid_t>(owner), 0) != 0) {
             QFile::remove(file.fileName()); // its Dolphin is gone: this one takes the list over
         }
+        QList<std::pair<QUrl, QUrl>> tied;
         for (const QString &line : lines) {
             const QStringList f = line.split(QLatin1Char('\t'));
+            if (f.size() == 3 && f.at(0) == QLatin1String("link")) {
+                tied.append({QUrl(f.at(1)), QUrl(f.at(2))});
+                continue;
+            }
             const qint64 pid = f.value(0).toLongLong();
             if (f.size() < 5 || pid <= 0 || ::kill(static_cast<pid_t>(pid), 0) != 0) {
                 continue;
             }
             const QUrl url(f.at(1));
+            if (m_pids.value(key(url)) == pid) {
+                continue; // known already: the lists are read again whenever one of them changes
+            }
             setUntilProcessEnds(url, pid, f.at(2), f.at(3));
+            // (when it started, as the Dolphin NG that started it has it: the history's id is made of it, the same
+            // in every Dolphin NG that sees the work end)
+            if (const qint64 started = f.value(6).toLongLong(); started > 0) {
+                m_entries[key(url)].startedAt = started;
+            }
+            if (!f.value(5).isEmpty()) {
+                m_programs.insert(key(url), f.at(5)); // (so that the queue of this Dolphin NG waits for it too)
+            }
             if (f.at(4) == QLatin1String("1")) {
                 watchForChildren(url);
+            }
+        }
+        for (const auto &[parent, child] : std::as_const(tied)) {
+            if (m_pids.contains(key(parent)) && !m_links.contains(key(child)) && QFileInfo::exists(child.toLocalFile())) {
+                link(parent, child);
             }
         }
     }
@@ -590,6 +689,26 @@ void NgActivity::watchForChildren(const QUrl &parent)
 
 void NgActivity::offerNewFile(const QUrl &url)
 {
+    // a download seen arriving: a file made in the last minutes that says where it was downloaded from (browsers write
+    // that when the download is complete). It goes to the history, once
+    if (url.isLocalFile()) {
+        const QFileInfo info(url.toLocalFile());
+        const qint64 now = QDateTime::currentMSecsSinceEpoch(), made = info.lastModified().toMSecsSinceEpoch();
+        if (info.isFile() && now - made < 120000 && now - made >= 0) {
+            offerRecent(url);
+            const KFileMetaData::UserMetaData data(info.absoluteFilePath());
+            const QUrl origin = data.isSupported() ? data.originUrl() : QUrl();
+            if (origin.isValid() && !origin.host().isEmpty()) {
+                Done done;
+                done.url = url;
+                done.label = ngTr("Download", "Scaricamento");
+                done.results = {ngTr("from ", "da ") + (origin.host().startsWith(QLatin1String("www.")) ? origin.host().mid(4) : origin.host())};
+                done.startedAt = info.birthTime().isValid() ? info.birthTime().toMSecsSinceEpoch() : made;
+                done.endedAt = made;
+                addToHistory(QStringLiteral("dl-%1-%2").arg(qHash(info.absoluteFilePath())).arg(made / 1000), done);
+            }
+        }
+    }
     if (m_watched.isEmpty()) {
         return;
     }
@@ -612,6 +731,44 @@ void NgActivity::offerNewFile(const QUrl &url)
     }
 }
 
+void NgActivity::offerRecent(const QUrl &url)
+{
+    // A file that has just appeared in a folder on show (pasted from the clipboard, downloaded, a screenshot, the
+    // result of an action) goes to the desktop's recent files, so that the next "Open" dialog has it at hand: the
+    // desktop's own list only knows the files some application opened. The files of a second are taken together:
+    // a few are somebody's work, many are an extraction or a copy and would only push everything else out
+    const QString name = url.fileName();
+    static const QStringList unfinished{QStringLiteral(".part"), QStringLiteral(".crdownload"), QStringLiteral(".tmp"), QStringLiteral(".lock"), QStringLiteral("~")};
+    if (name.startsWith(QLatin1Char('.')) || std::any_of(unfinished.cbegin(), unfinished.cend(), [&name](const QString &end) {
+            return name.endsWith(end, Qt::CaseInsensitive);
+        })) {
+        return;
+    }
+    if (m_recentOffered.contains(url)) {
+        return;
+    }
+    m_recentBatch.append(url);
+    if (m_recentBatch.size() > 1) {
+        return;
+    }
+    QTimer::singleShot(1000, this, [this] {
+        const QList<QUrl> batch = m_recentBatch;
+        m_recentBatch.clear();
+        if (batch.size() > 12) {
+            return;
+        }
+        if (m_recentOffered.size() > 500) {
+            m_recentOffered.clear();
+        }
+        for (const QUrl &file : batch) {
+            if (QFileInfo::exists(file.toLocalFile())) {
+                m_recentOffered.insert(file);
+                KRecentDocument::add(file, QStringLiteral("org.kde.dolphin"));
+            }
+        }
+    });
+}
+
 void NgActivity::link(const QUrl &parent, const QUrl &child)
 {
     const QString childKey = key(child), parentKey = key(parent);
@@ -620,6 +777,16 @@ void NgActivity::link(const QUrl &parent, const QUrl &child)
     }
     m_links.insert(childKey, {child, parent});
     m_linkedAt.insert(childKey, QDateTime::currentMSecsSinceEpoch());
+    // the new file keeps where it came from (the action's name without its trailing dots: "Transcribe…")
+    if (child.isLocalFile() && parent.isLocalFile() && ngFileMadeFrom(child.toLocalFile()).isEmpty()) {
+        QString action = m_entries.value(parentKey).text;
+        while (action.endsWith(QChar(0x2026)) || action.endsWith(QLatin1Char('.'))) {
+            action.chop(1);
+        }
+        ngSetFileMadeFrom(child.toLocalFile(), parent.toLocalFile(), action.trimmed());
+        // (an attribute changes neither the file's time nor its size: the facts kept for it are read again)
+        NgFacts::instance()->attributesChanged(child.toLocalFile());
+    }
     if (!m_sweep.isActive()) {
         m_sweep.start();
     }
@@ -662,29 +829,38 @@ void NgActivity::sweepFamilies()
     // so the result is easy to find; then the bubble fades out and the files go back in order. Checked every
     // second, whatever way the family was made or its work ended
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    bool removed = false, ended = false;
+    // a result that is gone (thrown away, moved elsewhere) is no longer tied to its source: the source alone kept the
+    // bubble until the 30 s were over. (Not in its first moments: a program may write a file, remove it and write it again)
+    for (auto it = m_links.begin(); it != m_links.end();) {
+        if (it->first.isLocalFile() && now - m_linkedAt.value(it.key(), now) > 2000 && !QFileInfo::exists(it->first.toLocalFile())) {
+            m_entries.remove(it.key());
+            m_pids.remove(it.key());
+            m_linkedAt.remove(it.key());
+            it = m_links.erase(it);
+            removed = true;
+        } else {
+            ++it;
+        }
+    }
     QSet<QString> parents;
     for (const auto &l : std::as_const(m_links)) {
         parents.insert(key(l.second));
     }
-    bool removed = false;
     for (const QString &parentKey : std::as_const(parents)) {
         // busy only while something is really at work: the parent's process (or job) or a child's process.
         // Being watched for late files does not count (the 30 s below cover them), and a process that is gone
         // ends its mark here too, whatever happened to the polling in tick()
-        auto alive = [this](const QString &k) {
+        auto alive = [this, &ended](const QString &k) {
             if (!m_pids.contains(k)) {
                 return false;
             }
             if (::kill(static_cast<pid_t>(m_pids.value(k)), 0) == 0) {
                 return true;
             }
-            m_pids.remove(k);
-            m_entries.remove(k);
-            m_cancellers.remove(k);
-            if (m_progressFiles.contains(k)) {
-                QFile::remove(m_progressFiles.take(k));
-            }
-            saveProcesses();
+            // (gone: ended here as in tick(), whichever of the two sees it first)
+            processEnded(k, m_pids.take(k));
+            ended = true;
             Q_EMIT changed();
             return false;
         };
@@ -722,6 +898,10 @@ void NgActivity::sweepFamilies()
                 }
             }
         }
+    }
+    if (ended) {
+        saveProcesses();
+        startWaiting();
     }
     if (m_links.isEmpty()) {
         m_sweep.stop();
@@ -832,7 +1012,219 @@ bool NgActivity::isStopHovered(const QUrl &url) const
 bool NgActivity::canCancel(const QUrl &url) const
 {
     const QString k = key(url);
-    return m_entries.contains(k) && !m_links.contains(k) && (m_pids.contains(k) || m_cancellers.contains(k));
+    const bool waiting = std::any_of(m_queue.cbegin(), m_queue.cend(), [&k](const Waiting &job) {
+        return key(job.url) == k;
+    });
+    return m_entries.contains(k) && !m_links.contains(k) && (m_pids.contains(k) || m_cancellers.contains(k) || waiting);
+}
+
+static QString ngHistoryFile()
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(dir);
+    return dir + QStringLiteral("/ng-history.tsv");
+}
+
+void NgActivity::remember(const QString &k, qint64 pid)
+{
+    // one line for each ended work: id, started, ended, stopped, label, url, results. Every Dolphin NG sees the work
+    // end: the id (the process and when it started) keeps it to one line
+    const Entry entry = m_entries.value(k);
+    QString label = m_labels.value(k, entry.text);
+    while (label.endsWith(QChar(0x2026)) || label.endsWith(QLatin1Char('.'))) {
+        label.chop(1);
+    }
+    QStringList results;
+    for (auto it = m_links.cbegin(); it != m_links.cend(); ++it) {
+        if (key(it->second) == k) {
+            results.append(it->first.fileName());
+        }
+    }
+    const QString id = QStringLiteral("%1-%2").arg(pid).arg(entry.startedAt / 1000);
+    QFile file(ngHistoryFile());
+    if (file.open(QIODevice::ReadOnly)) {
+        const QByteArray known = file.readAll();
+        file.close();
+        const QByteArray mark = id.toUtf8() + '\t';
+        const QByteArray later = QByteArray("\n").append(mark);
+        if (known.startsWith(mark) || known.contains(later)) {
+            return;
+        }
+    }
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Append)) {
+        return;
+    }
+    const QStringList fields{id, QString::number(entry.startedAt), QString::number(QDateTime::currentMSecsSinceEpoch()), m_stopped.remove(k) ? QStringLiteral("1") : QStringLiteral("0"),
+                             label.trimmed(), k, results.join(QLatin1Char('|'))};
+    file.write(fields.join(QLatin1Char('\t')).toUtf8() + '\n');
+}
+
+void NgActivity::addToHistory(const QString &id, const Done &done)
+{
+    QFile file(ngHistoryFile());
+    const QByteArray mark = id.toUtf8() + '\t';
+    if (file.open(QIODevice::ReadOnly)) {
+        const QByteArray known = file.readAll();
+        file.close();
+        const QByteArray later = QByteArray("\n").append(mark);
+        if (known.startsWith(mark) || known.contains(later)) {
+            return;
+        }
+    }
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Append)) {
+        return;
+    }
+    const QStringList fields{id, QString::number(done.startedAt), QString::number(done.endedAt), done.stopped ? QStringLiteral("1") : QStringLiteral("0"), done.label, key(done.url),
+                             done.results.join(QLatin1Char('|')), done.where.toString()};
+    file.write(fields.join(QLatin1Char('\t')).toUtf8() + '\n');
+    file.close();
+    Q_EMIT changed();
+}
+
+QList<NgActivity::Done> NgActivity::history(int limit)
+{
+    // (read again only when the file changed: the jobs' list asks at every step of a turning arc)
+    static QList<Done> all;
+    static qint64 stamp = -1, size = -1;
+    const QFileInfo info(ngHistoryFile());
+    const qint64 nowStamp = info.exists() ? info.lastModified().toMSecsSinceEpoch() : 0, nowSize = info.exists() ? info.size() : 0;
+    if (nowStamp != stamp || nowSize != size) {
+        stamp = nowStamp;
+        size = nowSize;
+        all.clear();
+        QFile file(info.filePath());
+        if (file.open(QIODevice::ReadOnly)) {
+            const QStringList lines = QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+            for (auto it = lines.crbegin(); it != lines.crend(); ++it) {
+                const QStringList f = it->split(QLatin1Char('\t'));
+                if (f.size() < 7) {
+                    continue;
+                }
+                Done done;
+                done.id = f.at(0);
+                done.startedAt = f.at(1).toLongLong();
+                done.endedAt = f.at(2).toLongLong();
+                done.stopped = f.at(3) == QLatin1String("1");
+                done.label = f.at(4);
+                done.url = QUrl(f.at(5));
+                done.results = f.at(6).split(QLatin1Char('|'), Qt::SkipEmptyParts);
+                done.where = QUrl(f.value(7));
+                all.append(done);
+            }
+        }
+    }
+    return all.mid(0, limit);
+}
+
+void NgActivity::clearHistory()
+{
+    QFile::remove(ngHistoryFile());
+}
+
+QList<NgActivity::Job> NgActivity::jobs() const
+{
+    QList<Job> running, waiting;
+    for (auto it = m_entries.cbegin(); it != m_entries.cend(); ++it) {
+        if (m_links.contains(it.key()) || !m_pids.contains(it.key())) {
+            continue; // a result waiting with its source, or a copy or a move (those have Plasma's own list)
+        }
+        QString label = m_labels.value(it.key(), it->text);
+        while (label.endsWith(QChar(0x2026)) || label.endsWith(QLatin1Char('.'))) {
+            label.chop(1);
+        }
+        running.append({QUrl(it.key()), label, it->percent, it->startedAt, false, true});
+    }
+    std::sort(running.begin(), running.end(), [](const Job &a, const Job &b) {
+        return a.startedAt < b.startedAt;
+    });
+    for (const Waiting &job : m_queue) {
+        waiting.append({job.url, job.label, -1, 0, true, true});
+    }
+    return running + waiting;
+}
+
+bool NgActivity::start(const QUrl &url, const QString &label, const QString &program, const QStringList &arguments, const QString &folder)
+{
+    const Waiting job{url, label, program, folder, arguments};
+    // in parallel (the default): started at once. One at a time (the settings' "JOBS_SERIES"): it waits while any
+    // quick action is at work, of this Dolphin NG or of another
+    // A file takes one action at a time, in either way: a second one waits for the first, which keeps the file's
+    // entry (the file shows the work going on; the one waiting is in the jobs' list)
+    const bool fileBusy = m_pids.contains(key(url));
+    if (fileBusy || (ngSetting("JOBS_SERIES") == QLatin1String("1") && !m_programs.isEmpty())) {
+        m_queue.append(job);
+        if (!fileBusy) {
+            set(url, -1, ngTr("Queued", "In coda"));
+        }
+        return true;
+    }
+    return launch(job);
+}
+
+void NgActivity::startWaiting()
+{
+    // one at a time: the next when nothing is at work; switched back to parallel meanwhile: all that waits
+    const bool series = ngSetting("JOBS_SERIES") == QLatin1String("1");
+    for (int i = 0; i < m_queue.count();) {
+        if (series && !m_programs.isEmpty()) {
+            break;
+        }
+        if (m_pids.contains(key(m_queue.at(i).url))) {
+            ++i; // (its file is still at work on another action)
+            continue;
+        }
+        const Waiting job = m_queue.takeAt(i);
+        m_entries.remove(key(job.url)); // (its "queued" entry: the work starts with a fresh one)
+        if (!launch(job)) {
+            // (nobody waits for the answer any more: the history says it did not start)
+            Done failed;
+            failed.url = job.url;
+            failed.label = job.label + ngTr(" (could not start)", " (non avviata)");
+            failed.startedAt = failed.endedAt = QDateTime::currentMSecsSinceEpoch();
+            failed.stopped = true;
+            addToHistory(QStringLiteral("no-%1-%2").arg(QCoreApplication::applicationPid()).arg(failed.endedAt), failed);
+            Q_EMIT changed();
+        }
+    }
+}
+
+bool NgActivity::launch(const Waiting &job)
+{
+    // detached, so a long job (a transcription) goes on if Dolphin is closed; the file shows it is busy with this
+    // action until the process is gone. A program that knows how far it is can write the percentage to
+    // $NG_PROGRESS_FILE (ng-transcribe does)
+    static int count = 0;
+    const QString progressFile = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)
+        + QStringLiteral("/dolphin-ng-progress-%1-%2").arg(QCoreApplication::applicationPid()).arg(++count);
+    QProcess process;
+    // through ng-job, when there: Plasma shows the work (with its percentage and a stop button) in the notifications
+    // and on the Dolphin NG icon, also after Dolphin NG is closed
+    static const QString jobRunner = [] {
+        QString p = QStandardPaths::findExecutable(QStringLiteral("ng-job"));
+        const QString local = QDir::homePath() + QStringLiteral("/.local/bin/ng-job");
+        return p.isEmpty() && QFileInfo(local).isExecutable() ? local : p;
+    }();
+    if (jobRunner.isEmpty()) {
+        process.setProgram(job.program);
+        process.setArguments(job.arguments);
+    } else {
+        process.setProgram(jobRunner);
+        process.setArguments(QStringList{QStringLiteral("--title"), job.label, QStringLiteral("--file"), job.url.toLocalFile(), QStringLiteral("--"), job.program} + job.arguments);
+    }
+    process.setWorkingDirectory(job.folder);
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("NG_PROGRESS_FILE"), progressFile);
+    process.setProcessEnvironment(environment);
+    qint64 pid = 0;
+    if (!process.startDetached(&pid)) {
+        return false;
+    }
+    m_programs.insert(key(job.url), job.program);
+    m_labels.insert(key(job.url), job.label);
+    setUntilProcessEnds(job.url, pid, job.label + QChar(0x2026), progressFile);
+    // what it makes (named after it, in the same folder) is tied to it and shown next to it
+    watchForChildren(job.url);
+    return true;
 }
 
 void NgActivity::setCanceller(const QUrl &url, const std::function<void()> &cancel)
@@ -840,10 +1232,27 @@ void NgActivity::setCanceller(const QUrl &url, const std::function<void()> &canc
     m_cancellers.insert(key(url), cancel);
 }
 
-void NgActivity::cancel(const QUrl &url)
+void NgActivity::cancel(const QUrl &url, bool queued)
 {
     const QString k = key(url);
+    // the work going on, when there is one; else (or when asked for) the one waiting, taken off the queue. The
+    // file's entry is the queued one only while nothing is at work on it
+    const bool atWork = m_pids.contains(k) || m_cancellers.contains(k);
+    for (int i = 0; (queued || !atWork) && i < m_queue.count(); ++i) {
+        if (key(m_queue.at(i).url) == k) {
+            m_queue.removeAt(i);
+            if (!atWork) {
+                m_entries.remove(k);
+            }
+            Q_EMIT changed();
+            return;
+        }
+    }
+    if (queued) {
+        return;
+    }
     if (m_pids.contains(k)) {
+        m_stopped.insert(k);
         // a quick action runs in its own session (detached): stop the whole group, the programs it started too
         const pid_t pid = static_cast<pid_t>(m_pids.value(k));
         ::kill(-pid, SIGTERM);
@@ -908,6 +1317,22 @@ qreal NgActivity::phase() const
     return m_phase;
 }
 
+void NgActivity::processEnded(const QString &k, qint64 pid)
+{
+    // all that ends with a process, but its line in m_pids (left to the caller, who may be walking that list)
+    if (!m_links.contains(k)) {
+        remember(k, pid); // (a result waiting with its source's process is no work of its own)
+    }
+    m_programs.remove(k);
+    m_labels.remove(k);
+    m_entries.remove(k);
+    m_cancellers.remove(k);
+    if (m_progressFiles.contains(k)) {
+        QFile::remove(m_progressFiles.take(k));
+    }
+    parentDone(k);
+}
+
 void NgActivity::tick()
 {
     // processes started for quick actions: done when they are gone (they are detached: no zombie stays behind)
@@ -917,13 +1342,8 @@ void NgActivity::tick()
         slow = 0;
         for (auto it = m_pids.begin(); it != m_pids.end();) {
             if (::kill(static_cast<pid_t>(it.value()), 0) != 0) {
-                m_entries.remove(it.key());
-                m_cancellers.remove(it.key());
-                parentDone(it.key());
+                processEnded(it.key(), it.value());
                 saveLater = true;
-                if (m_progressFiles.contains(it.key())) {
-                    QFile::remove(m_progressFiles.take(it.key()));
-                }
                 it = m_pids.erase(it);
             } else {
                 // how far it is, if the program says so
@@ -944,6 +1364,7 @@ void NgActivity::tick()
     }
     if (saveLater) {
         saveProcesses();
+        startWaiting();
     }
     const bool grows = growing();
     if (grows) {
@@ -1654,6 +2075,29 @@ QStringList ngFileTags(const QString &path)
     return data.tags();
 }
 
+NgMadeFrom ngFileMadeFrom(const QString &path)
+{
+    NgMadeFrom made;
+    if (path.isEmpty()) {
+        return made;
+    }
+    KFileMetaData::UserMetaData data(path);
+    if (data.isSupported()) {
+        made.source = data.attribute(QStringLiteral("dolphin-ng.made-from"));
+        made.action = data.attribute(QStringLiteral("dolphin-ng.made-by"));
+    }
+    return made;
+}
+
+void ngSetFileMadeFrom(const QString &path, const QString &source, const QString &action)
+{
+    KFileMetaData::UserMetaData data(path);
+    if (!path.isEmpty() && data.isSupported()) {
+        data.setAttribute(QStringLiteral("dolphin-ng.made-from"), source);
+        data.setAttribute(QStringLiteral("dolphin-ng.made-by"), action);
+    }
+}
+
 QString ngAgoText(const QDateTime &when)
 {
     const qint64 days = when.date().daysTo(QDate::currentDate());
@@ -2045,6 +2489,19 @@ bool ngRowColumns(const QGraphicsItem *item)
     return ngRowColumns();
 }
 
+// dolphin-ng: the rows drawn without Dolphin's icon (two lines, Details with columns) had one height whatever the
+// zoom, so zooming changed nothing one could see. What the zoom adds over the mode's default size (16 px icons, 48 px
+// previews: there the row is as it always was) is added to the row; the tile, the drawing and the icon follow it
+int ngRowZoomRoom(const KItemListView *view)
+{
+    if (!view) {
+        return 0;
+    }
+    const auto *files = qobject_cast<const KFileItemListView *>(view);
+    const int base = files && files->previewsShown() ? 48 : 22;
+    return qBound(0, view->styleOption().iconSize - base, 96);
+}
+
 bool ngDetailsPlain()
 {
     return ngSetting("DETAILS_LOOK").toLower() != QLatin1String("tiles");
@@ -2057,6 +2514,11 @@ bool ngDetailsCompact()
 
 void KItemListWidget::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
+    // dolphin-ng: painted into the item's kept picture (the cache mode set in the constructor) there is no widget: the
+    // view's own viewport stands for it (its palette, its focus)
+    if (!widget && scene() && !scene()->views().isEmpty()) {
+        widget = scene()->views().constFirst()->viewport();
+    }
     Q_UNUSED(option)
 
     // dolphin-ng: with any style but "stripe" the view sets m_alternateBackground on every row

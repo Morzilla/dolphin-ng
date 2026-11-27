@@ -85,6 +85,7 @@
 #include <QScrollBar>
 #include <QSize>
 #include <QGraphicsView>
+#include <KIO/StatJob>
 #include <QTimer>
 #include <QToolTip>
 #include <QVBoxLayout>
@@ -107,6 +108,7 @@ public:
             m_inner->registerJob(job);
         }
         KJobTrackerInterface::registerJob(job);
+        m_started.insert(job, QDateTime::currentMSecsSinceEpoch());
         if (auto *del = qobject_cast<KIO::DeleteJob *>(job)) {
             // deleting: the files being deleted, from the start
             m_label.insert(job, ngTr("Deleting", "Eliminazione"));
@@ -168,6 +170,9 @@ public:
 
     void unregisterJob(KJob *job) override
     {
+        // (KJobTrackerInterface connects this to the job's end before finished(), and its own unregisterJob() takes
+        // the job's connections away: finished() below is not reached, so the history is written here)
+        remember(job);
         if (m_inner) {
             m_inner->unregisterJob(job);
         }
@@ -178,6 +183,7 @@ public:
 protected:
     void finished(KJob *job) override
     {
+        remember(job);
         forget(job);
     }
     void percent(KJob *job, unsigned long value) override
@@ -189,8 +195,50 @@ protected:
     }
 
 private:
+    // a copy, a move or a deletion that ended goes to the history of the jobs tab: what was worked on (the first
+    // item, and how many there were) and where it went
+    void remember(KJob *job)
+    {
+        if (!m_started.contains(job)) {
+            return;
+        }
+        NgActivity::Done done;
+        done.startedAt = m_started.take(job);
+        done.endedAt = QDateTime::currentMSecsSinceEpoch();
+        done.stopped = job->error() != KJob::NoError;
+        QList<QUrl> sources;
+        if (auto *copy = qobject_cast<KIO::CopyJob *>(job)) {
+            sources = copy->srcUrls();
+            const QUrl to = copy->destUrl();
+            const bool toTrash = to.scheme() == QLatin1String("trash");
+            done.label = toTrash ? ngTr("To the trash", "Nel cestino") : copy->operationMode() == KIO::CopyJob::Move ? ngTr("Move", "Sposta") : ngTr("Copy", "Copia");
+            if (!toTrash) {
+                QString folder = to.isLocalFile() ? to.toLocalFile() : to.toDisplayString();
+                if (folder.startsWith(QDir::homePath())) {
+                    folder = QStringLiteral("Home") + folder.mid(QDir::homePath().size());
+                }
+                done.results = {folder};
+                done.where = to; // (the place itself, for "show": the text above is only what the history says)
+            }
+        } else if (auto *del = qobject_cast<KIO::DeleteJob *>(job)) {
+            sources = del->urls();
+            done.label = ngTr("Delete", "Elimina");
+        } else {
+            return;
+        }
+        if (sources.isEmpty()) {
+            return;
+        }
+        done.url = sources.constFirst();
+        if (sources.count() > 1) {
+            done.label += ngTr(" (%1 items)", " (%1 elementi)").arg(sources.count());
+        }
+        NgActivity::self()->addToHistory(QStringLiteral("io-%1-%2").arg(QCoreApplication::applicationPid()).arg(done.endedAt), done);
+    }
+    QHash<KJob *, qint64> m_started;
     void forget(KJob *job)
     {
+        m_started.remove(job);
         for (const QUrl &url : m_urls.value(job) + m_children.value(job)) {
             NgActivity::self()->clear(url);
         }
@@ -279,6 +327,33 @@ DolphinView::DolphinView(const QUrl &url, QWidget *parent)
     connect(m_selectionChangedTimer, &QTimer::timeout, this, &DolphinView::emitSelectionChangedSignal);
 
     m_model = new KFileItemModel(this);
+    // dolphin-ng: the list of what happened lately is made when it is asked for, and nobody tells when there is
+    // more: while it is on show in the active window it is asked again every few seconds (an update of what
+    // is there, not a new listing: nothing flickers, the selection stays)
+    auto *recentRefresh = new QTimer(this);
+    recentRefresh->setInterval(10000);
+    connect(recentRefresh, &QTimer::timeout, this, [this] {
+        if (m_url.scheme() != QLatin1String("ngrecent") || !isVisible() || !window() || !window()->isActiveWindow() || m_loadingState == LoadingState::Loading) {
+            return;
+        }
+        // (asked first whether anything is different: ng-recent says what the list holds in a few figures. Asking
+        // for the list itself every time made the view flicker for nothing)
+        const QUrl url = m_url;
+        KIO::StatJob *job = KIO::stat(url, KIO::HideProgressInfo);
+        connect(job, &KJob::result, this, [this, job, url] {
+            if (job->error() || url != m_url) {
+                return;
+            }
+            const QString stamp = url.toString() + QLatin1Char(' ') + job->statResult().stringValue(KIO::UDSEntry::UDS_EXTRA + 15);
+            const QString before = property("_ng_recent_stamp").toString();
+            setProperty("_ng_recent_stamp", stamp);
+            // (the first answer for a list is what was just listed)
+            if (before.startsWith(url.toString() + QLatin1Char(' ')) && before != stamp) {
+                m_model->refreshDirectory(m_url);
+            }
+        });
+    });
+    recentRefresh->start();
     m_view = new DolphinItemListView();
     m_view->setEnabledSelectionToggles(DolphinItemListView::SelectionTogglesEnabled::FollowSetting);
     m_view->setVisibleRoles({"text"});
@@ -2683,6 +2758,14 @@ void DolphinView::loadDirectory(const QUrl &url, bool reload)
         return;
     }
 
+    // dolphin-ng: in the list of what happened lately the lines that stand for many files open like folders, also
+    // when folders are not set to open in place
+    const bool recentList = url.scheme() == QLatin1String("ngrecent");
+    if (m_view->property("_ng_recent_list").toBool() != recentList) {
+        m_view->setProperty("_ng_recent_list", recentList);
+        m_view->setSupportsItemExpanding(m_view->itemLayout() == KFileItemListView::DetailsLayout && (DetailsModeSettings::expandableFolders() || recentList));
+    }
+
     if (reload) {
         m_model->refreshDirectory(url);
     } else {
@@ -2807,7 +2890,10 @@ void DolphinView::applyViewProperties(const ViewProperties &props)
     // dolphin-ng: the folder's own choice of columns (the Details view), if it has one. Before the header's widths: it
     // shows or hides the header, and a hidden one skipped the folder's saved widths below
     const QString ownColumns = ngFolderColumns(url());
-    m_view->ngSetRowColumns(ownColumns.isEmpty() ? QVariant() : QVariant(ownColumns == QLatin1String("on")));
+    // (the list of what happened lately starts with columns, one line for each entry: what happened, the size, when
+    // and where, side by side. It is a list to look through, and the tall rows showed a handful of entries)
+    const bool recentList = url().scheme() == QLatin1String("ngrecent");
+    m_view->ngSetRowColumns(ownColumns.isEmpty() ? (recentList ? QVariant(true) : QVariant()) : QVariant(ownColumns == QLatin1String("on")));
 
     KItemListView *itemListView = m_container->controller()->view();
     if (itemListView->isHeaderVisible()) {
@@ -2987,37 +3073,8 @@ void DolphinView::ngRunQuickAction(const KFileItem &item, int number)
             KMessageBox::error(window(), ngTr("This needs the program “%1”, which is not installed.", "Serve il programma «%1», che non è installato.").arg(program));
             return;
         }
-        // detached, so a long job (a transcription) goes on if Dolphin is closed; the file shows it is busy
-        // with this action until the process is gone
-        // a program that knows how far it is can write the percentage to $NG_PROGRESS_FILE (ng-transcribe does)
-        static int count = 0;
-        const QString progressFile = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)
-            + QStringLiteral("/dolphin-ng-progress-%1-%2").arg(QCoreApplication::applicationPid()).arg(++count);
-        QProcess process;
-        // through ng-job, when there: Plasma shows the work (with its percentage and a stop button) in the
-        // notifications and on the Dolphin NG icon, also after Dolphin NG is closed
-        static const QString jobRunner = [] {
-            QString p = QStandardPaths::findExecutable(QStringLiteral("ng-job"));
-            const QString local = QDir::homePath() + QStringLiteral("/.local/bin/ng-job");
-            return p.isEmpty() && QFileInfo(local).isExecutable() ? local : p;
-        }();
-        if (jobRunner.isEmpty()) {
-            process.setProgram(program);
-            process.setArguments(arguments);
-        } else {
-            process.setProgram(jobRunner);
-            process.setArguments(QStringList{QStringLiteral("--title"), label, QStringLiteral("--file"), itemUrl.toLocalFile(), QStringLiteral("--"), program} + arguments);
-        }
-        process.setWorkingDirectory(folder);
-        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-        environment.insert(QStringLiteral("NG_PROGRESS_FILE"), progressFile);
-        process.setProcessEnvironment(environment);
-        qint64 pid = 0;
-        if (process.startDetached(&pid)) {
-            NgActivity::self()->setUntilProcessEnds(itemUrl, pid, label + QStringLiteral("…"), progressFile);
-            // what it makes (named after it, in the same folder) is tied to it and shown next to it
-            NgActivity::self()->watchForChildren(itemUrl);
-        } else {
+        // started, or queued behind the same program already at work (NgActivity::start)
+        if (!NgActivity::self()->start(itemUrl, label, program, arguments, folder)) {
             KMessageBox::error(window(), ngTr("“%1” could not be started.", "Impossibile avviare «%1».").arg(program));
         }
     };
@@ -3386,6 +3443,8 @@ void DolphinView::updatePlaceholderLabel()
 
     } else if (m_url.scheme() == QLatin1String("recentlyused")) {
         m_placeholderLabel->setText(i18n("No recently used items"));
+    } else if (m_url.scheme() == QLatin1String("ngrecent")) {
+        m_placeholderLabel->setText(ngTr("Nothing new in the last two weeks", "Niente di nuovo nelle ultime due settimane"));
     } else if (m_url.scheme() == QLatin1String("smb") && (m_url.host().isEmpty() || m_url.path().isEmpty() || m_url.path() == QLatin1String("/"))) {
         m_placeholderLabel->setText(i18n("No shared folders found"));
     } else if (m_url.scheme() == QLatin1String("network")) {
