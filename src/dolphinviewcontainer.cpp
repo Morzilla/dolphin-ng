@@ -753,14 +753,13 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         const bool dark = ngIsDark(palette());
-        const QColor ink = palette().color(QPalette::WindowText);
         const QColor accent = ngAccent(palette().color(QPalette::Highlight), dark);
         const bool hovered = underMouse();
         const QRectF body = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-        QColor fill = isChecked() ? accent : ink;
+        QColor fill = accent;
         fill.setAlphaF(isChecked() ? (hovered ? 0.26 : 0.18) : (hovered ? 0.10 : 0.0));
-        QColor edge = isChecked() ? accent : ink;
-        edge.setAlphaF(isChecked() ? 0.60 : (hovered ? 0.30 : 0.18));
+        QColor edge = accent;
+        edge.setAlphaF(isChecked() ? 0.60 : (hovered ? 0.40 : 0.24));
         painter.setPen(QPen(edge, 1));
         painter.setBrush(fill);
         painter.drawRoundedRect(body, body.height() / 2.0, body.height() / 2.0);
@@ -773,8 +772,8 @@ protected:
             painter.setPen(QPen(dark ? QColor(16, 18, 24) : QColor(255, 255, 255), 1.9, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
             painter.drawPolyline(QPolygonF{QPointF(box.left() + 4, box.center().y() + 0.5), QPointF(box.left() + 7, box.bottom() - 4.5), QPointF(box.right() - 3.5, box.top() + 4.5)});
         } else {
-            QColor outline = ink;
-            outline.setAlphaF(hovered ? 0.6 : 0.42);
+            QColor outline = accent;
+            outline.setAlphaF(hovered ? 0.85 : 0.6);
             painter.setPen(QPen(outline, 1.3));
             painter.setBrush(Qt::NoBrush);
             painter.drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), 5, 5);
@@ -784,8 +783,10 @@ protected:
             icon().paint(&painter, QRect(qRound(x), (height() - 16) / 2, 16, 16));
             x += 16 + 5;
         }
-        QColor textInk = ink;
-        textInk.setAlphaF(isChecked() ? 1.0 : 0.86);
+        // the name in the accent, as the bar's own buttons have it (and not a colour of the palette, which a
+        // scheme may give this bar dark on dark)
+        QColor textInk = accent;
+        textInk.setAlphaF(isChecked() ? 1.0 : 0.92);
         painter.setPen(textInk);
         QFont f = font();
         f.setWeight(isChecked() ? QFont::DemiBold : QFont::Normal);
@@ -816,8 +817,8 @@ public:
         small.setPointSizeF(small.pointSizeF() * 0.88);
         small.setWeight(QFont::DemiBold);
         label->setFont(small);
-        label->setEnabled(false); // (dimmed: it is a caption)
         label->setContentsMargins(0, 0, 4, 0);
+        m_label = label;
         m_layout->addWidget(label);
     }
 
@@ -834,15 +835,25 @@ protected:
         const bool dark = ngIsDark(palette());
         QColor sheet = dark ? QColor(255, 255, 255) : QColor(255, 255, 255);
         sheet.setAlphaF(dark ? 0.055 : 0.42);
-        QColor edge = palette().color(QPalette::WindowText);
-        edge.setAlphaF(0.10);
+        const QColor accent = ngAccent(palette().color(QPalette::Highlight), dark);
+        QColor edge = accent;
+        edge.setAlphaF(0.16);
         painter.setPen(QPen(edge, 1));
         painter.setBrush(sheet);
         const QRectF body = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
         painter.drawRoundedRect(body, 12, 12);
+        // (the caption: the accent, dimmed)
+        QColor caption = accent;
+        caption.setAlphaF(0.72);
+        QPalette own = m_label->palette();
+        if (own.color(QPalette::WindowText) != caption) {
+            own.setColor(QPalette::WindowText, caption);
+            m_label->setPalette(own);
+        }
     }
 
 private:
+    QLabel *m_label = nullptr;
     QHBoxLayout *m_layout;
 };
 
