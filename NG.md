@@ -201,6 +201,9 @@ own (a synchronisation, an updater) is a list apart, "Automatic" among the sideb
 [ng-fsevents](https://github.com/Morzilla/ng-fsevents) service the list has what programs changed anywhere in the
 home, and which program.
 
+An operation shows its first four files from the start, so that what changed is in sight at a glance;
+`RECENT_GROUPS=closed` keeps each one line until it is clicked.
+
 Settings (Configure › NG › Sidebar, or `dolphinrc [DolphinNG]`): `RECENT_LOOK=classic` shows the list in the item
 view, `RECENT_LEGACY=1` brings KDE's own "Recent Files" back, `RECENT_LOCATIONS=1` its "Recent Locations".
 

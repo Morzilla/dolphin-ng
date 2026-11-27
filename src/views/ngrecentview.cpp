@@ -36,7 +36,7 @@
 namespace
 {
 const int s_gap = 6;
-const int s_shownChildren = 6;
+const int s_shownChildren = 4; // the files of an operation in sight before "Show all"
 
 QColor hueColor(int hue, bool dark)
 {
@@ -160,6 +160,21 @@ void NgRecentView::refresh()
     reload();
 }
 
+bool NgRecentView::isOpen(const QString &id) const
+{
+    // Operations show their first files from the start: what was changed is in sight at a glance, at the price of
+    // some room (RECENT_GROUPS=closed: one line each until it is clicked). A click turns either way round
+    static const bool openAtFirst = ngSetting("RECENT_GROUPS").toLower() != QLatin1String("closed");
+    const int generation = ngSettingsGeneration();
+    static int seen = generation;
+    static bool current = openAtFirst;
+    if (generation != seen) {
+        seen = generation;
+        current = ngSetting("RECENT_GROUPS").toLower() != QLatin1String("closed");
+    }
+    return current != m_toggled.contains(id);
+}
+
 QUrl NgRecentView::listUrl() const
 {
     // ng-recent keeps what was done on its own in a list apart, and has one with both
@@ -220,10 +235,7 @@ void NgRecentView::applyKinds()
     }
     m_hover = -1;
     for (int i = 0; i < m_entries.size(); ++i) {
-        if (m_entries.at(i).group && qEnvironmentVariableIsSet("DOLPHIN_NG_RECENT_OPEN_ALL")) {
-            m_expanded.insert(m_entries.at(i).id); // (to look at open operations without a pointer: tests, pictures)
-        }
-        if (m_entries.at(i).group && m_expanded.contains(m_entries.at(i).id)) {
+        if (m_entries.at(i).group && isOpen(m_entries.at(i).id)) {
             loadChildren(i);
         }
     }
@@ -408,7 +420,7 @@ void NgRecentView::layoutRows()
         row.rect = QRect(6, y, width, fileHeight);
         m_rows.append(row);
         y += fileHeight + s_gap;
-        if (entry.group && m_expanded.contains(entry.id)) {
+        if (entry.group && isOpen(entry.id)) {
             const int shown = m_showAll.contains(entry.id) ? entry.children.size() : qMin(s_shownChildren, int(entry.children.size()));
             for (int c = 0; c < shown; ++c) {
                 Row child;
@@ -484,7 +496,7 @@ void NgRecentView::paintEntry(QPainter &painter, const Row &row, const Entry &en
     int x = x0 + 12;
     if (entry.group) {
         // the twisty, then the sign of what was done
-        const bool open = m_expanded.contains(entry.id);
+        const bool open = isOpen(entry.id);
         QPainterPath twisty;
         const QPointF c(x + 8, midY);
         if (open) {
@@ -715,7 +727,7 @@ void NgRecentView::paintEvent(QPaintEvent *)
     // what is inside an open operation hangs from a line in its colour
     for (int i = 0; i < m_rows.size(); ++i) {
         const Row &row = m_rows.at(i);
-        if (row.type != Row::Group || !m_expanded.contains(m_entries.at(row.entry).id)) {
+        if (row.type != Row::Group || !isOpen(m_entries.at(row.entry).id)) {
             continue;
         }
         int bottom = row.rect.bottom();
@@ -803,7 +815,7 @@ void NgRecentView::act(const Button &button)
         hidden.append(entry.id);
         settings.setValue(QStringLiteral("HiddenOperations"), hidden.mid(qMax(0, int(hidden.size()) - 500)));
         settings.sync();
-        m_expanded.remove(entry.id);
+        m_toggled.remove(entry.id);
         reload();
         break;
     }
@@ -820,7 +832,7 @@ void NgRecentView::act(const Button &button)
             file.write((QLatin1Char('\n') + entry.path.mid(home.size() + 1) + QStringLiteral("/\n")).toUtf8());
             file.close();
         }
-        m_expanded.remove(entry.id);
+        m_toggled.remove(entry.id);
         QTimer::singleShot(1500, this, &NgRecentView::reload);
         break;
     }
@@ -849,14 +861,16 @@ void NgRecentView::mousePressEvent(QMouseEvent *event)
     if (row.type == Row::Group) {
         // an operation opens in place, and closes
         const QString id = m_entries.at(row.entry).id;
-        if (m_expanded.contains(id)) {
-            m_expanded.remove(id);
-            m_showAll.remove(id);
+        const bool wasOpen = isOpen(id);
+        if (m_toggled.contains(id)) {
+            m_toggled.remove(id);
         } else {
-            m_expanded.insert(id);
-            if (!m_entries.at(row.entry).loaded) {
-                loadChildren(row.entry);
-            }
+            m_toggled.insert(id);
+        }
+        if (wasOpen) {
+            m_showAll.remove(id);
+        } else if (!m_entries.at(row.entry).loaded) {
+            loadChildren(row.entry);
         }
         layoutRows();
         return;

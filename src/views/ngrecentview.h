@@ -110,7 +110,8 @@ private:
     QList<Entry> m_entries;
     QList<Row> m_rows;
     QList<Button> m_buttons;
-    QSet<QString> m_expanded; // operations open at the moment
+    QSet<QString> m_toggled; // the operations clicked: closed when they start open, open when they start closed
+    bool isOpen(const QString &id) const;
     QSet<QString> m_showAll;
     QHash<QString, QPixmap> m_previews; // path -> picture
     QSet<QString> m_previewAsked;

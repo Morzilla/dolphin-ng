@@ -75,6 +75,7 @@ private:
     QCheckBox *m_panelsFlush = nullptr; // the panels against the window's edges (PANELS_EDGE=flush)
     QCheckBox *m_sidebarPinned;
     QCheckBox *m_recentLocations = nullptr; // "Recent Locations" among the places (RECENT_LOCATIONS)
+    QCheckBox *m_recentClosed = nullptr; // in the recent view, operations closed until clicked (RECENT_GROUPS=closed)
     QCheckBox *m_recentClassic = nullptr; // "Recent Files" in the item view, not in its own (RECENT_LOOK=classic)
     QCheckBox *m_recentLegacy = nullptr; // "Recent Files" stays the desktop's own list (RECENT_LEGACY)
     QCheckBox *m_sectionsFollow = nullptr; // the sections below the places right after the list (SIDEBAR_FOLLOW)
