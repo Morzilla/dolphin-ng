@@ -187,6 +187,23 @@ and the sidebar takes the whole left side of the window, with back, forward and 
 NG settings → Sidebar → Window puts the tabs back above the location bar (under the system's title bar) or above
 the files, as in Dolphin.
 
+## Recent Files
+
+With [ng-recent](https://github.com/Morzilla/ng-recent) installed, "Recent Files" is the story of what happened
+lately, not only what an application opened: one card per file with what happened to it, the application that did
+it, its size and the time, under the day it happened. Things done in one go (an archive unpacked, a
+synchronisation) are one card that opens in place on its files, with what can be done about it underneath: open
+the folder, hide the operation, always leave that folder out.
+
+The bar has, in place of sorting and view, what to see: **Everything**, **Created**, **Modified**, **Opened**
+(each on or off, they add up) and the kinds of file the list holds. What was done by things that work on their
+own (a synchronisation, an updater) is a list apart, "Automatic" among the sidebar's filters. With the
+[ng-fsevents](https://github.com/Morzilla/ng-fsevents) service the list has what programs changed anywhere in the
+home, and which program.
+
+Settings (Configure › NG › Sidebar, or `dolphinrc [DolphinNG]`): `RECENT_LOOK=classic` shows the list in the item
+view, `RECENT_LEGACY=1` brings KDE's own "Recent Files" back, `RECENT_LOCATIONS=1` its "Recent Locations".
+
 ## Folder sizes
 
 When Dolphin shows folder sizes, Dolphin NG keeps them across folders and restarts. A known size shows at once;
@@ -239,6 +256,9 @@ quick actions have a page of their own. Settings are stored in `dolphinrc` (grou
 forced with a `DOLPHIN_NG_*` variable, see [`ng/dolphin-ng.conf.example`](ng/dolphin-ng.conf.example).
 
 <img src="ng/screenshots/features/settings.png" width="420" alt="The NG settings page">
+
+One switch has no control, being there to compare: `ITEM_CACHE=off` (`dolphinrc [DolphinNG]`, or
+`DOLPHIN_NG_ITEM_CACHE=off`) draws every item again at every frame, as before the items were kept as pictures.
 
 ## State of things
 

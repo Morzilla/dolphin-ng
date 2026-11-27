@@ -5,6 +5,8 @@
  */
 
 #include "dolphinviewcontainer.h"
+#include "views/ngrecentview.h"
+#include "kitemviews/kitemlistcontainer.h"
 
 #include "admin/bar.h"
 #include "admin/workerintegration.h"
@@ -838,6 +840,11 @@ public:
             if (m_filter && !m_filter->text().isEmpty()) {
                 m_filter->clear(); // a new folder starts unfiltered
             }
+            // (into the list of what happened lately, or out of it: the bar is another one there, see rebuild())
+            const bool recent = recentStory();
+            if (recent != m_recentBar) {
+                rebuild();
+            }
         });
 
         connect(view, &DolphinView::sortRoleChanged, this, [this] {
@@ -926,7 +933,7 @@ private:
     bool m_sheetApplying = false;
     QColor m_openSheet; // Aurora: the sheet of an open menu's button, see NgOpenSheet (invalid: the style sheet paints it)
     // what the filter shows: everything, files only (no folders), or one NgKind::Category
-    enum { All = -1, FilesOnly = NgKind::CategoryCount };
+    enum { All = -1, FilesOnly = NgKind::CategoryCount, ByHand = 1000, OnItsOwn = 1001 };
 
     // The chips and the search box draw themselves, the same under every widget style: a translucent
     // pill for the checked one, a fainter one on hover, no outlines that depend on the style's hover tracking.
@@ -1099,6 +1106,18 @@ public:
     QList<FilterEntry> filters() const
     {
         QList<FilterEntry> entries;
+        // dolphin-ng: the list of what happened lately is two lists, what you did and what was done by things that
+        // work on their own (a synchronisation, an updater): ng-recent says how many lines each has
+        if (m_view && m_view->url().scheme() == QLatin1String("ngrecent") && !m_view->url().path().startsWith(QLatin1String("/op/"))) {
+            const KIO::UDSEntry root = m_view->rootItem().entry();
+            const int byHand = root.stringValue(KIO::UDSEntry::UDS_EXTRA + 12).toInt();
+            const int onItsOwn = root.stringValue(KIO::UDSEntry::UDS_EXTRA + 13).toInt();
+            const bool automatic = m_view->url().path().startsWith(QLatin1String("/automatic"));
+            if (onItsOwn > 0 || automatic) {
+                entries.append({ngTr("Yours", "Tuoi"), byHand, ByHand, !automatic, QStringLiteral("user-identity")});
+                entries.append({ngTr("Automatic", "Automatici"), onItsOwn, OnItsOwn, automatic, QStringLiteral("view-refresh")});
+            }
+        }
         if (!m_view || m_total == 0 || m_total > 4000) {
             return entries;
         }
@@ -1118,11 +1137,32 @@ public:
     }
     void setFilter(int id)
     {
+        if (id == ByHand || id == OnItsOwn) {
+            // (not a filter of what is listed: the other of the two lists)
+            QUrl url(id == OnItsOwn ? QStringLiteral("ngrecent:/automatic") : QStringLiteral("ngrecent:/"));
+            url.setQuery(QStringLiteral("title=") + QString::fromLatin1(QUrl::toPercentEncoding(id == OnItsOwn ? ngTr("Automatic", "Automatici") : ngTr("Recent Files", "File recenti"))));
+            if (onOpenUrl && m_view && url.path() != (m_view->url().path().isEmpty() ? QStringLiteral("/") : m_view->url().path())) {
+                onOpenUrl(url);
+            }
+            return;
+        }
         setActive(id);
     }
+    std::function<void(const QUrl &)> onOpenUrl;
     std::function<void()> onFiltersChanged;
 
 private:
+    // whether the view shows the list of what happened lately in its own view (not the item view)
+    bool recentStory() const
+    {
+        return m_view && m_view->url().scheme() == QLatin1String("ngrecent") && !m_view->url().path().startsWith(QLatin1String("/op/"))
+            && ngSetting("RECENT_LOOK").toLower() != QLatin1String("classic");
+    }
+    bool m_recentBar = false;
+    int m_recentPresent = 0;
+    bool m_recentRetry = false;
+    QPointer<NgRecentView> m_recentWatched;
+
     // A button that opens a menu: while the menu is open the button loses its own highlight and takes the colour
     // of the menu, so that the two read as one piece (the style joins them, see Breeze NG).
     void menuButton(QToolButton *button)
@@ -1487,6 +1527,101 @@ private:
             fitSorting();
         });
         if (!m_view) {
+            m_flow->invalidate();
+            return;
+        }
+        // The list of what happened lately in its own view (NgRecentView): there is nothing to sort, group or lay
+        // out. In the place of all that, well in sight, what to see: everything that was made or changed, only
+        // what is new, only what was modified, or what was only opened
+        m_recentBar = recentStory();
+        if (m_recentBar) {
+            auto *recentView = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly);
+            const int events = m_view->property("_ng_recent_events").toInt();
+            const int kinds = m_view->property("_ng_recent_kinds").toInt();
+            auto choose = [this](int newEvents, int newKinds) {
+                m_view->setProperty("_ng_recent_events", newEvents);
+                m_view->setProperty("_ng_recent_kinds", newKinds);
+                if (auto *view = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly)) {
+                    view->setFilters(newEvents, newKinds);
+                }
+                rebuild();
+            };
+            // (a pill of buttons that are on or off each on its own: the choices add up)
+            auto pillOf = [this] {
+                auto *pill = new QWidget(this);
+                pill->setObjectName(QStringLiteral("sortPill"));
+                pill->setAttribute(Qt::WA_StyledBackground);
+                auto *segments = new QHBoxLayout(pill);
+                segments->setContentsMargins(3, 0, 3, 0);
+                segments->setSpacing(1);
+                m_flow->addWidget(pill);
+                return segments;
+            };
+            auto toggle = [this](QHBoxLayout *segments, const QString &text, const char *icon, bool on, bool named) {
+                QToolButton *button = chip(text, on);
+                m_flow->removeWidget(button);
+                button->setParent(segments->parentWidget());
+                button->setIcon(QIcon::fromTheme(QString::fromLatin1(icon)));
+                button->setToolButtonStyle(named ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
+                button->setToolTip(text);
+                segments->addWidget(button);
+                return button;
+            };
+            caption(ngTr("Show", "Mostra"));
+            QHBoxLayout *what = pillOf();
+            m_sortPill = what->parentWidget();
+            connect(toggle(what, ngTr("Everything", "Tutto"), "view-list-details", events == 0 && kinds == 0, true), &QToolButton::clicked, this, [choose] {
+                choose(0, 0);
+            });
+            const struct {
+                int bit;
+                QString text;
+                const char *icon;
+            } happened[] = {{1, ngTr("Created", "Creati"), "document-new"}, {2, ngTr("Modified", "Modificati"), "document-edit"}, {4, ngTr("Opened", "Aperti"), "document-open"}};
+            for (const auto &one : happened) {
+                const int bit = one.bit;
+                connect(toggle(what, one.text, one.icon, events & bit, true), &QToolButton::clicked, this, [choose, events, kinds, bit] {
+                    choose(events ^ bit, kinds);
+                });
+            }
+            // the kinds of file there are in the list (the ones chosen stay, also when the list no longer has any)
+            const int present = (recentView ? recentView->kindsPresent() : 0) | kinds;
+            if (present != 0) {
+                const QString labels[NgKind::CategoryCount] = {ngTr("Folders", "Cartelle"),       ngTr("Images", "Immagini"),          ngTr("Documents", "Documenti"),
+                                                               ngTr("Spreadsheets", "Fogli"),     ngTr("Archives", "Archivi"),         ngTr("Audio and video", "Audio e video"),
+                                                               ngTr("Code and data", "Codice e dati"), ngTr("Packages", "Pacchetti"), ngTr("Other", "Altro")};
+                static const char *const icons[NgKind::CategoryCount] = {"folder", "image-x-generic", "x-office-document", "x-office-spreadsheet", "application-zip",
+                                                                         "video-x-generic", "application-json", "application-x-rpm", "unknown"};
+                    QHBoxLayout *which = pillOf();
+                for (int category = 0; category < NgKind::CategoryCount; ++category) {
+                    const int bit = 1 << category;
+                    if (!(present & bit)) {
+                        continue;
+                    }
+                    connect(toggle(which, labels[category], icons[category], kinds & bit, true), &QToolButton::clicked, this, [choose, events, kinds, bit] {
+                        choose(events, kinds ^ bit);
+                    });
+                }
+            }
+            m_recentPresent = present;
+            if (recentView && recentView != m_recentWatched) {
+                // (another list was read: other kinds may be in it)
+                m_recentWatched = recentView;
+                connect(recentView, &NgRecentView::contentChanged, this, [this, recentView] {
+                    if (m_recentBar && (recentView->kindsPresent() | recentView->kindFilter()) != m_recentPresent) {
+                        rebuild();
+                    }
+                });
+            } else if (!recentView && !m_recentRetry) {
+                // (the view is made a moment after the list is entered: the kinds are added when it is there)
+                m_recentRetry = true;
+                QTimer::singleShot(250, this, [this] {
+                    m_recentRetry = false;
+                    if (recentStory()) {
+                        rebuild();
+                    }
+                });
+            }
             m_flow->invalidate();
             return;
         }
@@ -1861,7 +1996,7 @@ private:
                 current = label;
             }
             connect(action, &QAction::triggered, this, [this, what] {
-                setActive(what);
+                setFilter(what); // ("Yours" and "Automatic" are not kinds of file: they open the other recent list)
             });
         };
         for (const FilterEntry &filter : filters()) {
@@ -3452,6 +3587,35 @@ DolphinViewContainer::DolphinViewContainer(const QUrl &url, QWidget *parent)
         });
     }
     m_topLayout->addWidget(m_view, positionFor.view, 0);
+
+    // dolphin-ng: the list of what happened lately has a view of its own (NgRecentView: cards by day, operations that
+    // open in place), which stands in for the items while that list is on show. RECENT_LOOK=classic: the item view
+    auto showRecent = [this] {
+        const QUrl url = m_view->url();
+        const bool recent = url.scheme() == QLatin1String("ngrecent") && !url.path().startsWith(QLatin1String("/op/"))
+            && ngSetting("RECENT_LOOK").toLower() != QLatin1String("classic");
+        auto *recentView = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly);
+        if (recent && !recentView) {
+            recentView = new NgRecentView(m_view);
+            m_view->layout()->addWidget(recentView);
+            connect(recentView, &NgRecentView::folderRequested, this, [this](const QUrl &folder) {
+                setUrl(folder);
+            });
+        }
+        // (the item view goes on listing underneath: the filters, the status bar and the sidebar count on it)
+        if (auto *items = m_view->findChild<KItemListContainer *>()) {
+            items->setVisible(!recent);
+        }
+        if (recentView) {
+            recentView->setVisible(recent);
+            if (recent) {
+                recentView->setFilters(m_view->property("_ng_recent_events").toInt(), m_view->property("_ng_recent_kinds").toInt());
+                recentView->setUrl(url);
+            }
+        }
+    };
+    connect(m_view, &DolphinView::urlChanged, this, showRecent);
+    QTimer::singleShot(0, this, showRecent);
     m_topLayout->addWidget(m_filterBar, positionFor.filterBar, 0);
     if (GeneralSettings::showStatusBar() == GeneralSettings::EnumShowStatusBar::FullWidth) {
         m_topLayout->addWidget(m_statusBar, positionFor.statusBar, 0);
@@ -3836,6 +4000,10 @@ QString DolphinViewContainer::placesText() const
 void DolphinViewContainer::reload()
 {
     view()->reload();
+    // (the list of what happened lately in its own view: read again too)
+    if (auto *recentView = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly); recentView && recentView->isVisible()) {
+        recentView->refresh();
+    }
     m_messageWidget->hide();
     m_statusBar->updateSpaceInfo();
 }
@@ -3868,6 +4036,12 @@ QString DolphinViewContainer::caption() const
     }
 
     KFilePlacesModel *placesModel = DolphinPlacesModelSingleton::instance().placesModel();
+
+    // dolphin-ng: the list of what happened lately is shown from the place "Recent Files": its name
+    if (url().scheme() == QLatin1String("ngrecent")) {
+        const QModelIndex place = placesModel->closestItem(QUrl(QStringLiteral("recentlyused:/files")));
+        return place.isValid() ? placesModel->text(place) : ngTr("Recent", "Recenti");
+    }
 
     QModelIndex url_index = placesModel->closestItem(url());
 
@@ -4612,6 +4786,9 @@ public:
         , m_open(std::move(open))
         , m_part(part)
     {
+        if (bar && m_open) {
+            bar->onOpenUrl = m_open; // ("Yours" and "Automatic" in the recent list are two lists, not a filter)
+        }
         setAttribute(Qt::WA_NoSystemBackground);
         setMouseTracking(true);
         setCursor(Qt::PointingHandCursor);

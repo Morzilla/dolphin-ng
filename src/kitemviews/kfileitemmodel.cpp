@@ -741,7 +741,8 @@ QList<QPair<int, QVariant>> KFileItemModel::groups() const
         // other items begin in starts again after it. Only for groups titled by words (ratings and permissions have
         // titles of their own kind)
         int pinned = 0;
-        while (pinned < m_itemData.count() && m_itemData.at(pinned)->ngPinned) {
+        const bool recent = !m_itemData.isEmpty() && m_itemData.first()->item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) == QLatin1String("ngrecent");
+        while (!recent && pinned < m_itemData.count() && m_itemData.at(pinned)->ngPinned) {
             ++pinned;
         }
         if (pinned > 0 && !m_groups.isEmpty() && m_groups.first().second.typeId() == QMetaType::QString) {
@@ -2073,8 +2074,14 @@ void KFileItemModel::insertItems(QList<ItemData *> &newItems)
 
     // dolphin-ng: a new file may be the child of a file at work here (a transcription, an extracted folder),
     // or the one a tie was waiting for: put it right after its parent
+    // (only in a folder: an entry that comes into the list of what happened lately, or into the results of a
+    // search, has not "just appeared in a folder on show", and offering it to the desktop's recent files made
+    // every line of the recent list an "opened" file)
+    const bool ownFolder = m_dirLister && m_dirLister->url().isLocalFile();
     for (const ItemData *data : std::as_const(newItems)) {
-        NgActivity::self()->offerNewFile(data->item.url());
+        if (ownFolder && data->item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) != QLatin1String("ngrecent")) {
+            NgActivity::self()->offerNewFile(data->item.url());
+        }
     }
     if (NgActivity::self()->hasLinks()) {
         ngRebuildFamilies();
@@ -2416,7 +2423,9 @@ QHash<QByteArray, QVariant> KFileItemModel::retrieveData(const KFileItem &item, 
         data.insert(sharedValue("extension"), QFileInfo(item.name()).suffix());
     }
 
-    if (m_requestRole[SizeRole] && !isDir) {
+    // (dolphin-ng: an entry of the list of what happened lately has its size also when the role is not asked for:
+    // the rows' drawings and thumbnails write it, and said "0 B")
+    if ((m_requestRole[SizeRole] || item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) == QLatin1String("ngrecent")) && !isDir) {
         KIO::filesize_t size = item.size();
         // dolphin-ng: entries of virtual folders (Recent Files) may come without their size: read it from the file
         if (size == 0 && !item.isDir() && !item.isLocalFile() && !item.localPath().isEmpty()) {
@@ -2482,13 +2491,19 @@ QHash<QByteArray, QVariant> KFileItemModel::retrieveData(const KFileItem &item, 
             }
 
             path = item.localPath();
+            // dolphin-ng: things done in one go, a line of the recent list that opens on its files: it has no
+            // place of its own, the folder its files are in does (ng-recent gives it in UDS_EXTRA + 9)
+            if (path.isEmpty() && item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) == QLatin1String("ngrecent")
+                && item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 8) == QLatin1String("6")) {
+                path = item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 9);
+            }
             if (path.startsWith(homePath)) {
                 path.replace(0, homePath.length(), QLatin1Char('~'));
             }
         }
 
         const int index = path.lastIndexOf(item.text());
-        path = path.mid(0, index - 1);
+        path = index > 0 ? path.mid(0, index - 1) : path;
         data.insert(sharedValue("path"), path);
     }
 
@@ -2507,7 +2522,10 @@ QHash<QByteArray, QVariant> KFileItemModel::retrieveData(const KFileItem &item, 
         data.insert(sharedValue("deletiontime"), deletionTime);
     }
 
-    if (m_requestRole[IsExpandableRole] && isDir) {
+    // dolphin-ng: in the list of what happened lately only the lines that stand for many files open (things done
+    // in one go, kind 6); a folder listed there is an event, its contents are not part of the list
+    const bool recentEntry = item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) == QLatin1String("ngrecent");
+    if (m_requestRole[IsExpandableRole] && isDir && (!recentEntry || item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 8) == QLatin1String("6"))) {
         data.insert(sharedValue("isExpandable"), true);
     }
 
@@ -2615,8 +2633,9 @@ bool KFileItemModel::lessThan(const ItemData *a, const ItemData *b, const QColla
         }
     }
 
-    // dolphin-ng: what is pinned comes first, before the folders, whatever the sorting
-    if (a->ngPinned != b->ngPinned) {
+    // dolphin-ng: what is pinned comes first, before the folders, whatever the sorting. Not in the list of what
+    // happened lately: that one is in order of time, and the pinned items are in the sidebar anyway
+    if (a->ngPinned != b->ngPinned && a->item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) != QLatin1String("ngrecent")) {
         return a->ngPinned;
     }
 

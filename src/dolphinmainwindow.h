@@ -604,7 +604,7 @@ private Q_SLOTS:
      * Reloads the view if \a url is the current URL already, and changes the
      * current URL otherwise.
      */
-    void slotPlaceActivated(const QUrl &url);
+    void slotPlaceActivated(const QUrl &placeUrl);
 
     /**
      * Is called if the another view has been activated by changing the current

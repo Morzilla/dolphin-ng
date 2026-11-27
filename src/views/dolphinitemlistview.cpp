@@ -184,7 +184,9 @@ bool DolphinItemListView::itemLayoutHighlightEntireRow(ItemLayout layout) const
 
 bool DolphinItemListView::itemLayoutSupportsItemExpanding(ItemLayout layout) const
 {
-    return layout == DetailsLayout && DetailsModeSettings::expandableFolders();
+    // dolphin-ng: the list of what happened lately has lines that open on their files (DolphinView says when it is
+    // on show), whatever the setting for folders
+    return layout == DetailsLayout && (DetailsModeSettings::expandableFolders() || property("_ng_recent_list").toBool());
 }
 
 void DolphinItemListView::onItemLayoutChanged(ItemLayout current, ItemLayout previous)
@@ -295,6 +297,7 @@ void DolphinItemListView::updateGridSize()
             itemHeight = ngRowColumns(this) && ngDetailsCompact() ? padding * 2 + option.fontMetrics.height() + 10
                 : ngRowColumns(this)                               ? padding * 2 + 2 * option.fontMetrics.height() + 4 + 12
                                                                    : padding * 2 + 2 * option.fontMetrics.height() + 4 + 24;
+            itemHeight += qBound(0, iconSize - (previewsShown() ? 48 : 22), 96); // the zoom makes the row taller (as ngRowZoomRoom)
         }
         break;
     }

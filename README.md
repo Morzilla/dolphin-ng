@@ -36,6 +36,13 @@
 > - **Work in progress on the file itself**: copies, conversions and transcriptions grow next to their source.
 > - **A pipeline of the work on your files**: one view of every operation, the ones running and the ones done
 >   (quick actions, copies, moves, deletions, downloads), shared by every Dolphin NG window.
+> - **Recent Files that tell what happened**: not only what an application opened, but what was downloaded, made,
+>   added or modified lately, and by which program ("Downloaded from kubuntu.org with Firefox", "Modified with
+>   GIMP"), with [ng-recent](https://github.com/Morzilla/ng-recent) and, for changes anywhere in the home, the
+>   [ng-fsevents](https://github.com/Morzilla/ng-fsevents) service. KDE's own list is an option away.
+>
+>   ![Recent Files: the event and the program under each file](ng/screenshots/readme/recent-list.png)
+>
 > - **A glass sidebar**: places, recent files, pinned items, filters with their counts, every disk with its usage.
 > - **Selections that read as one**: neighbouring selected items share one outline.
 > - **The same look in every app's Open/Save window** with [Dialog NG](https://github.com/Morzilla/dialog-ng), and

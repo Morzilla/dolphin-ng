@@ -62,6 +62,10 @@ private:
     QWidget *m_ngFadeBottom = nullptr;
     QWidget *m_ngBottom = nullptr;
     QWidget *m_ngPinned = nullptr;
+    bool ngRecentLocationsHidden(const KFilePlacesModel *placesModel, const QModelIndex &index) const;
+    void ngRevealCurrent(); // dolphin-ng: the place of the folder shown, scrolled into view
+    bool m_ngRevealQueued = false;
+    int m_ngRevealHeight = -1;
     QWidget *m_ngFilters = nullptr;
     bool m_ngLayouting = false;
     bool m_ngDevicesPending = false;
