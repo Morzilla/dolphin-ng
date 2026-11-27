@@ -1196,6 +1196,8 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     m_recentLegacy = toggle(ngTr("\"Recent Files\" shows only the files applications opened, as in Dolphin (not what was created, downloaded, moved or made)",
                                  "\"File recenti\" mostra solo i file aperti dalle applicazioni, come in Dolphin (non ciò che è stato creato, scaricato, spostato o prodotto)"));
     m_recentLocations = toggle(ngTr("Show \"Recent Locations\" in the places", "Mostra \"Posizioni recenti\" tra le risorse"));
+    m_recentClassic = toggle(ngTr("\"Recent Files\" as a plain list of items, not as cards by day with the operations that open",
+                                  "\"File recenti\" come elenco normale, non come schede per giorno con le operazioni che si aprono"));
     m_sidebarPinned = toggle(ngTr("Pinned folders and files", "Cartelle e file fissati in alto"));
     m_sidebarFilters = toggle(ngTr("Filters, at the bottom of the panel", "Filtri, in fondo al pannello"));
     m_sidebarPinned->hide(); // driven by the list above
@@ -1464,7 +1466,7 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
                  {m_motion, "GLASS_MOTION"}, {m_lavaStyle, "LAVA_STYLE"}, {m_lavaSize, "LAVA_SIZE"}, {m_lavaColours, "LAVA_COLORS"}, {m_lavaSpeed, "LAVA_SPEED"},
                  {m_rim, "GLASS_RIM"},      {m_devices, "DEVICES"},     {m_twoLines, "LIST"},        {m_rows, "ROWS"},        {m_icons, "ICONS"},
                  {m_mark, "MARK"},          {m_sigla, "SIGLA"},         {m_ago, "DATE_AGO"},         {m_tiles, "TILES"},          {m_rowDates, "ROW_DATES"},
-                 {m_rowWash, "ROW_WASH"}, {m_hoverPreview, "PREVIEW_HOVER"}, {m_hoverDelay, "PREVIEW_HOVER"}, {m_float, "PREVIEW_FLOAT"}, {m_cards, "CARDS"}, {m_cardsFit, "CARDS_FIT"}, {m_cardsInfo, "CARDS_INFO"}, {m_cardsMark, "CARDS_MARK"}, {m_cardsBadge, "CARDS_BADGE"}, {m_activitySize, "ACTIVITY_SIZE"}, {m_sidebarFilters, "SIDEBAR_FILTERS"}, {m_sidebarPinned, "SIDEBAR_PINNED"}, {m_recentLegacy, "RECENT_LEGACY"}, {m_recentLocations, "RECENT_LOCATIONS"}};
+                 {m_rowWash, "ROW_WASH"}, {m_hoverPreview, "PREVIEW_HOVER"}, {m_hoverDelay, "PREVIEW_HOVER"}, {m_float, "PREVIEW_FLOAT"}, {m_cards, "CARDS"}, {m_cardsFit, "CARDS_FIT"}, {m_cardsInfo, "CARDS_INFO"}, {m_cardsMark, "CARDS_MARK"}, {m_cardsBadge, "CARDS_BADGE"}, {m_activitySize, "ACTIVITY_SIZE"}, {m_sidebarFilters, "SIDEBAR_FILTERS"}, {m_sidebarPinned, "SIDEBAR_PINNED"}, {m_recentLegacy, "RECENT_LEGACY"}, {m_recentLocations, "RECENT_LOCATIONS"}, {m_recentClassic, "RECENT_LOOK"}};
     for (const auto &entry : bound) {
         entry.widget->setEnabled(!ngSettingFromEnvironment(entry.name));
     }
@@ -1475,7 +1477,7 @@ NgSettingsPage::NgSettingsPage(QWidget *parent)
     quickSideRow->setEnabled(m_quickView->isChecked());
 
     connect(m_dialogQuick, &QCheckBox::toggled, this, &NgSettingsPage::changed);
-    for (QCheckBox *box : {m_panelsFlush, m_sectionsFollow, m_recentLegacy, m_recentLocations, m_glassPanel, m_motion, m_twoLines, m_icons, m_ago, m_tiles, m_hoverPreview, m_folderSizes, m_rowDates, m_float, m_sidebarFilters, m_sidebarPinned, m_rowWash, m_folderContentDate}) {
+    for (QCheckBox *box : {m_panelsFlush, m_sectionsFollow, m_recentLegacy, m_recentLocations, m_recentClassic, m_glassPanel, m_motion, m_twoLines, m_icons, m_ago, m_tiles, m_hoverPreview, m_folderSizes, m_rowDates, m_float, m_sidebarFilters, m_sidebarPinned, m_rowWash, m_folderContentDate}) {
         connect(box, &QCheckBox::toggled, this, &NgSettingsPage::changed);
     }
     connect(m_hoverDelay, &QSpinBox::valueChanged, this, &NgSettingsPage::changed);
@@ -1683,6 +1685,7 @@ void NgSettingsPage::loadSettings()
     m_sectionsFollow->setChecked(ngSetting("SIDEBAR_FOLLOW").toLower() == QLatin1String("list"));
     m_recentLegacy->setChecked(ngSetting("RECENT_LEGACY") == QLatin1String("1"));
     m_recentLocations->setChecked(ngSetting("RECENT_LOCATIONS") == QLatin1String("1"));
+    m_recentClassic->setChecked(ngSetting("RECENT_LOOK").toLower() == QLatin1String("classic"));
     m_folderContentDate->setChecked(ngSetting("SORT_FOLDERS_BY_CONTENT").toLower() != QLatin1String("off"));
 
     m_twoLines->setChecked(ngSetting("LIST").toLower() != QLatin1String("columns"));
@@ -1773,6 +1776,9 @@ void NgSettingsPage::applySettings()
     }
     if (!ngSettingFromEnvironment("RECENT_LOCATIONS")) {
         setNgSetting("RECENT_LOCATIONS", m_recentLocations->isChecked() ? QStringLiteral("1") : QString());
+    }
+    if (!ngSettingFromEnvironment("RECENT_LOOK")) {
+        setNgSetting("RECENT_LOOK", m_recentClassic->isChecked() ? QStringLiteral("classic") : QString());
     }
     {
         QStringList order;
@@ -1868,6 +1874,7 @@ void NgSettingsPage::restoreDefaults()
     m_sectionsFollow->setChecked(false);
     m_recentLegacy->setChecked(false);
     m_recentLocations->setChecked(false);
+    m_recentClassic->setChecked(false);
     fillSectionOrder({QStringLiteral("places"), QStringLiteral("pinned"), QStringLiteral("filters"), QStringLiteral("disks")}, true, true, true);
     for (const auto &entry : std::as_const(m_deviceBoxes)) {
         entry.second->setChecked(true);

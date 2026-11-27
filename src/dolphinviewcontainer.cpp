@@ -1996,7 +1996,7 @@ private:
                 current = label;
             }
             connect(action, &QAction::triggered, this, [this, what] {
-                setActive(what);
+                setFilter(what); // ("Yours" and "Automatic" are not kinds of file: they open the other recent list)
             });
         };
         for (const FilterEntry &filter : filters()) {
@@ -4000,6 +4000,10 @@ QString DolphinViewContainer::placesText() const
 void DolphinViewContainer::reload()
 {
     view()->reload();
+    // (the list of what happened lately in its own view: read again too)
+    if (auto *recentView = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly); recentView && recentView->isVisible()) {
+        recentView->refresh();
+    }
     m_messageWidget->hide();
     m_statusBar->updateSpaceInfo();
 }
@@ -4782,8 +4786,8 @@ public:
         , m_open(std::move(open))
         , m_part(part)
     {
-        if (bar && open) {
-            bar->onOpenUrl = open; // ("Yours" and "Automatic" in the recent list are two lists, not a filter)
+        if (bar && m_open) {
+            bar->onOpenUrl = m_open; // ("Yours" and "Automatic" in the recent list are two lists, not a filter)
         }
         setAttribute(Qt::WA_NoSystemBackground);
         setMouseTracking(true);

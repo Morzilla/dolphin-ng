@@ -3144,7 +3144,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
                     } else if (!happened.isEmpty() && recentItem.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 8) == QLatin1String("6")) {
                         // things done in one go: not "Folder", how many files it opens on
                         const int files = recentItem.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 10).toInt();
-                        typeText = QLocale().toString(files) + QLatin1String(" file");
+                        typeText = QLocale().toString(files) + QLatin1Char(' ') + (files == 1 ? ngTr("file", "file") : ngTr("files", "file"));
                     }
                 }
             }
@@ -5119,7 +5119,8 @@ QRectF KStandardItemListWidget::boundingRect() const
     const QRectF r = KItemListWidget::boundingRect();
     // (cards of one family share a background drawn out to the middle of the gap between them: within the bounds,
     // or the picture an item is kept as cuts it off)
-    return m_layout == CardsLayout ? r.adjusted(-12, -12, 12, 12) : m_ngObjectRow ? r.adjusted(-6, -6, 6, 6) : r;
+    // (20: half of the widest gap paintNgFamily() joins across, 40 px, which a stretched grid can reach)
+    return m_layout == CardsLayout ? r.adjusted(-20, -20, 20, 20) : m_ngObjectRow ? r.adjusted(-6, -6, 6, 6) : r;
 }
 
 void KStandardItemListWidget::moveEvent(QGraphicsSceneMoveEvent *event)

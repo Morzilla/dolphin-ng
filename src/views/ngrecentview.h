@@ -29,6 +29,8 @@ public:
     explicit NgRecentView(QWidget *parent = nullptr);
 
     void setUrl(const QUrl &url);
+    /** reads the list again (the window's Reload) */
+    void refresh();
     /**
      * What to see. @p events: a sum of 1 what is new (made, downloaded, added), 2 what was modified, 4 what was only
      * opened; 0: everything that was made or changed. @p kinds: a sum of 1 << NgKind::Category (pictures, documents…);
@@ -112,7 +114,7 @@ private:
     QSet<QString> m_previewAsked;
     int m_hover = -1;
     int m_hoverButton = -1;
-    int m_selected = -1;
+    QString m_selected; // the path of the selected file (not its row: the rows are made anew when anything opens)
     int m_contentHeight = 0;
     bool m_loading = false;
     int m_events = 0;

@@ -149,8 +149,14 @@ void NgRecentView::setUrl(const QUrl &url)
     }
     m_url = url;
     m_stamp.clear();
-    m_selected = -1;
+    m_selected.clear();
     verticalScrollBar()->setValue(0);
+    reload();
+}
+
+void NgRecentView::refresh()
+{
+    m_stamp.clear();
     reload();
 }
 
@@ -203,7 +209,6 @@ void NgRecentView::applyKinds()
         }
     }
     m_hover = -1;
-    m_selected = -1;
     for (int i = 0; i < m_entries.size(); ++i) {
         if (m_entries.at(i).group && qEnvironmentVariableIsSet("DOLPHIN_NG_RECENT_OPEN_ALL")) {
             m_expanded.insert(m_entries.at(i).id); // (to look at open operations without a pointer: tests, pictures)
@@ -366,6 +371,8 @@ void NgRecentView::requestPreviews(const QList<Entry> &entries)
 void NgRecentView::layoutRows()
 {
     m_rows.clear();
+    m_hover = -1; // (rows by number: none is under the pointer until it moves)
+    m_hoverButton = -1;
     const QFontMetrics metrics(font());
     const int fileHeight = qMax(58, 2 * metrics.height() + 24);
     const int width = viewport()->width() - 12;
@@ -448,7 +455,7 @@ void NgRecentView::paintEntry(QPainter &painter, const Row &row, const Entry &en
     const QColor hue = hueColor(entry.hue, dark);
     const QRectF card = row.rect;
     const bool child = row.child >= 0;
-    const bool selected = m_selected >= 0 && &m_rows.at(m_selected) == &row;
+    const bool selected = !entry.group && !m_selected.isEmpty() && entry.path == m_selected;
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(selected ? QPen(faded(pal.color(QPalette::Highlight), 0.9), 1.2) : Qt::NoPen);
     // a card: a veil of the text's colour on the window (lighter for what is inside an operation)
@@ -538,7 +545,7 @@ void NgRecentView::paintEntry(QPainter &painter, const Row &row, const Entry &en
     if (entry.group) {
         // how many files, on a pill
         painter.setFont(bold);
-        const QString count = QLocale().toString(entry.count) + QLatin1String(" file");
+        const QString count = QLocale().toString(entry.count) + QLatin1Char(' ') + (entry.count == 1 ? ngTr("file", "file") : ngTr("files", "file"));
         const int pillW = boldMetrics.horizontalAdvance(count) + 22, pillH = boldMetrics.height() + 8;
         const QRectF pill(infoRight - pillW, midY - pillH / 2.0, pillW, pillH);
         painter.setPen(QPen(faded(ink, 0.16), 1));
@@ -824,7 +831,7 @@ void NgRecentView::mousePressEvent(QMouseEvent *event)
     }
     const int index = rowAt(event->pos());
     if (index < 0) {
-        m_selected = -1;
+        m_selected.clear();
         viewport()->update();
         return;
     }
@@ -845,10 +852,10 @@ void NgRecentView::mousePressEvent(QMouseEvent *event)
         return;
     }
     if (row.type == Row::File) {
-        m_selected = index;
-        viewport()->update();
-        if (style()->styleHint(QStyle::SH_ItemView_ActivateItemOnSingleClick, nullptr, this)) {
-            if (const Entry *entry = entryOf(row)) {
+        if (const Entry *entry = entryOf(row)) {
+            m_selected = entry->path;
+            viewport()->update();
+            if (style()->styleHint(QStyle::SH_ItemView_ActivateItemOnSingleClick, nullptr, this)) {
                 open(*entry);
             }
         }
