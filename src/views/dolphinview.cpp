@@ -85,6 +85,7 @@
 #include <QScrollBar>
 #include <QSize>
 #include <QGraphicsView>
+#include <KIO/StatJob>
 #include <QTimer>
 #include <QToolTip>
 #include <QVBoxLayout>
@@ -332,9 +333,25 @@ DolphinView::DolphinView(const QUrl &url, QWidget *parent)
     auto *recentRefresh = new QTimer(this);
     recentRefresh->setInterval(10000);
     connect(recentRefresh, &QTimer::timeout, this, [this] {
-        if (m_url.scheme() == QLatin1String("ngrecent") && isVisible() && window() && window()->isActiveWindow() && m_loadingState != LoadingState::Loading) {
-            m_model->refreshDirectory(m_url);
+        if (m_url.scheme() != QLatin1String("ngrecent") || !isVisible() || !window() || !window()->isActiveWindow() || m_loadingState == LoadingState::Loading) {
+            return;
         }
+        // (asked first whether anything is different: ng-recent says what the list holds in a few figures. Asking
+        // for the list itself every time made the view flicker for nothing)
+        const QUrl url = m_url;
+        KIO::StatJob *job = KIO::stat(url, KIO::HideProgressInfo);
+        connect(job, &KJob::result, this, [this, job, url] {
+            if (job->error() || url != m_url) {
+                return;
+            }
+            const QString stamp = url.toString() + QLatin1Char(' ') + job->statResult().stringValue(KIO::UDSEntry::UDS_EXTRA + 15);
+            const QString before = property("_ng_recent_stamp").toString();
+            setProperty("_ng_recent_stamp", stamp);
+            // (the first answer for a list is what was just listed)
+            if (before.startsWith(url.toString() + QLatin1Char(' ')) && before != stamp) {
+                m_model->refreshDirectory(m_url);
+            }
+        });
     });
     recentRefresh->start();
     m_view = new DolphinItemListView();

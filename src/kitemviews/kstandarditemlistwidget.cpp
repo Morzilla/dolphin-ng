@@ -71,6 +71,91 @@ static QString ngHappened(const KFileItem &item)
     return item.entry().stringValue(KIO::UDSEntry::UDS_COMMENT);
 }
 
+// dolphin-ng: the list of what happened lately reads at a glance by colour: what kind of thing happened to an entry
+// (ng-recent's kind in UDS_EXTRA + 8; for things done in one go, 6, what they did in + 14; + 11 when it was done by
+// something that works on its own). -1 for any other item; else 0 new, 1 added, 2 modified, 3 downloaded, 4 made by
+// an action, 5 opened, 7 automatic
+static int ngRecentHue(const KFileItem &item, bool *group = nullptr)
+{
+    if (group) {
+        *group = false;
+    }
+    if (item.isNull() || item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) != QLatin1String("ngrecent")) {
+        return -1;
+    }
+    int kind = item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 8).toInt();
+    if (kind == 6) {
+        if (group) {
+            *group = true;
+        }
+        const int made = item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 14).toInt();
+        kind = made == 1 ? 0 : made == 2 ? 1 : 2;
+    }
+    return item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 11) == QLatin1String("automatic") ? 7 : kind;
+}
+
+static QColor ngRecentColor(int hue, bool dark)
+{
+    switch (hue) {
+    case 0:
+        return dark ? QColor(0xE6, 0xB2, 0x5C) : QColor(0xA8, 0x6A, 0x12); // new: amber
+    case 1:
+        return dark ? QColor(0xB9, 0x9C, 0xF0) : QColor(0x7A, 0x4F, 0xC0); // added: violet
+    case 2:
+        return dark ? QColor(0x86, 0xB6, 0xF2) : QColor(0x2C, 0x6F, 0xC7); // modified: blue
+    case 3:
+        return dark ? QColor(0x6F, 0xD0, 0x8F) : QColor(0x2A, 0x8A, 0x4A); // downloaded: green
+    case 4:
+        return dark ? QColor(0xF0, 0x8A, 0x7C) : QColor(0xC0, 0x39, 0x2B); // made by an action: red
+    case 7:
+        return dark ? QColor(0x6F, 0xD0, 0xD0) : QColor(0x1A, 0x8A, 0x8A); // on its own: teal
+    default:
+        return QColor();
+    }
+}
+
+// Things done in one go, a line that opens on its files: not a folder's icon but a badge in the colour of what was
+// done, with a second sheet behind it (many files) and a sign: + new files, an arrow for files added, a pencil for
+// files modified, a turning arrow for what worked on its own
+static void ngPaintRecentBadge(QPainter *painter, const QRectF &box, int hue, bool dark)
+{
+    const QColor ink = ngRecentColor(hue, dark);
+    QColor fill = ink, edge = ink, back = ink, backEdge = ink;
+    fill.setAlphaF(dark ? 0.22 : 0.15);
+    edge.setAlphaF(0.50);
+    back.setAlphaF(dark ? 0.12 : 0.08);
+    backEdge.setAlphaF(0.28);
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing);
+    const qreal radius = box.width() * 0.26;
+    const QRectF front = box.adjusted(0.5, 3.5, -3.5, -0.5);
+    painter->setPen(QPen(backEdge, 1));
+    painter->setBrush(back);
+    painter->drawRoundedRect(front.translated(3, -3), radius, radius);
+    painter->setPen(QPen(edge, 1));
+    painter->setBrush(fill);
+    painter->drawRoundedRect(front, radius, radius);
+    painter->setBrush(Qt::NoBrush);
+    painter->setPen(QPen(ink, qMax(1.6, box.width() / 18.0), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    const QPointF c = front.center();
+    const qreal r = front.width() * 0.22;
+    if (hue == 0) {
+        painter->drawLine(QPointF(c.x() - r, c.y()), QPointF(c.x() + r, c.y()));
+        painter->drawLine(QPointF(c.x(), c.y() - r), QPointF(c.x(), c.y() + r));
+    } else if (hue == 1) {
+        painter->drawLine(QPointF(c.x() - r, c.y()), QPointF(c.x() + r, c.y()));
+        painter->drawPolyline(QPolygonF{QPointF(c.x() + r * 0.3, c.y() - r * 0.7), QPointF(c.x() + r, c.y()), QPointF(c.x() + r * 0.3, c.y() + r * 0.7)});
+    } else if (hue == 7) {
+        const QRectF circle(c.x() - r, c.y() - r, 2 * r, 2 * r);
+        painter->drawArc(circle, 60 * 16, 270 * 16);
+        painter->drawPolyline(QPolygonF{QPointF(c.x() + r * 0.15, c.y() - r * 1.5), QPointF(c.x() + r * 0.62, c.y() - r * 0.86), QPointF(c.x() - r * 0.15, c.y() - r * 0.5)});
+    } else {
+        painter->drawLine(QPointF(c.x() - r * 0.75, c.y() + r * 0.75), QPointF(c.x() + r * 0.75, c.y() - r * 0.75));
+        painter->drawLine(QPointF(c.x() - r, c.y() + r * 1.15), QPointF(c.x() + r, c.y() + r * 1.15));
+    }
+    painter->restore();
+}
+
 // dolphin-ng: the well-known folders of the home (xdg-user-dirs), recognised by where they are: 0 for any other
 // folder, else 1 desktop, 2 downloads, 3 documents, 4 pictures, 5 music, 6 videos, 7 templates, 8 public
 int ngSpecialFolder(const QString &path)
@@ -970,7 +1055,23 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
             }
         }
         const NgMark mark = m_ngDetailsRow ? NgMark::Tile : ngMark(); // (the Details view: the small tile)
-        if (m_ngObjectRow) {
+        // the list of what happened lately: things done in one go have their badge in place of a folder
+        bool recentGroup = false;
+        int recentHue = -1;
+        if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
+            if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
+                recentHue = ngRecentHue(fileModel->fileItem(index()), &recentGroup);
+            }
+        }
+        if (recentGroup && recentHue >= 0) {
+            const qreal side = qMin(size().height() - 12, qreal(44));
+            const TextInfo *nameInfo = m_textInfo.value("text");
+            const qreal room = (nameInfo ? nameInfo->pos.x() : x0 + side + 12) - x0 - 10;
+            const qreal fitted = qMin(side, room);
+            if (fitted >= 16) {
+                ngPaintRecentBadge(painter, QRectF(x0 + 6, (size().height() - fitted) / 2.0, fitted, fitted), recentHue, ngIsDark(styleOption().palette));
+            }
+        } else if (m_ngObjectRow) {
             // the drawing of the card, small: type and size written on it; a real preview becomes the object
             // (a print, a page, a film strip). Resting on a preview opens the quick view, as on the cards
             // (with expandable folders, after the expansion arrow and the tree lines of the parents, not under them)
@@ -1246,6 +1347,24 @@ void KStandardItemListWidget::paint(QPainter *painter, const QStyleOptionGraphic
             continue; // dolphin-ng: the hover actions take the place of the date
         }
         const TextInfo *textInfo = m_textInfo.value(m_sortedVisibleRoles[i]);
+        // the list of what happened lately: what happened, in its colour (see ngRecentHue)
+        bool eventInk = false;
+        if (ngRow && m_sortedVisibleRoles[i] == "type" && !isSelected()) {
+            if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
+                if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
+                    const QColor ink = ngRecentColor(ngRecentHue(fileModel->fileItem(index())), ngIsDark(styleOption().palette));
+                    if (ink.isValid()) {
+                        painter->setPen(ink);
+                        painter->drawStaticText(textInfo->pos, textInfo->staticText);
+                        painter->setPen(infoInk);
+                        eventInk = true;
+                    }
+                }
+            }
+        }
+        if (eventInk) {
+            continue;
+        }
         if (ngHalo) {
             ngPaintTextHalo(
                 painter,
