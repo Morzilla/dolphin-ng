@@ -2074,8 +2074,14 @@ void KFileItemModel::insertItems(QList<ItemData *> &newItems)
 
     // dolphin-ng: a new file may be the child of a file at work here (a transcription, an extracted folder),
     // or the one a tie was waiting for: put it right after its parent
+    // (only in a folder: an entry that comes into the list of what happened lately, or into the results of a
+    // search, has not "just appeared in a folder on show", and offering it to the desktop's recent files made
+    // every line of the recent list an "opened" file)
+    const bool ownFolder = m_dirLister && m_dirLister->url().isLocalFile();
     for (const ItemData *data : std::as_const(newItems)) {
-        NgActivity::self()->offerNewFile(data->item.url());
+        if (ownFolder && data->item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) != QLatin1String("ngrecent")) {
+            NgActivity::self()->offerNewFile(data->item.url());
+        }
     }
     if (NgActivity::self()->hasLinks()) {
         ngRebuildFamilies();
