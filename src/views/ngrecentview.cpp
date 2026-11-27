@@ -121,10 +121,10 @@ NgRecentView::NgRecentView(QWidget *parent)
         if (!isVisible() || !window()->isActiveWindow() || m_loading || !m_url.isValid()) {
             return;
         }
-        const QUrl url = m_url;
+        const QUrl url = listUrl();
         KIO::StatJob *job = KIO::stat(url, KIO::HideProgressInfo);
         connect(job, &KJob::result, this, [this, job, url] {
-            if (job->error() || url != m_url) {
+            if (job->error() || url != listUrl()) {
                 return;
             }
             const QString stamp = job->statResult().stringValue(KIO::UDSEntry::UDS_EXTRA + 15);
@@ -160,14 +160,24 @@ void NgRecentView::refresh()
     reload();
 }
 
-void NgRecentView::setFilters(int events, int kinds)
+QUrl NgRecentView::listUrl() const
 {
-    if (events == m_events && kinds == m_kinds) {
+    // ng-recent keeps what was done on its own in a list apart, and has one with both
+    QUrl url = m_url;
+    url.setPath(m_who == 2 ? QStringLiteral("/automatic") : m_who == 3 ? QStringLiteral("/all") : QStringLiteral("/"));
+    return url;
+}
+
+void NgRecentView::setFilters(int events, int kinds, int who)
+{
+    who = who == 2 || who == 3 ? who : 1;
+    if (events == m_events && kinds == m_kinds && who == m_who) {
         return;
     }
-    const bool again = events != m_events; // (another list, or the same one with other lines: asked again)
+    const bool again = events != m_events || who != m_who; // (another list, or the same one with other lines: asked again)
     m_events = events;
     m_kinds = kinds;
+    m_who = who;
     verticalScrollBar()->setValue(0);
     if (again) {
         m_stamp.clear();
@@ -245,13 +255,13 @@ void NgRecentView::reload()
     m_loading = true;
     auto fresh = std::make_shared<QList<Entry>>();
     // (what was only opened is not in the list unless asked for: ng-recent adds it with "opened=1")
-    QUrl asked = m_url;
+    QUrl asked = listUrl();
     if (m_events & 4) {
         QUrlQuery query(asked);
         query.addQueryItem(QStringLiteral("opened"), QStringLiteral("1"));
         asked.setQuery(query);
     }
-    const int filter = m_events;
+    const int filter = m_events | (m_who << 8);
     KIO::ListJob *job = KIO::listDir(asked, KIO::HideProgressInfo);
     const QUrl url = m_url;
     connect(job, &KIO::ListJob::entries, this, [fresh](KIO::Job *, const KIO::UDSEntryList &list) {
@@ -276,7 +286,7 @@ void NgRecentView::reload()
     });
     connect(job, &KJob::result, this, [this, job, fresh, url, filter] {
         m_loading = false;
-        if (url != m_url || filter != m_events) {
+        if (url != m_url || filter != (m_events | (m_who << 8))) {
             reload();
             return;
         }
@@ -284,7 +294,7 @@ void NgRecentView::reload()
             return;
         }
         // the hues: 0 new, 1 added, 2 modified, 3 downloaded, 4 made by an action, 5 opened, 7 on its own
-        fresh->removeIf([filter](const Entry &entry) {
+        fresh->removeIf([filter = filter & 0xff](const Entry &entry) {
             const bool made = entry.hue == 0 || entry.hue == 1 || entry.hue == 3 || entry.hue == 4;
             if (filter == 0) {
                 return entry.hue == 5; // (everything that was made or changed: not what was only opened)

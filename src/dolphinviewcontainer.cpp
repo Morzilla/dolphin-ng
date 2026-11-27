@@ -1106,18 +1106,8 @@ public:
     QList<FilterEntry> filters() const
     {
         QList<FilterEntry> entries;
-        // dolphin-ng: the list of what happened lately is two lists, what you did and what was done by things that
-        // work on their own (a synchronisation, an updater): ng-recent says how many lines each has
-        if (m_view && m_view->url().scheme() == QLatin1String("ngrecent") && !m_view->url().path().startsWith(QLatin1String("/op/"))) {
-            const KIO::UDSEntry root = m_view->rootItem().entry();
-            const int byHand = root.stringValue(KIO::UDSEntry::UDS_EXTRA + 12).toInt();
-            const int onItsOwn = root.stringValue(KIO::UDSEntry::UDS_EXTRA + 13).toInt();
-            const bool automatic = m_view->url().path().startsWith(QLatin1String("/automatic"));
-            if (onItsOwn > 0 || automatic) {
-                entries.append({ngTr("Yours", "Tuoi"), byHand, ByHand, !automatic, QStringLiteral("user-identity")});
-                entries.append({ngTr("Automatic", "Automatici"), onItsOwn, OnItsOwn, automatic, QStringLiteral("view-refresh")});
-            }
-        }
+        // (the list of what happened lately: by whom, the user or things that work on their own, is chosen in the
+        // bar, with what happened and the kinds of file)
         if (!m_view || m_total == 0 || m_total > 4000) {
             return entries;
         }
@@ -1538,11 +1528,14 @@ private:
             auto *recentView = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly);
             const int events = m_view->property("_ng_recent_events").toInt();
             const int kinds = m_view->property("_ng_recent_kinds").toInt();
-            auto choose = [this](int newEvents, int newKinds) {
+            const int who = m_view->property("_ng_recent_who").toInt() == 0 ? 1 : m_view->property("_ng_recent_who").toInt();
+            auto choose = [this, who](int newEvents, int newKinds, int newWho = 0) {
+                newWho = newWho == 0 ? who : newWho;
                 m_view->setProperty("_ng_recent_events", newEvents);
                 m_view->setProperty("_ng_recent_kinds", newKinds);
+                m_view->setProperty("_ng_recent_who", newWho);
                 if (auto *view = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly)) {
-                    view->setFilters(newEvents, newKinds);
+                    view->setFilters(newEvents, newKinds, newWho);
                 }
                 rebuild();
             };
@@ -1584,6 +1577,15 @@ private:
                     choose(events ^ bit, kinds);
                 });
             }
+            // by whom: the user, or things that work on their own (a synchronisation, an updater, the desktop's own
+            // services; ng-fsevents tells them apart). One of the two is always on
+            QHBoxLayout *byWhom = pillOf();
+            connect(toggle(byWhom, ngTr("By me", "Da me"), "user-identity", who & 1, true), &QToolButton::clicked, this, [choose, events, kinds, who] {
+                choose(events, kinds, (who ^ 1) == 0 ? 2 : (who ^ 1));
+            });
+            connect(toggle(byWhom, ngTr("By others", "Da altri"), "system-run", who & 2, true), &QToolButton::clicked, this, [choose, events, kinds, who] {
+                choose(events, kinds, (who ^ 2) == 0 ? 1 : (who ^ 2));
+            });
             // the kinds of file there are in the list (the ones chosen stay, also when the list no longer has any)
             const int present = (recentView ? recentView->kindsPresent() : 0) | kinds;
             if (present != 0) {
@@ -3609,7 +3611,8 @@ DolphinViewContainer::DolphinViewContainer(const QUrl &url, QWidget *parent)
         if (recentView) {
             recentView->setVisible(recent);
             if (recent) {
-                recentView->setFilters(m_view->property("_ng_recent_events").toInt(), m_view->property("_ng_recent_kinds").toInt());
+                recentView->setFilters(m_view->property("_ng_recent_events").toInt(), m_view->property("_ng_recent_kinds").toInt(),
+                                       m_view->property("_ng_recent_who").toInt());
                 recentView->setUrl(url);
             }
         }

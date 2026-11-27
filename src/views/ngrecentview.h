@@ -35,8 +35,10 @@ public:
      * What to see. @p events: a sum of 1 what is new (made, downloaded, added), 2 what was modified, 4 what was only
      * opened; 0: everything that was made or changed. @p kinds: a sum of 1 << NgKind::Category (pictures, documents…);
      * 0: every kind. Within each the choices add up (new or modified); the two together narrow (… that are pictures).
+     * @p who: 1 what the user did, 2 what was done by things that work on their own (a synchronisation, an updater),
+     * 3 both.
      */
-    void setFilters(int events, int kinds);
+    void setFilters(int events, int kinds, int who = 1);
     int eventFilter() const;
     int kindFilter() const;
     /** the kinds of file the list holds (before the filter by kind), as a sum of 1 << NgKind::Category */
@@ -119,6 +121,8 @@ private:
     bool m_loading = false;
     int m_events = 0;
     int m_kinds = 0;
+    int m_who = 1;
+    QUrl listUrl() const; // the list asked of ng-recent for m_who
     int m_present = 0;
     QList<Entry> m_listed; // what the list holds, before the filter by kind
     QString m_stamp;
