@@ -298,6 +298,8 @@ DOLPHIN_EXPORT bool ngNoIcons();
 DOLPHIN_EXPORT bool ngNoIcons(const QGraphicsItem *item);
 // dolphin-ng: the drawn rows with columns of attributes after the name (ROW_COLUMNS=on), under Dolphin's own header
 DOLPHIN_EXPORT bool ngRowColumns();
+class KItemListView;
+DOLPHIN_EXPORT int ngRowZoomRoom(const KItemListView *view); // what the zoom adds to the height of a drawn row
 
 /** dolphin-ng: is this a dark colour scheme? The fork's own painting picks its shades from the answer. */
 DOLPHIN_EXPORT bool ngIsDark(const QPalette &palette);

@@ -9,6 +9,7 @@
 #include "kitemlistwidget.h"
 
 #include "private/ngfacts.h"
+#include "kfileitemlistview.h"
 #include "kstandarditemlistview.h" // dolphin-ng: the layout, for the selection toggle
 #include <QUrl>
 #include <QGraphicsScene>
@@ -2486,6 +2487,19 @@ bool ngRowColumns(const QGraphicsItem *item)
         }
     }
     return ngRowColumns();
+}
+
+// dolphin-ng: the rows drawn without Dolphin's icon (two lines, Details with columns) had one height whatever the
+// zoom, so zooming changed nothing one could see. What the zoom adds over the mode's default size (16 px icons, 48 px
+// previews: there the row is as it always was) is added to the row; the tile, the drawing and the icon follow it
+int ngRowZoomRoom(const KItemListView *view)
+{
+    if (!view) {
+        return 0;
+    }
+    const auto *files = qobject_cast<const KFileItemListView *>(view);
+    const int base = files && files->previewsShown() ? 48 : 22;
+    return qBound(0, view->styleOption().iconSize - base, 96);
 }
 
 bool ngDetailsPlain()

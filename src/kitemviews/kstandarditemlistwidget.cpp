@@ -660,7 +660,7 @@ void KStandardItemListWidgetInformant::calculateDetailsLayoutItemSizeHints(QVect
         : details                                    ? option.padding * 2 + textHeight + 12
         : ngNoIcons(view) ? option.padding * 2 + textHeight + (ngMark() == NgMark::Object ? 44 : 24) // no icon: as tall as its two lines (a little more for the drawing)
                           : option.padding * 2 + qMax(option.iconSize, textHeight);
-    logicalHeightHints.fill(std::make_pair(height, false));
+    logicalHeightHints.fill(std::make_pair(height + (ngNoIcons(view) ? ngRowZoomRoom(view) : 0), false));
     logicalWidthHint = -1.0;
 }
 
@@ -2105,11 +2105,14 @@ void KStandardItemListWidget::updateExpansionArea()
         const QHash<QByteArray, QVariant> values = data();
         const int expandedParentsCount = values.value("expandedParentsCount", 0).toInt();
         if (expandedParentsCount >= 0) {
-            const int widgetIconSize = styleOption().iconSize;
-            const qreal widgetHeight = size().height();
+            // dolphin-ng: a drawn row grows with the zoom (ngRowZoomRoom); the arrow and the step of a level stay as
+            // they are at the default size, or the whole row would move right as one zooms in
+            const int zoomRoom = ngNoIcons(this) ? ngRowZoomRoom(qobject_cast<const KItemListView *>(parentObject())) : 0;
+            const int widgetIconSize = styleOption().iconSize - zoomRoom;
+            const qreal widgetHeight = size().height() - zoomRoom;
             const qreal inc = (widgetHeight - widgetIconSize) / 2;
             const qreal x = expandedParentsCount * widgetHeight + inc;
-            const qreal y = inc;
+            const qreal y = inc + zoomRoom / 2.0;
             if (layoutDirection() == Qt::LeftToRight) {
                 const qreal leftPaddingWidth = m_highlightEntireRow ? leftPadding() : 0;
                 m_expansionArea = QRectF(leftPaddingWidth + x, y, widgetIconSize, widgetIconSize);

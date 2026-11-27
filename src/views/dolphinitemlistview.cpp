@@ -295,6 +295,7 @@ void DolphinItemListView::updateGridSize()
             itemHeight = ngRowColumns(this) && ngDetailsCompact() ? padding * 2 + option.fontMetrics.height() + 10
                 : ngRowColumns(this)                               ? padding * 2 + 2 * option.fontMetrics.height() + 4 + 12
                                                                    : padding * 2 + 2 * option.fontMetrics.height() + 4 + 24;
+            itemHeight += qBound(0, iconSize - (previewsShown() ? 48 : 22), 96); // the zoom makes the row taller (as ngRowZoomRoom)
         }
         break;
     }

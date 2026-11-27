@@ -741,7 +741,8 @@ QList<QPair<int, QVariant>> KFileItemModel::groups() const
         // other items begin in starts again after it. Only for groups titled by words (ratings and permissions have
         // titles of their own kind)
         int pinned = 0;
-        while (pinned < m_itemData.count() && m_itemData.at(pinned)->ngPinned) {
+        const bool recent = !m_itemData.isEmpty() && m_itemData.first()->item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) == QLatin1String("ngrecent");
+        while (!recent && pinned < m_itemData.count() && m_itemData.at(pinned)->ngPinned) {
             ++pinned;
         }
         if (pinned > 0 && !m_groups.isEmpty() && m_groups.first().second.typeId() == QMetaType::QString) {
@@ -2617,8 +2618,9 @@ bool KFileItemModel::lessThan(const ItemData *a, const ItemData *b, const QColla
         }
     }
 
-    // dolphin-ng: what is pinned comes first, before the folders, whatever the sorting
-    if (a->ngPinned != b->ngPinned) {
+    // dolphin-ng: what is pinned comes first, before the folders, whatever the sorting. Not in the list of what
+    // happened lately: that one is in order of time, and the pinned items are in the sidebar anyway
+    if (a->ngPinned != b->ngPinned && a->item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) != QLatin1String("ngrecent")) {
         return a->ngPinned;
     }
 
