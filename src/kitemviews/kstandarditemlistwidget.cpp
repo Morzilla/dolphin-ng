@@ -3361,7 +3361,8 @@ void KStandardItemListWidget::drawSiblingsInformation(QPainter *painter)
         const QBitArray siblings = siblingsInformation();
         const int own = siblings.count() - 1; // the item's own level; 0: the first level
         const qreal h = size().height();
-        const qreal step = h; // one level further in
+        // one level further in: the row's height without what the zoom adds to it, as updateExpansionArea() steps
+        const qreal step = h - ngRowZoomRoom(qobject_cast<const KItemListView *>(parentObject()));
         const qreal mid = h / 2.0;
         const qreal ownX = (m_expansionArea.left() + m_expansionArea.right()) / 2.0; // the expansion arrow
         // where the tile is (as paint() places it): a level's children hang from under the centre of its tile
@@ -5116,7 +5117,9 @@ qreal KStandardItemListWidget::ngSelectionRadius() const
 QRectF KStandardItemListWidget::boundingRect() const
 {
     const QRectF r = KItemListWidget::boundingRect();
-    return m_layout == CardsLayout || m_ngObjectRow ? r.adjusted(-6, -6, 6, 6) : r;
+    // (cards of one family share a background drawn out to the middle of the gap between them: within the bounds,
+    // or the picture an item is kept as cuts it off)
+    return m_layout == CardsLayout ? r.adjusted(-12, -12, 12, 12) : m_ngObjectRow ? r.adjusted(-6, -6, 6, 6) : r;
 }
 
 void KStandardItemListWidget::moveEvent(QGraphicsSceneMoveEvent *event)

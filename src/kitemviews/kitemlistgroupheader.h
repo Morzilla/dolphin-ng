@@ -63,6 +63,7 @@ public:
 protected:
     /** dolphin-ng: how wide the title is as drawn (the whole row unless the derived class says) */
     virtual qreal ngLabelWidth() const;
+    virtual bool ngLabelIsPicture() const; // (drawn from the left whatever the direction of the text)
 
     virtual void paintRole(QPainter *painter, const QRectF &roleBounds, const QColor &color) = 0;
     virtual void paintSeparator(QPainter *painter, const QColor &color) = 0;

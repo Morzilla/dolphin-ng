@@ -967,6 +967,13 @@ void PlacesPanel::ngRevealCurrent()
         return;
     }
     m_ngRevealQueued = true;
+    // (a place that was hidden grows into the list over half a second: looked at again when it has its height)
+    QTimer::singleShot(600, this, [this] {
+        const QRect row = currentIndex().isValid() ? visualRect(currentIndex()) : QRect();
+        if (row.isValid() && (row.bottom() > viewport()->height() - 26 || row.top() < 0)) {
+            ngRevealCurrent();
+        }
+    });
     QTimer::singleShot(0, this, [this] {
         m_ngRevealQueued = false;
         if (!currentIndex().isValid()) {

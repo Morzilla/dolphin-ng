@@ -92,7 +92,7 @@ KItemListWidget::KItemListWidget(KItemListWidgetInformant *informant, QGraphicsI
     // The drawn rows and cards (rounded sheets, the file's drawing, gradients, text) were painted again from nothing
     // at every frame, for every item in view: scrolling kept two processor cores busy, eight times stock Dolphin.
     // An item that changes (hover, selection, new data) is painted again as before. DOLPHIN_NG_ITEM_CACHE=off: as it was
-    static const bool cached = qEnvironmentVariable("DOLPHIN_NG_ITEM_CACHE").toLower() != QLatin1String("off");
+    static const bool cached = ngSetting("ITEM_CACHE").toLower() != QLatin1String("off"); // (dolphinrc [DolphinNG], or the environment)
     if (cached) {
         // (the pictures live in Qt's pixmap cache, 10 MiB by default: a window of large cards needs more than that,
         // and a cache too small gives the pictures up and paints everything again)

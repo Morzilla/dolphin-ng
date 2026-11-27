@@ -62,7 +62,12 @@ qreal KStandardItemListGroupHeader::ngLabelWidth() const
     if (!m_pixmap.isNull()) {
         return m_pixmap.width() / m_pixmap.devicePixelRatio();
     }
-    return QFontMetricsF(styleOption().font).horizontalAdvance(m_text);
+    return QFontMetricsF(font()).horizontalAdvance(m_text); // (the font the title is cut to its room and drawn with)
+}
+
+bool KStandardItemListGroupHeader::ngLabelIsPicture() const
+{
+    return !m_pixmap.isNull();
 }
 
 void KStandardItemListGroupHeader::paintSeparator(QPainter *painter, const QColor &color)
