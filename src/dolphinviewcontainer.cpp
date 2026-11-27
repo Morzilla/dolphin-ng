@@ -715,6 +715,137 @@ private:
     const QColor *m_sheet;
 };
 
+// dolphin-ng: a choice that can be on with others (the filters of the recent list): a rounded chip with a box that
+// fills with the accent and gets its tick when on, the icon and the name. Several of them in a group say by their
+// look that more than one can be chosen
+class NgTickChip : public QAbstractButton
+{
+public:
+    NgTickChip(const QString &text, const QIcon &icon, QWidget *parent)
+        : QAbstractButton(parent)
+    {
+        setText(text);
+        setIcon(icon);
+        setCheckable(true);
+        setCursor(Qt::PointingHandCursor);
+        setFocusPolicy(Qt::TabFocus);
+        setAttribute(Qt::WA_Hover);
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    }
+
+    QSize sizeHint() const override
+    {
+        const QFontMetrics metrics(font());
+        return QSize(10 + 16 + 7 + (icon().isNull() ? 0 : 16 + 5) + metrics.horizontalAdvance(label()) + 16, qMax(28, metrics.height() + 10));
+    }
+
+    // (the desktop writes a keyboard accelerator into a button's text, "&Modified": not drawn here)
+    QString label() const
+    {
+        QString shown = text();
+        shown.replace(QLatin1String("&&"), QStringLiteral("\x01")).remove(QLatin1Char('&')).replace(QLatin1Char('\x01'), QLatin1Char('&'));
+        return shown;
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const bool dark = ngIsDark(palette());
+        const QColor ink = palette().color(QPalette::WindowText);
+        const QColor accent = ngAccent(palette().color(QPalette::Highlight), dark);
+        const bool hovered = underMouse();
+        const QRectF body = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        QColor fill = isChecked() ? accent : ink;
+        fill.setAlphaF(isChecked() ? (hovered ? 0.26 : 0.18) : (hovered ? 0.10 : 0.0));
+        QColor edge = isChecked() ? accent : ink;
+        edge.setAlphaF(isChecked() ? 0.60 : (hovered ? 0.30 : 0.18));
+        painter.setPen(QPen(edge, 1));
+        painter.setBrush(fill);
+        painter.drawRoundedRect(body, body.height() / 2.0, body.height() / 2.0);
+        // the box
+        const QRectF box(10, (height() - 16) / 2.0, 16, 16);
+        if (isChecked()) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(accent);
+            painter.drawRoundedRect(box, 5, 5);
+            painter.setPen(QPen(dark ? QColor(16, 18, 24) : QColor(255, 255, 255), 1.9, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            painter.drawPolyline(QPolygonF{QPointF(box.left() + 4, box.center().y() + 0.5), QPointF(box.left() + 7, box.bottom() - 4.5), QPointF(box.right() - 3.5, box.top() + 4.5)});
+        } else {
+            QColor outline = ink;
+            outline.setAlphaF(hovered ? 0.6 : 0.42);
+            painter.setPen(QPen(outline, 1.3));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), 5, 5);
+        }
+        qreal x = box.right() + 7;
+        if (!icon().isNull()) {
+            icon().paint(&painter, QRect(qRound(x), (height() - 16) / 2, 16, 16));
+            x += 16 + 5;
+        }
+        QColor textInk = ink;
+        textInk.setAlphaF(isChecked() ? 1.0 : 0.86);
+        painter.setPen(textInk);
+        QFont f = font();
+        f.setWeight(isChecked() ? QFont::DemiBold : QFont::Normal);
+        painter.setFont(f);
+        painter.drawText(QRectF(x, 0, width() - x - 6, height()), Qt::AlignVCenter | Qt::AlignLeft, label());
+        if (hasFocus()) {
+            QColor ring = accent;
+            ring.setAlphaF(0.8);
+            painter.setPen(QPen(ring, 1.4));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRoundedRect(body.adjusted(1, 1, -1, -1), body.height() / 2.0 - 1, body.height() / 2.0 - 1);
+        }
+    }
+};
+
+// A group of such choices under one word ("What happened", "By whom", "Kind"): a faint sheet that holds them together
+class NgChoiceGroup : public QWidget
+{
+public:
+    NgChoiceGroup(const QString &title, QWidget *parent)
+        : QWidget(parent)
+        , m_layout(new QHBoxLayout(this))
+    {
+        m_layout->setContentsMargins(12, 4, 6, 4);
+        m_layout->setSpacing(5);
+        auto *label = new QLabel(title, this);
+        QFont small = label->font();
+        small.setPointSizeF(small.pointSizeF() * 0.88);
+        small.setWeight(QFont::DemiBold);
+        label->setFont(small);
+        label->setEnabled(false); // (dimmed: it is a caption)
+        label->setContentsMargins(0, 0, 4, 0);
+        m_layout->addWidget(label);
+    }
+
+    void add(QWidget *choice)
+    {
+        m_layout->addWidget(choice);
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const bool dark = ngIsDark(palette());
+        QColor sheet = dark ? QColor(255, 255, 255) : QColor(255, 255, 255);
+        sheet.setAlphaF(dark ? 0.055 : 0.42);
+        QColor edge = palette().color(QPalette::WindowText);
+        edge.setAlphaF(0.10);
+        painter.setPen(QPen(edge, 1));
+        painter.setBrush(sheet);
+        const QRectF body = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        painter.drawRoundedRect(body, 12, 12);
+    }
+
+private:
+    QHBoxLayout *m_layout;
+};
+
 class NgSortBar : public QWidget
 {
 public:
@@ -1561,26 +1692,25 @@ private:
                 segments->addWidget(button);
                 return button;
             };
-            // what can be on together is a box to tick, with its icon: several at once, as boxes say by themselves
-            auto tick = [this](QHBoxLayout *segments, const QString &text, const char *icon, bool on) {
-                auto *box = new QCheckBox(text, segments->parentWidget());
-                box->setIcon(QIcon::fromTheme(QString::fromLatin1(icon)));
-                box->setChecked(on);
-                box->setFocusPolicy(Qt::TabFocus);
-                box->setCursor(Qt::PointingHandCursor);
-                segments->setContentsMargins(12, 0, 12, 0);
-                segments->setSpacing(16);
-                segments->addWidget(box);
-                return box;
+            // what can be on together: chips with a box to tick, in a group under one word
+            auto groupOf = [this](const QString &title) {
+                auto *group = new NgChoiceGroup(title, this);
+                m_flow->addWidget(group);
+                return group;
             };
-            caption(ngTr("Show", "Mostra"));
+            auto tick = [](NgChoiceGroup *group, const QString &text, const char *icon, bool on) {
+                auto *chip = new NgTickChip(text, QIcon::fromTheme(QString::fromLatin1(icon)), group);
+                chip->setChecked(on);
+                group->add(chip);
+                return chip;
+            };
             // ("Everything" is a button: it clears the boxes)
             QHBoxLayout *all = pillOf();
             m_sortPill = all->parentWidget();
             connect(toggle(all, ngTr("Everything", "Tutto"), "view-list-details", events == 0 && kinds == 0, true), &QToolButton::clicked, this, [choose] {
                 choose(0, 0);
             });
-            QHBoxLayout *what = pillOf();
+            NgChoiceGroup *what = groupOf(ngTr("What happened", "Evento"));
             const struct {
                 int bit;
                 QString text;
@@ -1588,17 +1718,17 @@ private:
             } happened[] = {{1, ngTr("Created", "Creati"), "document-new"}, {2, ngTr("Modified", "Modificati"), "document-edit"}, {4, ngTr("Opened", "Aperti"), "document-open"}};
             for (const auto &one : happened) {
                 const int bit = one.bit;
-                connect(tick(what, one.text, one.icon, events & bit), &QCheckBox::clicked, this, [choose, events, kinds, bit] {
+                connect(tick(what, one.text, one.icon, events & bit), &QAbstractButton::clicked, this, [choose, events, kinds, bit] {
                     choose(events ^ bit, kinds);
                 });
             }
             // by whom: the user, or things that work on their own (a synchronisation, an updater, the desktop's own
             // services; ng-fsevents tells them apart). One of the two is always on
-            QHBoxLayout *byWhom = pillOf();
-            connect(tick(byWhom, ngTr("By me", "Da me"), "user-identity", who & 1), &QCheckBox::clicked, this, [choose, events, kinds, who] {
+            NgChoiceGroup *byWhom = groupOf(ngTr("By whom", "Autore"));
+            connect(tick(byWhom, ngTr("By me", "Da me"), "user-identity", who & 1), &QAbstractButton::clicked, this, [choose, events, kinds, who] {
                 choose(events, kinds, (who ^ 1) == 0 ? 2 : (who ^ 1));
             });
-            connect(tick(byWhom, ngTr("By others", "Da altri"), "system-run", who & 2), &QCheckBox::clicked, this, [choose, events, kinds, who] {
+            connect(tick(byWhom, ngTr("By others", "Da altri"), "system-run", who & 2), &QAbstractButton::clicked, this, [choose, events, kinds, who] {
                 choose(events, kinds, (who ^ 2) == 0 ? 1 : (who ^ 2));
             });
             // the kinds of file there are in the list (the ones chosen stay, also when the list no longer has any)
@@ -1609,13 +1739,13 @@ private:
                                                                ngTr("Code and data", "Codice e dati"), ngTr("Packages", "Pacchetti"), ngTr("Other", "Altro")};
                 static const char *const icons[NgKind::CategoryCount] = {"folder", "image-x-generic", "x-office-document", "x-office-spreadsheet", "application-zip",
                                                                          "video-x-generic", "application-json", "application-x-rpm", "unknown"};
-                    QHBoxLayout *which = pillOf();
+                    NgChoiceGroup *which = groupOf(ngTr("Kind", "Tipo"));
                 for (int category = 0; category < NgKind::CategoryCount; ++category) {
                     const int bit = 1 << category;
                     if (!(present & bit)) {
                         continue;
                     }
-                    connect(tick(which, labels[category], icons[category], kinds & bit), &QCheckBox::clicked, this, [choose, events, kinds, bit] {
+                    connect(tick(which, labels[category], icons[category], kinds & bit), &QAbstractButton::clicked, this, [choose, events, kinds, bit] {
                         choose(events, kinds ^ bit);
                     });
                 }
