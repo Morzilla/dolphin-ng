@@ -5563,25 +5563,35 @@ void KStandardItemListWidget::paintNgActivity(QPainter *painter)
             const qreal pillHeight = fm.height() * 1.7;
             const qreal stopRoom = stoppable ? pillHeight - 4 + 4 : 0;
             const qreal w = qMin(fm.horizontalAdvance(caption) + 22 + stopRoom, row.width() * 0.45);
-            // solid, over the end of the row: it covers the date while the work runs
-            // (drawn rows: before the dates, where the quick actions come)
-            const qreal pillRight = m_ngObjectRow && !m_ngTime.isEmpty() ? m_ngTime.first().letterPos.x() - 16 : row.right() - 8;
+            // (drawn rows: before the dates, where the quick actions come; rows with columns: right after the name,
+            // in the empty part of its column, or at that column's end when the name is long; at the end of the row
+            // it stood half over the date and cut its words)
+            qreal pillRight = m_ngObjectRow && !m_ngTime.isEmpty() ? m_ngTime.first().letterPos.x() - 16 : row.right() - 8;
+            if (ngRowColumns(this) && columnWidth("text") > w + 60) {
+                const qreal columnEnd = leftPadding() + columnWidth("text") - 10;
+                pillRight = qMin(columnEnd, m_textRect.right() + 14 + w);
+            }
             const QRectF pill(pillRight - w, row.center().y() - pillHeight / 2, w, pillHeight);
-            painter->setPen(QPen(QColor(accent.red(), accent.green(), accent.blue(), 110), 1));
-            painter->setBrush(QColor(16, 17, 21));
-            painter->drawRoundedRect(pill, pill.height() / 2, pill.height() / 2);
+            // a sheet of the row's own kind with the accent round it: white on a light scheme, a dark glass on a dark
+            // one. It was a black capsule on both, the one of the cards (which lies over pictures and has to be dark):
+            // on a light row it read as a hole
+            const bool darkRow = ngIsDark(styleOption().palette);
+            const QColor accentInk = darkRow ? accent.lighter(135) : QColor::fromHslF(accent.hslHueF() < 0 ? 0.55 : accent.hslHueF(), qMin<qreal>(accent.hslSaturationF(), 0.80), 0.36);
+            painter->setPen(QPen(QColor(accent.red(), accent.green(), accent.blue(), darkRow ? 110 : 170), 1));
+            painter->setBrush(darkRow ? QColor(16, 17, 21, 215) : QColor(255, 255, 255, 235));
+            painter->drawRoundedRect(pill.adjusted(0.5, 0.5, -0.5, -0.5), pill.height() / 2, pill.height() / 2);
             painter->setFont(f);
-            painter->setPen(accent.lighter(135));
+            painter->setPen(accentInk);
             const QRectF textBox = pill.adjusted(0, 0, -stopRoom, 0);
             painter->drawText(textBox, Qt::AlignCenter, fm.elidedText(caption, Qt::ElideRight, textBox.width() - 14));
             if (stoppable) {
                 const QRectF stop(pill.right() - pill.height() + 2, pill.top() + 2, pill.height() - 4, pill.height() - 4);
                 const bool hot = activity->isStopHovered(url);
                 painter->setPen(Qt::NoPen);
-                painter->setBrush(hot ? QColor(214, 72, 66) : QColor(255, 255, 255, 18));
+                painter->setBrush(hot ? QColor(214, 72, 66) : darkRow ? QColor(255, 255, 255, 18) : QColor(0, 0, 0, 20));
                 painter->drawEllipse(stop);
                 const qreal c = stop.width() * 0.18;
-                painter->setPen(QPen(hot ? QColor(255, 255, 255) : QColor(222, 226, 232), 1.6, Qt::SolidLine, Qt::RoundCap));
+                painter->setPen(QPen(hot ? QColor(255, 255, 255) : darkRow ? QColor(222, 226, 232) : QColor(60, 64, 72), 1.6, Qt::SolidLine, Qt::RoundCap));
                 painter->drawLine(stop.center() + QPointF(-c, -c), stop.center() + QPointF(c, c));
                 painter->drawLine(stop.center() + QPointF(c, -c), stop.center() + QPointF(-c, c));
                 m_ngCancelRect = stop;
