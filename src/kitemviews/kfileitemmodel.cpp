@@ -2416,7 +2416,9 @@ QHash<QByteArray, QVariant> KFileItemModel::retrieveData(const KFileItem &item, 
         data.insert(sharedValue("extension"), QFileInfo(item.name()).suffix());
     }
 
-    if (m_requestRole[SizeRole] && !isDir) {
+    // (dolphin-ng: an entry of the list of what happened lately has its size also when the role is not asked for:
+    // the rows' drawings and thumbnails write it, and said "0 B")
+    if ((m_requestRole[SizeRole] || item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) == QLatin1String("ngrecent")) && !isDir) {
         KIO::filesize_t size = item.size();
         // dolphin-ng: entries of virtual folders (Recent Files) may come without their size: read it from the file
         if (size == 0 && !item.isDir() && !item.isLocalFile() && !item.localPath().isEmpty()) {

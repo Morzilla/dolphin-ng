@@ -2765,6 +2765,14 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
             }
         }
 
+        // in the list of what happened lately the first date is the event's: "When", and for today its time
+        bool eventRow = false;
+        if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
+            if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
+                eventRow = !ngHappened(fileModel->fileItem(index())).isEmpty();
+            }
+        }
+
         // ---- time column: "C  12/10/26 · 29 giorni fa" over "M  09/11/26 · ieri"; dropped on a narrow view (then chips)
         m_ngTime.clear();
         const bool roomForTime = size().width() >= fontHeight * 42;
@@ -2779,15 +2787,18 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
             QFont small = m_customizedFont;
             small.setPointSizeF(small.pointSizeF() * 0.9);
             const QFontMetricsF smallMetrics(small);
-            const QString createdLabel = usedFirst ? (m_ngObjectRow ? ngTr("Used", "Usato") : QStringLiteral("U"))
+            const QString createdLabel = (usedFirst && eventRow) ? (m_ngObjectRow ? ngTr("When", "Quando") : QStringLiteral("Q"))
+                : usedFirst ? (m_ngObjectRow ? ngTr("Used", "Usato") : QStringLiteral("U"))
                                                    : (m_ngObjectRow ? ngTr("Created", "Creato") : QStringLiteral("C"));
             const QString modifiedLabel = m_ngObjectRow ? ngTr("Modified", "Modificato") : QStringLiteral("M");
             const qreal letterWidth = m_ngObjectRow ? qMax(smallMetrics.horizontalAdvance(createdLabel), smallMetrics.horizontalAdvance(modifiedLabel)) + 10
                                                     : monoMetrics.horizontalAdvance(QStringLiteral("M")) + 8;
-            auto line = [&](const QString &letter, const QDateTime &when, qreal y) {
+            auto line = [&](const QString &letter, const QDateTime &when, qreal y, bool clock = false) {
                 NgTimeLine entry;
                 entry.letter = letter;
-                entry.text = QStringLiteral("%1 · %2").arg(locale.toString(when.date(), QLocale::ShortFormat), ngAgoText(when));
+                // (an event of today: its time, which is what tells two of them apart)
+                const bool today = clock && when.date() == QDate::currentDate();
+                entry.text = QStringLiteral("%1 · %2").arg(today ? locale.toString(when.time(), QLocale::ShortFormat) : locale.toString(when.date(), QLocale::ShortFormat), ngAgoText(when));
                 entry.text = smallMetrics.elidedText(entry.text, Qt::ElideRight, timeWidth - letterWidth);
                 entry.letterPos = m_ngObjectRow ? QPointF(timeLeft, y + smallMetrics.ascent())
                                                 : QPointF(timeLeft, y + monoMetrics.ascent() + (smallMetrics.height() - monoMetrics.height()) / 2);
@@ -2797,7 +2808,7 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
             const qreal rowsHeight = 2 * smallMetrics.height() + 1;
             const qreal top = (widgetHeight - rowsHeight) / 2.0;
             if (created.isValid()) {
-                line(createdLabel, created, top);
+                line(createdLabel, created, top, usedFirst && eventRow);
                 line(modifiedLabel, modified, top + smallMetrics.height() + 1);
             } else {
                 line(modifiedLabel, modified, top + (smallMetrics.height() + 1) / 2.0);

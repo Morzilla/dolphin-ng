@@ -3679,7 +3679,14 @@ static QUrl ngRecentPlace(const QUrl &url)
 {
     if (url.scheme() == QLatin1String("recentlyused") && url.path() == QLatin1String("/files") && ngSetting("RECENT_LEGACY") != QLatin1String("1")
         && KProtocolInfo::isKnownProtocol(QStringLiteral("ngrecent"))) {
-        return QUrl(QStringLiteral("ngrecent:/"));
+        // (with the place's name as its title: the location bar shows that, not "ngrecent:")
+        KFilePlacesModel *places = DolphinPlacesModelSingleton::instance().placesModel();
+        const QModelIndex place = places->closestItem(url);
+        QUrl recent(QStringLiteral("ngrecent:/"));
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("title"), place.isValid() ? places->text(place) : ngTr("Recent", "Recenti"));
+        recent.setQuery(query);
+        return recent;
     }
     return url;
 }
