@@ -53,6 +53,18 @@ void KStandardItemListGroupHeader::paintRole(QPainter *painter, const QRectF &ro
     }
 }
 
+qreal KStandardItemListGroupHeader::ngLabelWidth() const
+{
+    if (m_dirtyCache) {
+        const_cast<KStandardItemListGroupHeader *>(this)->updateCache();
+    }
+    // the words, or the picture drawn in their place (the stars of a rating)
+    if (!m_pixmap.isNull()) {
+        return m_pixmap.width() / m_pixmap.devicePixelRatio();
+    }
+    return QFontMetricsF(styleOption().font).horizontalAdvance(m_text);
+}
+
 void KStandardItemListGroupHeader::paintSeparator(QPainter *painter, const QColor &color)
 {
     if (ngAurora()) {

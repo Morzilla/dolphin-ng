@@ -24,6 +24,7 @@ public:
 
 protected:
     void paintRole(QPainter *painter, const QRectF &roleBounds, const QColor &color) override;
+    qreal ngLabelWidth() const override;
     void paintSeparator(QPainter *painter, const QColor &color) override;
     void roleChanged(const QByteArray &current, const QByteArray &previous) override;
     void dataChanged(const QVariant &current, const QVariant &previous) override;
