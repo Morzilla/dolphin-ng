@@ -715,17 +715,16 @@ private:
     const QColor *m_sheet;
 };
 
-// dolphin-ng: a choice that can be on with others (the filters of the recent list): a rounded chip with a box that
-// fills with the accent and gets its tick when on, the icon and the name. Several of them in a group say by their
-// look that more than one can be chosen
-class NgTickChip : public QAbstractButton
+// dolphin-ng: a choice that can be on with others (the filters of the recent list), as a word: nothing round it; off
+// it is dimmed, on it is in the accent, a little bolder, on a faint fill and with a tick before it. (The colours
+// come from the application's palette: this bar's own may be another one, and gave black on a dark window)
+class NgWordChip : public QAbstractButton
 {
 public:
-    NgTickChip(const QString &text, const QIcon &icon, QWidget *parent)
+    NgWordChip(const QString &text, QWidget *parent)
         : QAbstractButton(parent)
     {
         setText(text);
-        setIcon(icon);
         setCheckable(true);
         setCursor(Qt::PointingHandCursor);
         setFocusPolicy(Qt::TabFocus);
@@ -735,8 +734,11 @@ public:
 
     QSize sizeHint() const override
     {
-        const QFontMetrics metrics(font());
-        return QSize(10 + 16 + 7 + (icon().isNull() ? 0 : 16 + 5) + metrics.horizontalAdvance(label()) + 16, qMax(28, metrics.height() + 10));
+        // (as wide as it is written: on, it is bolder and has its tick. The bar is laid out again when one is
+        // clicked, so the others make room)
+        QFont shown = font();
+        shown.setWeight(isChecked() ? QFont::DemiBold : QFont::Normal);
+        return QSize(7 + (isChecked() ? 13 : 0) + QFontMetrics(shown).horizontalAdvance(label()) + 7, qMax(28, QFontMetrics(shown).height() + 10));
     }
 
     // (the desktop writes a keyboard accelerator into a button's text, "&Modified": not drawn here)
@@ -752,109 +754,81 @@ protected:
     {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
-        const bool dark = ngIsDark(palette());
-        const QColor accent = ngAccent(palette().color(QPalette::Highlight), dark);
+        const QPalette pal = QApplication::palette();
+        const bool dark = ngIsDark(pal);
+        const QColor ink = pal.color(QPalette::WindowText);
+        const QColor accent = ngAccent(pal.color(QPalette::Highlight), dark);
         const bool hovered = underMouse();
-        const QRectF body = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-        QColor fill = accent;
-        fill.setAlphaF(isChecked() ? (hovered ? 0.26 : 0.18) : (hovered ? 0.10 : 0.0));
-        QColor edge = accent;
-        edge.setAlphaF(isChecked() ? 0.60 : (hovered ? 0.40 : 0.24));
-        painter.setPen(QPen(edge, 1));
-        painter.setBrush(fill);
-        painter.drawRoundedRect(body, body.height() / 2.0, body.height() / 2.0);
-        // the box
-        const QRectF box(10, (height() - 16) / 2.0, 16, 16);
-        if (isChecked()) {
+        const QRectF body = QRectF(rect()).adjusted(0.5, 2.5, -0.5, -2.5);
+        if (isChecked() || hovered) {
+            QColor fill = isChecked() ? accent : ink;
+            fill.setAlphaF(isChecked() ? (hovered ? 0.22 : 0.15) : 0.07);
             painter.setPen(Qt::NoPen);
-            painter.setBrush(accent);
-            painter.drawRoundedRect(box, 5, 5);
-            painter.setPen(QPen(dark ? QColor(16, 18, 24) : QColor(255, 255, 255), 1.9, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-            painter.drawPolyline(QPolygonF{QPointF(box.left() + 4, box.center().y() + 0.5), QPointF(box.left() + 7, box.bottom() - 4.5), QPointF(box.right() - 3.5, box.top() + 4.5)});
-        } else {
-            QColor outline = accent;
-            outline.setAlphaF(hovered ? 0.85 : 0.6);
-            painter.setPen(QPen(outline, 1.3));
-            painter.setBrush(Qt::NoBrush);
-            painter.drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), 5, 5);
+            painter.setBrush(fill);
+            painter.drawRoundedRect(body, 8, 8);
         }
-        qreal x = box.right() + 7;
-        if (!icon().isNull()) {
-            icon().paint(&painter, QRect(qRound(x), (height() - 16) / 2, 16, 16));
-            x += 16 + 5;
-        }
-        // the name in the accent, as the bar's own buttons have it (and not a colour of the palette, which a
-        // scheme may give this bar dark on dark)
-        QColor textInk = accent;
-        textInk.setAlphaF(isChecked() ? 1.0 : 0.92);
-        painter.setPen(textInk);
         QFont f = font();
         f.setWeight(isChecked() ? QFont::DemiBold : QFont::Normal);
         painter.setFont(f);
-        painter.drawText(QRectF(x, 0, width() - x - 6, height()), Qt::AlignVCenter | Qt::AlignLeft, label());
+        QColor textInk = isChecked() ? accent : ink;
+        textInk.setAlphaF(isChecked() ? 1.0 : (hovered ? 0.92 : 0.66));
+        qreal x = 7;
+        if (isChecked()) {
+            painter.setPen(QPen(accent, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            const qreal mid = height() / 2.0;
+            painter.drawPolyline(QPolygonF{QPointF(x, mid + 0.5), QPointF(x + 3.2, mid + 3.8), QPointF(x + 9, mid - 3.5)});
+            x += 13;
+        } else {
+            x = 7;
+        }
+        painter.setPen(textInk);
+        painter.drawText(QRectF(x, 0, width() - x, height()), Qt::AlignVCenter | Qt::AlignLeft, label());
         if (hasFocus()) {
             QColor ring = accent;
             ring.setAlphaF(0.8);
             painter.setPen(QPen(ring, 1.4));
             painter.setBrush(Qt::NoBrush);
-            painter.drawRoundedRect(body.adjusted(1, 1, -1, -1), body.height() / 2.0 - 1, body.height() / 2.0 - 1);
+            painter.drawRoundedRect(body, 8, 8);
         }
     }
 };
 
-// A group of such choices under one word ("What happened", "By whom", "Kind"): a faint sheet that holds them together
-class NgChoiceGroup : public QWidget
+// A hairline between two groups of such words
+class NgWordSeparator : public QWidget
 {
 public:
-    NgChoiceGroup(const QString &title, QWidget *parent)
+    explicit NgWordSeparator(QWidget *parent)
         : QWidget(parent)
-        , m_layout(new QHBoxLayout(this))
     {
-        m_layout->setContentsMargins(12, 4, 6, 4);
-        m_layout->setSpacing(5);
-        auto *label = new QLabel(title, this);
-        QFont small = label->font();
-        small.setPointSizeF(small.pointSizeF() * 0.88);
-        small.setWeight(QFont::DemiBold);
-        label->setFont(small);
-        label->setContentsMargins(0, 0, 4, 0);
-        m_label = label;
-        m_layout->addWidget(label);
-    }
-
-    void add(QWidget *choice)
-    {
-        m_layout->addWidget(choice);
+        setFixedSize(7, 28);
     }
 
 protected:
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
-        const bool dark = ngIsDark(palette());
-        QColor sheet = dark ? QColor(255, 255, 255) : QColor(255, 255, 255);
-        sheet.setAlphaF(dark ? 0.055 : 0.42);
-        const QColor accent = ngAccent(palette().color(QPalette::Highlight), dark);
-        QColor edge = accent;
-        edge.setAlphaF(0.16);
-        painter.setPen(QPen(edge, 1));
-        painter.setBrush(sheet);
-        const QRectF body = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-        painter.drawRoundedRect(body, 12, 12);
-        // (the caption: the accent, dimmed)
-        QColor caption = accent;
-        caption.setAlphaF(0.72);
-        QPalette own = m_label->palette();
-        if (own.color(QPalette::WindowText) != caption) {
-            own.setColor(QPalette::WindowText, caption);
-            m_label->setPalette(own);
-        }
+        QColor line = QApplication::palette().color(QPalette::WindowText);
+        line.setAlphaF(0.16);
+        painter.fillRect(QRectF(3, 7, 1, height() - 14), line);
     }
+};
 
-private:
-    QLabel *m_label = nullptr;
-    QHBoxLayout *m_layout;
+// A menu that stays open while its boxes are ticked: several kinds are chosen in one go
+class NgStayMenu : public QMenu
+{
+public:
+    using QMenu::QMenu;
+
+protected:
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        QAction *action = activeAction();
+        if (action && action->isCheckable() && action->isEnabled()) {
+            action->trigger();
+            return;
+        }
+        QMenu::mouseReleaseEvent(event);
+    }
 };
 
 class NgSortBar : public QWidget
@@ -1292,9 +1266,6 @@ private:
             && ngSetting("RECENT_LOOK").toLower() != QLatin1String("classic");
     }
     bool m_recentBar = false;
-    int m_recentPresent = 0;
-    bool m_recentRetry = false;
-    QPointer<NgRecentView> m_recentWatched;
 
     // A button that opens a menu: while the menu is open the button loses its own highlight and takes the colour
     // of the menu, so that the two read as one piece (the style joins them, see Breeze NG).
@@ -1682,104 +1653,99 @@ private:
                 }
                 rebuild();
             };
-            // (a pill of buttons that are on or off each on its own: the choices add up)
-            auto pillOf = [this] {
-                auto *pill = new QWidget(this);
-                pill->setObjectName(QStringLiteral("sortPill"));
-                pill->setAttribute(Qt::WA_StyledBackground);
-                auto *segments = new QHBoxLayout(pill);
-                segments->setContentsMargins(3, 0, 3, 0);
-                segments->setSpacing(1);
-                m_flow->addWidget(pill);
-                return segments;
-            };
-            auto toggle = [this](QHBoxLayout *segments, const QString &text, const char *icon, bool on, bool named) {
-                QToolButton *button = chip(text, on);
-                m_flow->removeWidget(button);
-                button->setParent(segments->parentWidget());
-                button->setIcon(QIcon::fromTheme(QString::fromLatin1(icon)));
-                button->setToolButtonStyle(named ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
-                button->setToolTip(text);
-                segments->addWidget(button);
-                return button;
-            };
-            // what can be on together: chips with a box to tick, in a group under one word
-            auto groupOf = [this](const QString &title) {
-                auto *group = new NgChoiceGroup(title, this);
-                m_flow->addWidget(group);
-                return group;
-            };
-            auto tick = [](NgChoiceGroup *group, const QString &text, const char *icon, bool on) {
-                auto *chip = new NgTickChip(text, QIcon::fromTheme(QString::fromLatin1(icon)), group);
+            // Words, no frames: "Everything" clears; then what happened, by whom, and the kinds of file one looks
+            // for most; the other kinds in a menu
+            auto word = [this](const QString &text, bool on) {
+                auto *chip = new NgWordChip(text, this);
                 chip->setChecked(on);
-                group->add(chip);
+                m_flow->addWidget(chip);
                 return chip;
             };
-            // ("Everything" is a button: it clears the boxes)
-            QHBoxLayout *all = pillOf();
-            m_sortPill = all->parentWidget();
-            connect(toggle(all, ngTr("Everything", "Tutto"), "view-list-details", events == 0 && kinds == 0, true), &QToolButton::clicked, this, [choose] {
+            auto separator = [this] {
+                m_flow->addWidget(new NgWordSeparator(this));
+            };
+            m_sortPill = nullptr;
+            connect(word(ngTr("Everything", "Tutto"), events == 0 && kinds == 0), &QAbstractButton::clicked, this, [choose] {
                 choose(0, 0);
             });
-            NgChoiceGroup *what = groupOf(ngTr("What happened", "Evento"));
+            separator();
             const struct {
                 int bit;
                 QString text;
-                const char *icon;
-            } happened[] = {{1, ngTr("Created", "Creati"), "document-new"}, {2, ngTr("Modified", "Modificati"), "document-edit"}, {4, ngTr("Opened", "Aperti"), "document-open"}};
+            } happened[] = {{1, ngTr("Created", "Creati")}, {2, ngTr("Modified", "Modificati")}, {4, ngTr("Opened", "Aperti")}};
             for (const auto &one : happened) {
                 const int bit = one.bit;
-                connect(tick(what, one.text, one.icon, events & bit), &QAbstractButton::clicked, this, [choose, events, kinds, bit] {
+                connect(word(one.text, events & bit), &QAbstractButton::clicked, this, [choose, events, kinds, bit] {
                     choose(events ^ bit, kinds);
                 });
             }
+            separator();
             // by whom: the user, or things that work on their own (a synchronisation, an updater, the desktop's own
             // services; ng-fsevents tells them apart). One of the two is always on
-            NgChoiceGroup *byWhom = groupOf(ngTr("By whom", "Autore"));
-            connect(tick(byWhom, ngTr("By me", "Da me"), "user-identity", who & 1), &QAbstractButton::clicked, this, [choose, events, kinds, who] {
+            connect(word(ngTr("By me", "Da me"), who & 1), &QAbstractButton::clicked, this, [choose, events, kinds, who] {
                 choose(events, kinds, (who ^ 1) == 0 ? 2 : (who ^ 1));
             });
-            connect(tick(byWhom, ngTr("By others", "Da altri"), "system-run", who & 2), &QAbstractButton::clicked, this, [choose, events, kinds, who] {
+            connect(word(ngTr("By others", "Da altri"), who & 2), &QAbstractButton::clicked, this, [choose, events, kinds, who] {
                 choose(events, kinds, (who ^ 2) == 0 ? 1 : (who ^ 2));
             });
-            // the kinds of file there are in the list (the ones chosen stay, also when the list no longer has any)
-            const int present = (recentView ? recentView->kindsPresent() : 0) | kinds;
-            if (present != 0) {
-                const QString labels[NgKind::CategoryCount] = {ngTr("Folders", "Cartelle"),       ngTr("Images", "Immagini"),          ngTr("Documents", "Documenti"),
-                                                               ngTr("Spreadsheets", "Fogli"),     ngTr("Archives", "Archivi"),         ngTr("Audio and video", "Audio e video"),
-                                                               ngTr("Code and data", "Codice e dati"), ngTr("Packages", "Pacchetti"), ngTr("Other", "Altro")};
-                static const char *const icons[NgKind::CategoryCount] = {"folder", "image-x-generic", "x-office-document", "x-office-spreadsheet", "application-zip",
-                                                                         "video-x-generic", "application-json", "application-x-rpm", "unknown"};
-                    NgChoiceGroup *which = groupOf(ngTr("Kind", "Tipo"));
-                for (int category = 0; category < NgKind::CategoryCount; ++category) {
-                    const int bit = 1 << category;
-                    if (!(present & bit)) {
-                        continue;
+            separator();
+            const QString labels[NgKind::CategoryCount] = {ngTr("Folders", "Cartelle"),       ngTr("Images", "Immagini"),          ngTr("Documents", "Documenti"),
+                                                           ngTr("Spreadsheets", "Fogli"),     ngTr("Archives", "Archivi"),         ngTr("Audio and video", "Audio e video"),
+                                                           ngTr("Code and data", "Codice e dati"), ngTr("Packages", "Pacchetti"), ngTr("Other", "Altro")};
+            for (const NgKind::Category category : {NgKind::Document, NgKind::Sheet, NgKind::Image, NgKind::Folder}) {
+                const int bit = 1 << int(category);
+                connect(word(labels[category], kinds & bit), &QAbstractButton::clicked, this, [choose, events, kinds, bit] {
+                    choose(events, kinds ^ bit);
+                });
+            }
+            // the kinds asked for less often: a menu of boxes, which says on its button what is chosen
+            const QList<NgKind::Category> rare{NgKind::Archive, NgKind::Media, NgKind::Data, NgKind::Package, NgKind::Other};
+            auto rareTitle = [labels, rare](int chosenKinds) {
+                QStringList chosen;
+                for (const NgKind::Category category : rare) {
+                    if (chosenKinds & (1 << int(category))) {
+                        chosen.append(labels[category]);
                     }
-                    connect(tick(which, labels[category], icons[category], kinds & bit), &QAbstractButton::clicked, this, [choose, events, kinds, bit] {
-                        choose(events, kinds ^ bit);
+                }
+                return chosen.isEmpty() ? ngTr("Other kinds", "Altri tipi") : chosen.size() == 1 ? chosen.constFirst() : ngTr("Other kinds: %1", "Altri tipi: %1").arg(chosen.size());
+            };
+            auto *more = new QToolButton(this);
+            more->setAutoRaise(true);
+            more->setProperty("ngPill", true);
+            more->setToolButtonStyle(Qt::ToolButtonTextOnly);
+            more->setPopupMode(QToolButton::InstantPopup);
+            more->setText(rareTitle(kinds));
+            auto *menu = new NgStayMenu(more);
+            for (const NgKind::Category category : rare) {
+                const int bit = 1 << int(category);
+                QAction *action = menu->addAction(labels[category]);
+                action->setCheckable(true);
+                action->setChecked(kinds & bit);
+                // (no rebuild of the bar here: the menu would go with it. The view is told, the button says what is on)
+                connect(action, &QAction::toggled, this, [this, more, rareTitle, bit](bool on) {
+                    const int now = on ? (m_view->property("_ng_recent_kinds").toInt() | bit) : (m_view->property("_ng_recent_kinds").toInt() & ~bit);
+                    m_view->setProperty("_ng_recent_kinds", now);
+                    if (auto *view = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly)) {
+                        view->setFilters(m_view->property("_ng_recent_events").toInt(), now, m_view->property("_ng_recent_who").toInt());
+                    }
+                    more->setText(rareTitle(now));
+                    more->setChecked(false);
+                });
+            }
+            more->setMenu(menu);
+            menuButton(more);
+            m_flow->addWidget(more);
+            // (the words of "Everything" and the rest follow what the menu did when it closes)
+            connect(menu, &QMenu::aboutToHide, this, [this, kinds] {
+                if (m_view && m_view->property("_ng_recent_kinds").toInt() != kinds) {
+                    QTimer::singleShot(0, this, [this] {
+                        rebuild();
                     });
                 }
-            }
-            m_recentPresent = present;
-            if (recentView && recentView != m_recentWatched) {
-                // (another list was read: other kinds may be in it)
-                m_recentWatched = recentView;
-                connect(recentView, &NgRecentView::contentChanged, this, [this, recentView] {
-                    if (m_recentBar && (recentView->kindsPresent() | recentView->kindFilter()) != m_recentPresent) {
-                        rebuild();
-                    }
-                });
-            } else if (!recentView && !m_recentRetry) {
-                // (the view is made a moment after the list is entered: the kinds are added when it is there)
-                m_recentRetry = true;
-                QTimer::singleShot(250, this, [this] {
-                    m_recentRetry = false;
-                    if (recentStory()) {
-                        rebuild();
-                    }
-                });
-            }
+            });
+            const int present = 0;
+            Q_UNUSED(present)
+            Q_UNUSED(recentView)
             m_flow->invalidate();
             return;
         }
