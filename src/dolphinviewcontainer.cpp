@@ -1159,6 +1159,9 @@ private:
             && ngSetting("RECENT_LOOK").toLower() != QLatin1String("classic");
     }
     bool m_recentBar = false;
+    int m_recentPresent = 0;
+    bool m_recentRetry = false;
+    QPointer<NgRecentView> m_recentWatched;
 
     // A button that opens a menu: while the menu is open the button loses its own highlight and takes the colour
     // of the menu, so that the two read as one piece (the style joins them, see Breeze NG).
@@ -1532,38 +1535,91 @@ private:
         // what is new, only what was modified, or what was only opened
         m_recentBar = recentStory();
         if (m_recentBar) {
+            auto *recentView = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly);
+            const int events = m_view->property("_ng_recent_events").toInt();
+            const int kinds = m_view->property("_ng_recent_kinds").toInt();
+            auto choose = [this](int newEvents, int newKinds) {
+                m_view->setProperty("_ng_recent_events", newEvents);
+                m_view->setProperty("_ng_recent_kinds", newKinds);
+                if (auto *view = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly)) {
+                    view->setFilters(newEvents, newKinds);
+                }
+                rebuild();
+            };
+            // (a pill of buttons that are on or off each on its own: the choices add up)
+            auto pillOf = [this] {
+                auto *pill = new QWidget(this);
+                pill->setObjectName(QStringLiteral("sortPill"));
+                pill->setAttribute(Qt::WA_StyledBackground);
+                auto *segments = new QHBoxLayout(pill);
+                segments->setContentsMargins(3, 0, 3, 0);
+                segments->setSpacing(1);
+                m_flow->addWidget(pill);
+                return segments;
+            };
+            auto toggle = [this](QHBoxLayout *segments, const QString &text, const char *icon, bool on, bool named) {
+                QToolButton *button = chip(text, on);
+                m_flow->removeWidget(button);
+                button->setParent(segments->parentWidget());
+                button->setIcon(QIcon::fromTheme(QString::fromLatin1(icon)));
+                button->setToolButtonStyle(named ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
+                button->setToolTip(text);
+                segments->addWidget(button);
+                return button;
+            };
             caption(ngTr("Show", "Mostra"));
-            auto *pill = new QWidget(this);
-            pill->setObjectName(QStringLiteral("sortPill"));
-            pill->setAttribute(Qt::WA_StyledBackground);
-            auto *segments = new QHBoxLayout(pill);
-            segments->setContentsMargins(3, 0, 3, 0);
-            segments->setSpacing(1);
-            m_flow->addWidget(pill);
-            m_sortPill = pill;
-            const int current = m_view->property("_ng_recent_filter").toInt();
+            QHBoxLayout *what = pillOf();
+            m_sortPill = what->parentWidget();
+            connect(toggle(what, ngTr("Everything", "Tutto"), "view-list-details", events == 0 && kinds == 0, true), &QToolButton::clicked, this, [choose] {
+                choose(0, 0);
+            });
             const struct {
-                int filter;
+                int bit;
                 QString text;
                 const char *icon;
-            } choices[] = {{0, ngTr("Everything", "Tutto"), "view-list-details"},
-                           {1, ngTr("Created", "Creati"), "document-new"},
-                           {2, ngTr("Modified", "Modificati"), "document-edit"},
-                           {3, ngTr("Opened", "Aperti"), "document-open"}};
-            for (const auto &choice : choices) {
-                QToolButton *button = chip(choice.text, choice.filter == current);
-                m_flow->removeWidget(button);
-                button->setParent(pill);
-                button->setIcon(QIcon::fromTheme(QString::fromLatin1(choice.icon)));
-                button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-                segments->addWidget(button);
-                const int filter = choice.filter;
-                connect(button, &QToolButton::clicked, this, [this, filter] {
-                    m_view->setProperty("_ng_recent_filter", filter);
-                    if (auto *recentView = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly)) {
-                        recentView->setFilter(filter);
+            } happened[] = {{1, ngTr("Created", "Creati"), "document-new"}, {2, ngTr("Modified", "Modificati"), "document-edit"}, {4, ngTr("Opened", "Aperti"), "document-open"}};
+            for (const auto &one : happened) {
+                const int bit = one.bit;
+                connect(toggle(what, one.text, one.icon, events & bit, true), &QToolButton::clicked, this, [choose, events, kinds, bit] {
+                    choose(events ^ bit, kinds);
+                });
+            }
+            // the kinds of file there are in the list (the ones chosen stay, also when the list no longer has any)
+            const int present = (recentView ? recentView->kindsPresent() : 0) | kinds;
+            if (present != 0) {
+                const QString labels[NgKind::CategoryCount] = {ngTr("Folders", "Cartelle"),       ngTr("Images", "Immagini"),          ngTr("Documents", "Documenti"),
+                                                               ngTr("Spreadsheets", "Fogli"),     ngTr("Archives", "Archivi"),         ngTr("Audio and video", "Audio e video"),
+                                                               ngTr("Code and data", "Codice e dati"), ngTr("Packages", "Pacchetti"), ngTr("Other", "Altro")};
+                static const char *const icons[NgKind::CategoryCount] = {"folder", "image-x-generic", "x-office-document", "x-office-spreadsheet", "application-zip",
+                                                                         "video-x-generic", "application-json", "application-x-rpm", "unknown"};
+                    QHBoxLayout *which = pillOf();
+                for (int category = 0; category < NgKind::CategoryCount; ++category) {
+                    const int bit = 1 << category;
+                    if (!(present & bit)) {
+                        continue;
                     }
-                    rebuild();
+                    connect(toggle(which, labels[category], icons[category], kinds & bit, true), &QToolButton::clicked, this, [choose, events, kinds, bit] {
+                        choose(events, kinds ^ bit);
+                    });
+                }
+            }
+            m_recentPresent = present;
+            if (recentView && recentView != m_recentWatched) {
+                // (another list was read: other kinds may be in it)
+                m_recentWatched = recentView;
+                connect(recentView, &NgRecentView::contentChanged, this, [this, recentView] {
+                    if (m_recentBar && (recentView->kindsPresent() | recentView->kindFilter()) != m_recentPresent) {
+                        rebuild();
+                    }
+                });
+            } else if (!recentView && !m_recentRetry) {
+                // (the view is made a moment after the list is entered: the kinds are added when it is there)
+                m_recentRetry = true;
+                QTimer::singleShot(250, this, [this] {
+                    m_recentRetry = false;
+                    if (recentStory()) {
+                        rebuild();
+                    }
                 });
             }
             m_flow->invalidate();
@@ -3553,7 +3609,7 @@ DolphinViewContainer::DolphinViewContainer(const QUrl &url, QWidget *parent)
         if (recentView) {
             recentView->setVisible(recent);
             if (recent) {
-                recentView->setFilter(m_view->property("_ng_recent_filter").toInt());
+                recentView->setFilters(m_view->property("_ng_recent_events").toInt(), m_view->property("_ng_recent_kinds").toInt());
                 recentView->setUrl(url);
             }
         }

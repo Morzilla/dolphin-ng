@@ -154,17 +154,66 @@ void NgRecentView::setUrl(const QUrl &url)
     reload();
 }
 
-void NgRecentView::setFilter(int filter)
+void NgRecentView::setFilters(int events, int kinds)
 {
-    if (filter == m_filter) {
+    if (events == m_events && kinds == m_kinds) {
         return;
     }
-    m_filter = filter;
-    m_stamp.clear();
+    const bool again = events != m_events; // (another list, or the same one with other lines: asked again)
+    m_events = events;
+    m_kinds = kinds;
     verticalScrollBar()->setValue(0);
-    if (m_url.isValid()) {
-        reload();
+    if (again) {
+        m_stamp.clear();
+        if (m_url.isValid()) {
+            reload();
+        }
+    } else {
+        applyKinds();
     }
+}
+
+int NgRecentView::eventFilter() const
+{
+    return m_events;
+}
+
+int NgRecentView::kindFilter() const
+{
+    return m_kinds;
+}
+
+int NgRecentView::kindsPresent() const
+{
+    return m_present;
+}
+
+// the kind of a line: a file's by its name; things done in one go count as a folder
+static int kindBit(const QString &name, bool folder)
+{
+    return 1 << int(ngKindFor(name, folder).category);
+}
+
+void NgRecentView::applyKinds()
+{
+    m_entries.clear();
+    for (const Entry &entry : std::as_const(m_listed)) {
+        if (m_kinds == 0 || (m_kinds & kindBit(entry.name, entry.folder || entry.group))) {
+            m_entries.append(entry);
+        }
+    }
+    m_hover = -1;
+    m_selected = -1;
+    for (int i = 0; i < m_entries.size(); ++i) {
+        if (m_entries.at(i).group && qEnvironmentVariableIsSet("DOLPHIN_NG_RECENT_OPEN_ALL")) {
+            m_expanded.insert(m_entries.at(i).id); // (to look at open operations without a pointer: tests, pictures)
+        }
+        if (m_entries.at(i).group && m_expanded.contains(m_entries.at(i).id)) {
+            loadChildren(i);
+        }
+    }
+    requestPreviews(m_entries);
+    layoutRows();
 }
 
 static void readEntries(const KIO::UDSEntryList &list, QList<int> *hues, const std::function<void(const KIO::UDSEntry &, int)> &add)
@@ -192,12 +241,12 @@ void NgRecentView::reload()
     auto fresh = std::make_shared<QList<Entry>>();
     // (what was only opened is not in the list unless asked for: ng-recent adds it with "opened=1")
     QUrl asked = m_url;
-    if (m_filter == 3) {
+    if (m_events & 4) {
         QUrlQuery query(asked);
         query.addQueryItem(QStringLiteral("opened"), QStringLiteral("1"));
         asked.setQuery(query);
     }
-    const int filter = m_filter;
+    const int filter = m_events;
     KIO::ListJob *job = KIO::listDir(asked, KIO::HideProgressInfo);
     const QUrl url = m_url;
     connect(job, &KIO::ListJob::entries, this, [fresh](KIO::Job *, const KIO::UDSEntryList &list) {
@@ -222,7 +271,7 @@ void NgRecentView::reload()
     });
     connect(job, &KJob::result, this, [this, job, fresh, url, filter] {
         m_loading = false;
-        if (url != m_url || filter != m_filter) {
+        if (url != m_url || filter != m_events) {
             reload();
             return;
         }
@@ -231,34 +280,23 @@ void NgRecentView::reload()
         }
         // the hues: 0 new, 1 added, 2 modified, 3 downloaded, 4 made by an action, 5 opened, 7 on its own
         fresh->removeIf([filter](const Entry &entry) {
-            switch (filter) {
-            case 1:
-                return !(entry.hue == 0 || entry.hue == 1 || entry.hue == 3 || entry.hue == 4);
-            case 2:
-                return entry.hue != 2;
-            case 3:
-                return entry.hue != 5;
-            default:
-                return false;
+            const bool made = entry.hue == 0 || entry.hue == 1 || entry.hue == 3 || entry.hue == 4;
+            if (filter == 0) {
+                return entry.hue == 5; // (everything that was made or changed: not what was only opened)
             }
+            // (what was done on its own, 7, is in a list of its own and goes with any choice there)
+            return !(((filter & 1) && made) || ((filter & 2) && entry.hue == 2) || ((filter & 4) && entry.hue == 5) || entry.hue == 7);
         });
         std::stable_sort(fresh->begin(), fresh->end(), [](const Entry &a, const Entry &b) {
             return a.when > b.when;
         });
-        // (what was open stays open: its files are asked for again)
-        m_entries = *fresh;
-        m_hover = -1;
-        m_selected = -1;
-        for (int i = 0; i < m_entries.size(); ++i) {
-            if (m_entries.at(i).group && qEnvironmentVariableIsSet("DOLPHIN_NG_RECENT_OPEN_ALL")) {
-                m_expanded.insert(m_entries.at(i).id); // (to look at open operations without a pointer: tests, pictures)
-            }
-            if (m_entries.at(i).group && m_expanded.contains(m_entries.at(i).id)) {
-                loadChildren(i);
-            }
+        m_listed = *fresh;
+        m_present = 0;
+        for (const Entry &entry : std::as_const(m_listed)) {
+            m_present |= kindBit(entry.name, entry.folder || entry.group);
         }
-        requestPreviews(m_entries);
-        layoutRows();
+        applyKinds();
+        Q_EMIT contentChanged();
     });
 }
 
@@ -630,7 +668,7 @@ void NgRecentView::paintEvent(QPaintEvent *)
         painter.setPen(faded(pal.color(QPalette::Text), 0.6));
         painter.drawText(QRect(0, offset, viewport()->width(), viewport()->height()), Qt::AlignCenter,
                          m_loading ? ngTr("Reading what happened lately…", "Lettura di ciò che è successo di recente…")
-                             : m_filter == 0 ? ngTr("Nothing happened lately", "Non è successo nulla di recente")
+                             : m_events == 0 && m_kinds == 0 ? ngTr("Nothing happened lately", "Non è successo nulla di recente")
                                              : ngTr("Nothing of this kind lately", "Niente di questo tipo di recente"));
         return;
     }

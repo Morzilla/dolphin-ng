@@ -29,12 +29,22 @@ public:
     explicit NgRecentView(QWidget *parent = nullptr);
 
     void setUrl(const QUrl &url);
-    /** what to see: 0 everything that was made or changed, 1 what is new (made, downloaded, added), 2 what was
-     *  modified, 3 what was only opened */
-    void setFilter(int filter);
+    /**
+     * What to see. @p events: a sum of 1 what is new (made, downloaded, added), 2 what was modified, 4 what was only
+     * opened; 0: everything that was made or changed. @p kinds: a sum of 1 << NgKind::Category (pictures, documents…);
+     * 0: every kind. Within each the choices add up (new or modified); the two together narrow (… that are pictures).
+     */
+    void setFilters(int events, int kinds);
+    int eventFilter() const;
+    int kindFilter() const;
+    /** the kinds of file the list holds (before the filter by kind), as a sum of 1 << NgKind::Category */
+    int kindsPresent() const;
     QUrl url() const;
 
 Q_SIGNALS:
+    /** the list was read again: other kinds of file may be in it */
+    void contentChanged();
+
     /** a folder is to be shown (the folder of an operation, the one a file is in) */
     void folderRequested(const QUrl &url);
 
@@ -83,6 +93,7 @@ private:
     void reload();
     void loadChildren(int entry);
     void layoutRows();
+    void applyKinds();
     void requestPreviews(const QList<Entry> &entries);
     int rowAt(const QPoint &pos) const;
     const Entry *entryOf(const Row &row) const;
@@ -104,7 +115,10 @@ private:
     int m_selected = -1;
     int m_contentHeight = 0;
     bool m_loading = false;
-    int m_filter = 0;
+    int m_events = 0;
+    int m_kinds = 0;
+    int m_present = 0;
+    QList<Entry> m_listed; // what the list holds, before the filter by kind
     QString m_stamp;
     QTimer *m_refresh;
 };
