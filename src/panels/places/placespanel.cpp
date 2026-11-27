@@ -573,7 +573,18 @@ bool PlacesPanel::ngRowShown(const KFilePlacesModel *placesModel, int row) const
     if (!allPlacesShown() && (placesModel->isHidden(index) || placesModel->isGroupHidden(group))) {
         return false;
     }
-    return !ngDeviceRowHidden(group);
+    // ("Recent Locations", when it is not shown, is not a row of its group: the one after it carries the title)
+    return !ngDeviceRowHidden(group) && !ngRecentLocationsHidden(placesModel, index);
+}
+
+bool PlacesPanel::ngRecentLocationsHidden(const KFilePlacesModel *placesModel, const QModelIndex &index) const
+{
+    // "Recent Locations" is not shown: the list of what happened lately ("Recent Files") has the folders too. The
+    // setting RECENT_LOCATIONS brings it back
+    // (only where that list is shown: without the ng-recent component, or with the desktop's own "Recent Files", the
+    // place stays as it was)
+    return placesModel->url(index) == QUrl(QStringLiteral("recentlyused:/locations")) && ngSetting("RECENT_LOCATIONS") != QLatin1String("1")
+        && ngSetting("RECENT_LEGACY") != QLatin1String("1") && KProtocolInfo::isKnownProtocol(QStringLiteral("ngrecent"));
 }
 
 bool PlacesPanel::ngFirstOfGroup(const KFilePlacesModel *placesModel, int row) const
@@ -597,12 +608,7 @@ bool PlacesPanel::ngRowHiddenByNg(const KFilePlacesModel *placesModel, int row) 
     if (ngDeviceRowHidden(group)) {
         return true;
     }
-    // "Recent Locations" is not shown: the list of what happened lately ("Recent Files") has the folders too. The
-    // setting RECENT_LOCATIONS brings it back
-    // (only where that list is shown: without the ng-recent component, or with the desktop's own "Recent Files", the
-    // place stays as it was)
-    if (placesModel->url(index) == QUrl(QStringLiteral("recentlyused:/locations")) && ngSetting("RECENT_LOCATIONS") != QLatin1String("1")
-        && ngSetting("RECENT_LEGACY") != QLatin1String("1") && KProtocolInfo::isKnownProtocol(QStringLiteral("ngrecent"))) {
+    if (ngRecentLocationsHidden(placesModel, index)) {
         return true;
     }
     if (!ngSectionCollapsed(ngGroupKey(group)) || (selectionModel() && selectionModel()->isSelected(index))) {

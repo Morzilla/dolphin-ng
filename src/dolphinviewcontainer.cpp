@@ -840,6 +840,11 @@ public:
             if (m_filter && !m_filter->text().isEmpty()) {
                 m_filter->clear(); // a new folder starts unfiltered
             }
+            // (into the list of what happened lately, or out of it: the bar is another one there, see rebuild())
+            const bool recent = recentStory();
+            if (recent != m_recentBar) {
+                rebuild();
+            }
         });
 
         connect(view, &DolphinView::sortRoleChanged, this, [this] {
@@ -1147,6 +1152,14 @@ public:
     std::function<void()> onFiltersChanged;
 
 private:
+    // whether the view shows the list of what happened lately in its own view (not the item view)
+    bool recentStory() const
+    {
+        return m_view && m_view->url().scheme() == QLatin1String("ngrecent") && !m_view->url().path().startsWith(QLatin1String("/op/"))
+            && ngSetting("RECENT_LOOK").toLower() != QLatin1String("classic");
+    }
+    bool m_recentBar = false;
+
     // A button that opens a menu: while the menu is open the button loses its own highlight and takes the colour
     // of the menu, so that the two read as one piece (the style joins them, see Breeze NG).
     void menuButton(QToolButton *button)
@@ -1511,6 +1524,48 @@ private:
             fitSorting();
         });
         if (!m_view) {
+            m_flow->invalidate();
+            return;
+        }
+        // The list of what happened lately in its own view (NgRecentView): there is nothing to sort, group or lay
+        // out. In the place of all that, well in sight, what to see: everything that was made or changed, only
+        // what is new, only what was modified, or what was only opened
+        m_recentBar = recentStory();
+        if (m_recentBar) {
+            caption(ngTr("Show", "Mostra"));
+            auto *pill = new QWidget(this);
+            pill->setObjectName(QStringLiteral("sortPill"));
+            pill->setAttribute(Qt::WA_StyledBackground);
+            auto *segments = new QHBoxLayout(pill);
+            segments->setContentsMargins(3, 0, 3, 0);
+            segments->setSpacing(1);
+            m_flow->addWidget(pill);
+            m_sortPill = pill;
+            const int current = m_view->property("_ng_recent_filter").toInt();
+            const struct {
+                int filter;
+                QString text;
+                const char *icon;
+            } choices[] = {{0, ngTr("Everything", "Tutto"), "view-list-details"},
+                           {1, ngTr("Created", "Creati"), "document-new"},
+                           {2, ngTr("Modified", "Modificati"), "document-edit"},
+                           {3, ngTr("Opened", "Aperti"), "document-open"}};
+            for (const auto &choice : choices) {
+                QToolButton *button = chip(choice.text, choice.filter == current);
+                m_flow->removeWidget(button);
+                button->setParent(pill);
+                button->setIcon(QIcon::fromTheme(QString::fromLatin1(choice.icon)));
+                button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+                segments->addWidget(button);
+                const int filter = choice.filter;
+                connect(button, &QToolButton::clicked, this, [this, filter] {
+                    m_view->setProperty("_ng_recent_filter", filter);
+                    if (auto *recentView = m_view->findChild<NgRecentView *>(QString(), Qt::FindDirectChildrenOnly)) {
+                        recentView->setFilter(filter);
+                    }
+                    rebuild();
+                });
+            }
             m_flow->invalidate();
             return;
         }
@@ -3498,6 +3553,7 @@ DolphinViewContainer::DolphinViewContainer(const QUrl &url, QWidget *parent)
         if (recentView) {
             recentView->setVisible(recent);
             if (recent) {
+                recentView->setFilter(m_view->property("_ng_recent_filter").toInt());
                 recentView->setUrl(url);
             }
         }

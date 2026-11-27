@@ -29,6 +29,9 @@ public:
     explicit NgRecentView(QWidget *parent = nullptr);
 
     void setUrl(const QUrl &url);
+    /** what to see: 0 everything that was made or changed, 1 what is new (made, downloaded, added), 2 what was
+     *  modified, 3 what was only opened */
+    void setFilter(int filter);
     QUrl url() const;
 
 Q_SIGNALS:
@@ -101,6 +104,7 @@ private:
     int m_selected = -1;
     int m_contentHeight = 0;
     bool m_loading = false;
+    int m_filter = 0;
     QString m_stamp;
     QTimer *m_refresh;
 };

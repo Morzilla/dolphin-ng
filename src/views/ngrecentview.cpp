@@ -31,6 +31,7 @@
 #include <QStandardPaths>
 #include <QStyle>
 #include <QTimer>
+#include <QUrlQuery>
 
 namespace
 {
@@ -153,6 +154,19 @@ void NgRecentView::setUrl(const QUrl &url)
     reload();
 }
 
+void NgRecentView::setFilter(int filter)
+{
+    if (filter == m_filter) {
+        return;
+    }
+    m_filter = filter;
+    m_stamp.clear();
+    verticalScrollBar()->setValue(0);
+    if (m_url.isValid()) {
+        reload();
+    }
+}
+
 static void readEntries(const KIO::UDSEntryList &list, QList<int> *hues, const std::function<void(const KIO::UDSEntry &, int)> &add)
 {
     Q_UNUSED(hues)
@@ -176,7 +190,15 @@ void NgRecentView::reload()
     }
     m_loading = true;
     auto fresh = std::make_shared<QList<Entry>>();
-    KIO::ListJob *job = KIO::listDir(m_url, KIO::HideProgressInfo);
+    // (what was only opened is not in the list unless asked for: ng-recent adds it with "opened=1")
+    QUrl asked = m_url;
+    if (m_filter == 3) {
+        QUrlQuery query(asked);
+        query.addQueryItem(QStringLiteral("opened"), QStringLiteral("1"));
+        asked.setQuery(query);
+    }
+    const int filter = m_filter;
+    KIO::ListJob *job = KIO::listDir(asked, KIO::HideProgressInfo);
     const QUrl url = m_url;
     connect(job, &KIO::ListJob::entries, this, [fresh](KIO::Job *, const KIO::UDSEntryList &list) {
         readEntries(list, nullptr, [&fresh](const KIO::UDSEntry &entry, int hue) {
@@ -198,15 +220,28 @@ void NgRecentView::reload()
             fresh->append(e);
         });
     });
-    connect(job, &KJob::result, this, [this, job, fresh, url] {
+    connect(job, &KJob::result, this, [this, job, fresh, url, filter] {
         m_loading = false;
-        if (url != m_url) {
+        if (url != m_url || filter != m_filter) {
             reload();
             return;
         }
         if (job->error()) {
             return;
         }
+        // the hues: 0 new, 1 added, 2 modified, 3 downloaded, 4 made by an action, 5 opened, 7 on its own
+        fresh->removeIf([filter](const Entry &entry) {
+            switch (filter) {
+            case 1:
+                return !(entry.hue == 0 || entry.hue == 1 || entry.hue == 3 || entry.hue == 4);
+            case 2:
+                return entry.hue != 2;
+            case 3:
+                return entry.hue != 5;
+            default:
+                return false;
+            }
+        });
         std::stable_sort(fresh->begin(), fresh->end(), [](const Entry &a, const Entry &b) {
             return a.when > b.when;
         });
@@ -595,7 +630,8 @@ void NgRecentView::paintEvent(QPaintEvent *)
         painter.setPen(faded(pal.color(QPalette::Text), 0.6));
         painter.drawText(QRect(0, offset, viewport()->width(), viewport()->height()), Qt::AlignCenter,
                          m_loading ? ngTr("Reading what happened lately…", "Lettura di ciò che è successo di recente…")
-                                   : ngTr("Nothing happened lately", "Non è successo nulla di recente"));
+                             : m_filter == 0 ? ngTr("Nothing happened lately", "Non è successo nulla di recente")
+                                             : ngTr("Nothing of this kind lately", "Niente di questo tipo di recente"));
         return;
     }
     for (int i = 0; i < m_rows.size(); ++i) {
