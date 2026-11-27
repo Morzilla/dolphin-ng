@@ -3017,10 +3017,15 @@ void KStandardItemListWidget::updateDetailsLayoutTextCache()
                 if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
                     // (not where the type column already says it)
                     const bool inColumn = columns && m_sortedVisibleRoles.contains("type");
-                    if (const QString happened = ngHappened(fileModel->fileItem(index())); !happened.isEmpty() && !inColumn) {
+                    const KFileItem recentItem = fileModel->fileItem(index());
+                    if (const QString happened = ngHappened(recentItem); !happened.isEmpty() && !inColumn) {
                         // (shortened to the room there is: a chip that does not fit is left out, and this one is
                         // what the row is for)
                         typeText = chipMetrics.elidedText(happened, Qt::ElideRight, qMax(qreal(60), textRight - chipX - 18));
+                    } else if (!happened.isEmpty() && recentItem.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 8) == QLatin1String("6")) {
+                        // things done in one go: not "Folder", how many files it opens on
+                        const int files = recentItem.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 10).toInt();
+                        typeText = QLocale().toString(files) + QLatin1String(" file");
                     }
                 }
             }

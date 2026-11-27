@@ -2491,13 +2491,19 @@ QHash<QByteArray, QVariant> KFileItemModel::retrieveData(const KFileItem &item, 
             }
 
             path = item.localPath();
+            // dolphin-ng: things done in one go, a line of the recent list that opens on its files: it has no
+            // place of its own, the folder its files are in does (ng-recent gives it in UDS_EXTRA + 9)
+            if (path.isEmpty() && item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 7) == QLatin1String("ngrecent")
+                && item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 8) == QLatin1String("6")) {
+                path = item.entry().stringValue(KIO::UDSEntry::UDS_EXTRA + 9);
+            }
             if (path.startsWith(homePath)) {
                 path.replace(0, homePath.length(), QLatin1Char('~'));
             }
         }
 
         const int index = path.lastIndexOf(item.text());
-        path = path.mid(0, index - 1);
+        path = index > 0 ? path.mid(0, index - 1) : path;
         data.insert(sharedValue("path"), path);
     }
 
