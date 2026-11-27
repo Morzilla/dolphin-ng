@@ -926,7 +926,7 @@ private:
     bool m_sheetApplying = false;
     QColor m_openSheet; // Aurora: the sheet of an open menu's button, see NgOpenSheet (invalid: the style sheet paints it)
     // what the filter shows: everything, files only (no folders), or one NgKind::Category
-    enum { All = -1, FilesOnly = NgKind::CategoryCount };
+    enum { All = -1, FilesOnly = NgKind::CategoryCount, ByHand = 1000, OnItsOwn = 1001 };
 
     // The chips and the search box draw themselves, the same under every widget style: a translucent
     // pill for the checked one, a fainter one on hover, no outlines that depend on the style's hover tracking.
@@ -1099,6 +1099,18 @@ public:
     QList<FilterEntry> filters() const
     {
         QList<FilterEntry> entries;
+        // dolphin-ng: the list of what happened lately is two lists, what you did and what was done by things that
+        // work on their own (a synchronisation, an updater): ng-recent says how many lines each has
+        if (m_view && m_view->url().scheme() == QLatin1String("ngrecent") && !m_view->url().path().startsWith(QLatin1String("/op/"))) {
+            const KIO::UDSEntry root = m_view->rootItem().entry();
+            const int byHand = root.stringValue(KIO::UDSEntry::UDS_EXTRA + 12).toInt();
+            const int onItsOwn = root.stringValue(KIO::UDSEntry::UDS_EXTRA + 13).toInt();
+            const bool automatic = m_view->url().path().startsWith(QLatin1String("/automatic"));
+            if (onItsOwn > 0 || automatic) {
+                entries.append({ngTr("Yours", "Tuoi"), byHand, ByHand, !automatic, QStringLiteral("user-identity")});
+                entries.append({ngTr("Automatic", "Automatici"), onItsOwn, OnItsOwn, automatic, QStringLiteral("view-refresh")});
+            }
+        }
         if (!m_view || m_total == 0 || m_total > 4000) {
             return entries;
         }
@@ -1118,8 +1130,18 @@ public:
     }
     void setFilter(int id)
     {
+        if (id == ByHand || id == OnItsOwn) {
+            // (not a filter of what is listed: the other of the two lists)
+            QUrl url(id == OnItsOwn ? QStringLiteral("ngrecent:/automatic") : QStringLiteral("ngrecent:/"));
+            url.setQuery(QStringLiteral("title=") + QString::fromLatin1(QUrl::toPercentEncoding(id == OnItsOwn ? ngTr("Automatic", "Automatici") : ngTr("Recent Files", "File recenti"))));
+            if (onOpenUrl && m_view && url.path() != (m_view->url().path().isEmpty() ? QStringLiteral("/") : m_view->url().path())) {
+                onOpenUrl(url);
+            }
+            return;
+        }
         setActive(id);
     }
+    std::function<void(const QUrl &)> onOpenUrl;
     std::function<void()> onFiltersChanged;
 
 private:
@@ -4618,6 +4640,9 @@ public:
         , m_open(std::move(open))
         , m_part(part)
     {
+        if (bar && open) {
+            bar->onOpenUrl = open; // ("Yours" and "Automatic" in the recent list are two lists, not a filter)
+        }
         setAttribute(Qt::WA_NoSystemBackground);
         setMouseTracking(true);
         setCursor(Qt::PointingHandCursor);
