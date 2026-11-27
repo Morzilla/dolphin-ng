@@ -326,6 +326,17 @@ DolphinView::DolphinView(const QUrl &url, QWidget *parent)
     connect(m_selectionChangedTimer, &QTimer::timeout, this, &DolphinView::emitSelectionChangedSignal);
 
     m_model = new KFileItemModel(this);
+    // dolphin-ng: the list of what happened lately is made when it is asked for, and nobody tells when there is
+    // more: while it is on show in the active window it is asked again every few seconds (an update of what
+    // is there, not a new listing: nothing flickers, the selection stays)
+    auto *recentRefresh = new QTimer(this);
+    recentRefresh->setInterval(10000);
+    connect(recentRefresh, &QTimer::timeout, this, [this] {
+        if (m_url.scheme() == QLatin1String("ngrecent") && isVisible() && window() && window()->isActiveWindow() && m_loadingState != LoadingState::Loading) {
+            m_model->refreshDirectory(m_url);
+        }
+    });
+    recentRefresh->start();
     m_view = new DolphinItemListView();
     m_view->setEnabledSelectionToggles(DolphinItemListView::SelectionTogglesEnabled::FollowSetting);
     m_view->setVisibleRoles({"text"});
