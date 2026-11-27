@@ -4256,6 +4256,14 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
         if (used.isValid()) {
             created = used;
             createdCaption = ngTr("Used", "Usato");
+            // (in the list of what happened lately that date is the event's, of whatever kind)
+            if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
+                if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
+                    if (!ngHappened(fileModel->fileItem(index())).isEmpty()) {
+                        createdCaption = ngTr("When", "Quando");
+                    }
+                }
+            }
         }
     }
     QList<NgQuickAction> quickActions;
@@ -4604,6 +4612,15 @@ void KStandardItemListWidget::updateCardsLayoutTextCache()
             bool monospace;
         };
         QList<Line> lines;
+        // in the list of what happened lately (ngrecent:/) the first line says what happened, as the rows and the other
+        // cards do in place of the kind
+        if (auto *fileView = qobject_cast<KFileItemListView *>(parentWidget())) {
+            if (auto *fileModel = qobject_cast<KFileItemModel *>(fileView->model())) {
+                if (const QString happened = ngHappened(fileModel->fileItem(index())); !happened.isEmpty()) {
+                    lines.append({ngTr("Event", "Evento"), happened, false});
+                }
+            }
+        }
         if (created.isValid()) {
             lines.append({createdCaption, dateLine(created), false});
         }
